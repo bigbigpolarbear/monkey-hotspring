@@ -16,11 +16,9 @@ const db = getFirestore(app);
 
 /* ─── Database helpers ─── */
 
-// Teachers
 export async function getTeachers() {
   const snap = await getDocs(collection(db, "teachers"));
   if (snap.empty) {
-    // Seed default teacher on first run
     const defaultTeacher = { username: "teacher", password: "1234", name: "Sensei" };
     const ref = await addDoc(collection(db, "teachers"), defaultTeacher);
     return [{ id: ref.id, ...defaultTeacher }];
@@ -28,7 +26,6 @@ export async function getTeachers() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-// Students
 export async function getStudents() {
   const snap = await getDocs(collection(db, "students"));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -46,6 +43,25 @@ export async function updateStudent(id, data) {
 
 export async function deleteStudent(id) {
   await deleteDoc(doc(db, "students", id));
+}
+
+/* ─── Quiz helpers ─── stored as documents keyed by studentId */
+export async function getQuizzes() {
+  const snap = await getDocs(collection(db, "quizzes"));
+  const quizzes = {};
+  snap.docs.forEach(d => {
+    const data = d.data();
+    quizzes[d.id] = data.questions || [];
+  });
+  return quizzes;
+}
+
+export async function setQuizForStudent(studentId, questions) {
+  await setDoc(doc(db, "quizzes", studentId), { questions });
+}
+
+export async function deleteQuizForStudent(studentId) {
+  await deleteDoc(doc(db, "quizzes", studentId));
 }
 
 export { db };
