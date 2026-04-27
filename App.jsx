@@ -590,7 +590,13 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         <ellipse cx="1.5" cy="-7.5" rx="1" ry="0.7" fill={C.noseDark} opacity="0.5" />
         <ellipse cx="-0.5" cy="-9.5" rx="1.5" ry="0.8" fill="white" opacity="0.3" />
         {/* Mouth */}
-        {mood === "excited" ? (
+        {mood === "eating" ? (
+          <>
+            <ellipse cx="0" cy="0" rx="5" ry="6" fill="#3a1a18" />
+            <ellipse cx="0" cy="-1" rx="3.5" ry="4" fill="#a82828" />
+            <path d="M -3 -3 Q 0 -2 3 -3" stroke="white" strokeWidth="0.8" fill="none" />
+          </>
+        ) : mood === "excited" ? (
           <path d="M -6 -2 Q 0 6 6 -2" fill={C.noseDark} opacity="0.3" stroke={C.text} strokeWidth="1.2" strokeLinecap="round" />
         ) : mood === "happy" ? (
           <path d="M -5 -2 Q 0 4 5 -2" fill="none" stroke={C.text} strokeWidth="1.3" strokeLinecap="round" />
@@ -1358,7 +1364,7 @@ function parseCSV(text) {
 /* ─── HAWK SVG ─── swoops in when student gets answer wrong */
 function HawkAttack({ onComplete }) {
   useEffect(() => {
-    const t = setTimeout(onComplete, 2400);
+    const t = setTimeout(onComplete, 4500);
     return () => clearTimeout(t);
   }, [onComplete]);
   return (
@@ -1366,102 +1372,304 @@ function HawkAttack({ onComplete }) {
       position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden",
     }}>
       <style>{`
-        @keyframes hawkSwoop {
-          0% { transform: translate(-200px, -100px) rotate(15deg) scale(0.8); }
-          40% { transform: translate(40%, 30%) rotate(-10deg) scale(1.4); }
-          55% { transform: translate(45%, 35%) rotate(-5deg) scale(1.5); }
-          70% { transform: translate(50%, 30%) rotate(10deg) scale(1.4); }
-          100% { transform: translate(120%, -50px) rotate(20deg) scale(0.8); opacity: 0; }
+        @keyframes hawkSwoopLong {
+          0% { transform: translate(-220px, -120px) rotate(20deg) scale(0.7); opacity: 0; }
+          12% { opacity: 1; }
+          25% { transform: translate(20%, -10%) rotate(-5deg) scale(1.0); }
+          40% { transform: translate(35%, 10%) rotate(-10deg) scale(1.3); }
+          55% { transform: translate(40%, 25%) rotate(-12deg) scale(1.6); }
+          65% { transform: translate(42%, 28%) rotate(-8deg) scale(1.7); }
+          75% { transform: translate(45%, 25%) rotate(0deg) scale(1.6); }
+          85% { transform: translate(55%, 15%) rotate(15deg) scale(1.3); }
+          95% { opacity: 1; transform: translate(80%, -10%) rotate(25deg) scale(1.0); }
+          100% { transform: translate(120%, -80px) rotate(30deg) scale(0.7); opacity: 0; }
         }
-        @keyframes screenShake {
+        @keyframes hawkShadow {
+          0% { transform: translate(-220px, 100px) scale(0.4); opacity: 0; }
+          25% { opacity: 0.4; }
+          55% { transform: translate(45%, 70%) scale(1.2); opacity: 0.5; }
+          75% { transform: translate(55%, 65%) scale(1.0); opacity: 0.4; }
+          100% { transform: translate(120%, 50px) scale(0.5); opacity: 0; }
+        }
+        @keyframes screenShakeLong {
           0%, 100% { transform: translate(0, 0); }
           10%, 30%, 50%, 70%, 90% { transform: translate(-3px, 1px); }
           20%, 40%, 60%, 80% { transform: translate(3px, -1px); }
         }
+        @keyframes redFlash {
+          0%, 100% { background: rgba(180,30,30,0.0); }
+          40%, 60% { background: rgba(180,30,30,0.18); }
+        }
+        @keyframes featherFall {
+          0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+          20% { opacity: 0.8; }
+          100% { transform: translate(var(--fx), 200px) rotate(var(--fr)); opacity: 0; }
+        }
       `}</style>
+      {/* Red ominous flash */}
       <div style={{
-        position: "absolute", left: 0, top: 0, width: "100%", height: "100%",
-        background: "rgba(180,30,30,0.08)",
-        animation: "screenShake 0.4s ease 0.5s 4",
+        position: "absolute", inset: 0,
+        animation: "redFlash 4.5s ease-in-out forwards",
       }} />
+      {/* Screen shake during dive */}
+      <div style={{
+        position: "absolute", inset: 0,
+        animation: "screenShakeLong 0.4s ease 1.8s 6",
+      }} />
+      {/* Shadow on the ground/water */}
       <div style={{
         position: "absolute", left: 0, top: 0,
-        animation: "hawkSwoop 2.2s ease-in-out forwards",
+        animation: "hawkShadow 4.5s ease-in-out forwards",
       }}>
-        <svg width="160" height="120" viewBox="-80 -60 160 120" style={{ overflow: "visible" }}>
-          {/* Wings spread */}
-          <path d="M -10 0 Q -50 -20 -75 -10 Q -55 0 -40 5 Q -25 8 -10 5 Z"
-            fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
-          <path d="M 10 0 Q 50 -20 75 -10 Q 55 0 40 5 Q 25 8 10 5 Z"
-            fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
-          {/* Wing feather details */}
-          <path d="M -20 2 L -55 -8 M -25 6 L -60 0 M -15 -2 L -45 -14"
-            stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
-          <path d="M 20 2 L 55 -8 M 25 6 L 60 0 M 15 -2 L 45 -14"
-            stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
-          {/* Body */}
-          <ellipse cx="0" cy="2" rx="12" ry="18" fill="#7a4e34" filter="url(#watercolorSoft)" />
-          <ellipse cx="0" cy="6" rx="8" ry="12" fill="#a06a48" opacity="0.5" />
-          {/* Head */}
-          <ellipse cx="0" cy="-14" rx="10" ry="9" fill="#6a4028" filter="url(#watercolorSoft)" />
-          {/* Sharp eyes */}
-          <ellipse cx="-3" cy="-15" rx="2" ry="1.5" fill="#ffd000" />
-          <ellipse cx="3" cy="-15" rx="2" ry="1.5" fill="#ffd000" />
-          <circle cx="-3" cy="-15" r="0.8" fill="#1a1a1a" />
-          <circle cx="3" cy="-15" r="0.8" fill="#1a1a1a" />
-          {/* Sharp beak */}
-          <path d="M -2 -10 L 0 -4 L 2 -10 L 0 -8 Z" fill="#ffb030" stroke="#a06020" strokeWidth="0.5" />
-          {/* Talons */}
-          <path d="M -5 18 L -7 24 M -3 18 L -3 26 M -1 18 L 1 25" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M 5 18 L 7 24 M 3 18 L 3 26 M 1 18 L -1 25" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
-          {/* Tail */}
-          <path d="M -4 18 L -8 28 L 0 24 L 8 28 L 4 18 Z" fill="#5a3a28" filter="url(#watercolorSoft)" />
-          {/* Angry brow */}
-          <path d="M -8 -19 L -2 -17 M 8 -19 L 2 -17" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" />
+        <svg width="120" height="50" viewBox="-60 -25 120 50" style={{ overflow: "visible" }}>
+          <ellipse cx="0" cy="0" rx="50" ry="14" fill="#000" opacity="0.5" filter="url(#watercolorSoft)" />
         </svg>
       </div>
+      {/* The hawk itself - bigger and slower */}
+      <div style={{
+        position: "absolute", left: 0, top: 0,
+        animation: "hawkSwoopLong 4.5s ease-in-out forwards",
+      }}>
+        <svg width="200" height="160" viewBox="-100 -80 200 160" style={{ overflow: "visible" }}>
+          {/* Wings spread wide */}
+          <path d="M -10 0 Q -60 -25 -95 -15 Q -65 0 -45 8 Q -28 12 -10 6 Z"
+            fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
+          <path d="M 10 0 Q 60 -25 95 -15 Q 65 0 45 8 Q 28 12 10 6 Z"
+            fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
+          {/* Wing feather details */}
+          <path d="M -25 4 L -70 -10 M -30 8 L -75 -2 M -20 -2 L -55 -16 M -35 12 L -65 4"
+            stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
+          <path d="M 25 4 L 70 -10 M 30 8 L 75 -2 M 20 -2 L 55 -16 M 35 12 L 65 4"
+            stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
+          {/* Wing tips - lighter */}
+          <path d="M -75 -10 Q -85 -8 -90 0 Q -82 -2 -75 -8" fill="#3a2418" opacity="0.7" />
+          <path d="M 75 -10 Q 85 -8 90 0 Q 82 -2 75 -8" fill="#3a2418" opacity="0.7" />
+          {/* Body */}
+          <ellipse cx="0" cy="2" rx="14" ry="22" fill="#7a4e34" filter="url(#watercolorSoft)" />
+          <ellipse cx="0" cy="6" rx="10" ry="14" fill="#a06a48" opacity="0.5" />
+          {/* Chest feather pattern */}
+          <path d="M -8 -2 Q 0 0 8 -2 M -7 4 Q 0 6 7 4 M -6 10 Q 0 12 6 10" stroke="#3a2418" strokeWidth="0.6" fill="none" opacity="0.5" />
+          {/* Head */}
+          <ellipse cx="0" cy="-18" rx="13" ry="11" fill="#6a4028" filter="url(#watercolorSoft)" />
+          {/* Sharp menacing yellow eyes */}
+          <ellipse cx="-4" cy="-19" rx="3" ry="2.5" fill="#ffd000" />
+          <ellipse cx="4" cy="-19" rx="3" ry="2.5" fill="#ffd000" />
+          <circle cx="-4" cy="-19" r="1.5" fill="#1a1a1a" />
+          <circle cx="4" cy="-19" r="1.5" fill="#1a1a1a" />
+          <circle cx="-3.5" cy="-19.5" r="0.5" fill="white" />
+          <circle cx="4.5" cy="-19.5" r="0.5" fill="white" />
+          {/* Sharp hooked beak */}
+          <path d="M -3 -13 L 0 -4 L 3 -13 L 0 -10 Z" fill="#ffb030" stroke="#a06020" strokeWidth="0.5" />
+          <path d="M 0 -4 L -1 -2 L 0 -3" fill="#a06020" />
+          {/* Talons - sharp and visible */}
+          <path d="M -6 22 L -8 30 M -4 22 L -4 32 M -2 22 L 0 31" stroke="#222" strokeWidth="2" strokeLinecap="round" />
+          <path d="M 6 22 L 8 30 M 4 22 L 4 32 M 2 22 L 0 31" stroke="#222" strokeWidth="2" strokeLinecap="round" />
+          {/* Talon tips */}
+          <circle cx="-8" cy="30" r="1" fill="#222" />
+          <circle cx="-4" cy="32" r="1" fill="#222" />
+          <circle cx="0" cy="31" r="1" fill="#222" />
+          <circle cx="8" cy="30" r="1" fill="#222" />
+          <circle cx="4" cy="32" r="1" fill="#222" />
+          {/* Tail feathers */}
+          <path d="M -5 22 L -10 36 L -3 30 L 0 36 L 3 30 L 10 36 L 5 22 Z" fill="#5a3a28" filter="url(#watercolorSoft)" />
+          {/* Angry brow - pronounced */}
+          <path d="M -10 -25 L -2 -22 M 10 -25 L 2 -22" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+          {/* Open mouth - menacing */}
+          <path d="M -2 -8 Q 0 -6 2 -8 Q 0 -7 -2 -8 Z" fill="#3a1a18" />
+        </svg>
+      </div>
+      {/* Falling feathers */}
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          position: "absolute", left: `${45 + i * 5}%`, top: "30%",
+          fontSize: 18, color: "#5a3a28",
+          "--fx": `${(i - 1) * 30}px`,
+          "--fr": `${(i - 1) * 90}deg`,
+          animation: `featherFall 3s ease-in ${2 + i * 0.3}s forwards`,
+          opacity: 0,
+        }}>🪶</div>
+      ))}
     </div>
   );
 }
 
-/* ─── FOOD REWARD ─── floats up when student gets answer correct */
+/* ─── WATERCOLOR FOOD SVGs ─── matching the monkey style */
+function WatercolorFood({ type = "strawberry", size = 80 }) {
+  const renderFood = () => {
+    switch (type) {
+      case "strawberry":
+        return (
+          <g filter="url(#watercolorSoft)">
+            {/* Body */}
+            <path d="M 0 -18 Q -22 -12 -20 8 Q -12 25 0 30 Q 12 25 20 8 Q 22 -12 0 -18 Z" fill="#e84050" />
+            <path d="M 0 -14 Q -18 -10 -16 8 Q -10 22 0 26 Q 10 22 16 8 Q 18 -10 0 -14 Z" fill="#ff7080" opacity="0.5" />
+            {/* Seeds */}
+            <ellipse cx="-7" cy="0" rx="1.2" ry="2.5" fill="#fff5d0" transform="rotate(-30 -7 0)" />
+            <ellipse cx="7" cy="0" rx="1.2" ry="2.5" fill="#fff5d0" transform="rotate(30 7 0)" />
+            <ellipse cx="-2" cy="8" rx="1.2" ry="2.5" fill="#fff5d0" />
+            <ellipse cx="5" cy="10" rx="1.2" ry="2.5" fill="#fff5d0" transform="rotate(20 5 10)" />
+            <ellipse cx="-9" cy="12" rx="1.2" ry="2.5" fill="#fff5d0" transform="rotate(-20 -9 12)" />
+            <ellipse cx="0" cy="-3" rx="1.2" ry="2.5" fill="#fff5d0" />
+            <ellipse cx="9" cy="14" rx="1.2" ry="2.5" fill="#fff5d0" transform="rotate(25 9 14)" />
+            <ellipse cx="-5" cy="18" rx="1.2" ry="2.5" fill="#fff5d0" />
+            {/* Leaves on top - star shape */}
+            <path d="M -10 -16 L -16 -26 L -4 -18 Z" fill="#5caa5e" />
+            <path d="M 0 -18 L -3 -28 L 6 -20 Z" fill="#5caa5e" />
+            <path d="M 10 -16 L 16 -26 L 4 -18 Z" fill="#5caa5e" />
+            <path d="M -2 -19 L 2 -28 L 6 -22 Z" fill="#7cc080" />
+            {/* Highlight */}
+            <ellipse cx="-7" cy="-5" rx="3" ry="6" fill="white" opacity="0.45" />
+            {/* Sparkle */}
+            <text x="14" y="-12" fontSize="10" fill="#fff4c2">✦</text>
+          </g>
+        );
+      case "nut": // acorn
+        return (
+          <g filter="url(#watercolorSoft)">
+            {/* Body */}
+            <ellipse cx="0" cy="6" rx="15" ry="16" fill="#a87858" />
+            <ellipse cx="-3" cy="2" rx="10" ry="11" fill="#c89878" opacity="0.6" />
+            {/* Cap */}
+            <ellipse cx="0" cy="-7" rx="17" ry="7" fill="#5a3818" />
+            <ellipse cx="0" cy="-9" rx="15" ry="5" fill="#7a4828" />
+            {/* Cap texture dots */}
+            <circle cx="-10" cy="-7" r="1.2" fill="#3a2810" />
+            <circle cx="-3" cy="-9" r="1.2" fill="#3a2810" />
+            <circle cx="3" cy="-9" r="1.2" fill="#3a2810" />
+            <circle cx="10" cy="-7" r="1.2" fill="#3a2810" />
+            <circle cx="-6" cy="-11" r="1" fill="#3a2810" />
+            <circle cx="6" cy="-11" r="1" fill="#3a2810" />
+            <circle cx="0" cy="-12" r="1" fill="#3a2810" />
+            {/* Stem */}
+            <path d="M 0 -14 Q 1 -18 3 -20" stroke="#5a3818" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            {/* Highlight */}
+            <ellipse cx="-5" cy="3" rx="3.5" ry="6" fill="white" opacity="0.35" />
+            {/* Sparkle */}
+            <text x="12" y="-3" fontSize="10" fill="#fff4c2">✦</text>
+          </g>
+        );
+      case "banana":
+        return (
+          <g filter="url(#watercolorSoft)">
+            {/* Body curved */}
+            <path d="M -18 -10 Q -10 -20 2 -16 Q 14 -10 20 6 Q 16 12 8 8 Q -2 0 -12 -2 Q -18 -2 -18 -10 Z"
+              fill="#f5d040" />
+            <path d="M -16 -10 Q -8 -16 0 -14 Q 12 -10 17 6 Q 14 8 8 6 Q -2 -2 -12 -4 Q -16 -4 -16 -10 Z"
+              fill="#fff088" opacity="0.5" />
+            {/* Stem dark tip */}
+            <path d="M -18 -10 L -22 -16 L -19 -14" fill="#7a5818" />
+            {/* Bottom tip */}
+            <ellipse cx="20" cy="6" rx="2" ry="2" fill="#5a3818" />
+            {/* Highlight curve */}
+            <path d="M -10 -12 Q -2 -14 8 -10" stroke="white" strokeWidth="2" fill="none" opacity="0.5" />
+            {/* Brown spots */}
+            <circle cx="-4" cy="-8" r="1" fill="#a06820" opacity="0.5" />
+            <circle cx="6" cy="-4" r="0.8" fill="#a06820" opacity="0.5" />
+            {/* Sparkle */}
+            <text x="-22" y="0" fontSize="10" fill="#fff4c2">✦</text>
+          </g>
+        );
+      case "apple":
+        return (
+          <g filter="url(#watercolorSoft)">
+            {/* Body */}
+            <ellipse cx="0" cy="3" rx="16" ry="15" fill="#e84030" />
+            <ellipse cx="-4" cy="-1" rx="10" ry="9" fill="#ff7060" opacity="0.5" />
+            {/* Stem */}
+            <path d="M 2 -13 L 0 -18" stroke="#5a3818" strokeWidth="3" strokeLinecap="round" fill="none" />
+            {/* Leaf */}
+            <path d="M 0 -16 Q 10 -18 10 -10 Q 4 -10 0 -16 Z" fill="#5caa5e" />
+            <path d="M 2 -14 Q 7 -14 9 -11" stroke="#3a7a3c" strokeWidth="0.5" fill="none" />
+            {/* Highlight */}
+            <ellipse cx="-6" cy="-3" rx="3.5" ry="7" fill="white" opacity="0.5" />
+            {/* Sparkle */}
+            <text x="12" y="-8" fontSize="10" fill="#fff4c2">✦</text>
+          </g>
+        );
+      case "carrot":
+        return (
+          <g filter="url(#watercolorSoft)">
+            {/* Body triangle */}
+            <path d="M -11 -8 L 11 -8 L 5 16 L -5 16 Z" fill="#ff8030" />
+            <path d="M -9 -8 L 9 -8 L 4 14 L -4 14 Z" fill="#ffb060" opacity="0.5" />
+            {/* Carrot lines */}
+            <path d="M -8 -3 L 8 -3 M -7 3 L 7 3 M -6 9 L 6 9" stroke="#cc5010" strokeWidth="0.7" opacity="0.6" />
+            {/* Greens on top */}
+            <path d="M -9 -10 L -12 -22 L -6 -14 Z" fill="#5caa5e" />
+            <path d="M -3 -10 L -3 -24 L 2 -16 Z" fill="#5caa5e" />
+            <path d="M 7 -10 L 12 -22 L 4 -14 Z" fill="#5caa5e" />
+            <path d="M 2 -12 L 5 -26 L 0 -18 Z" fill="#7cc080" />
+            <path d="M -1 -10 L 1 -22 L -3 -16 Z" fill="#3a7a3c" />
+            {/* Highlight */}
+            <ellipse cx="-3" cy="2" rx="2.5" ry="7" fill="white" opacity="0.35" />
+            {/* Sparkle */}
+            <text x="-14" y="0" fontSize="10" fill="#fff4c2">✦</text>
+          </g>
+        );
+      default: return null;
+    }
+  };
+  return (
+    <svg width={size} height={size * 1.1} viewBox="-30 -32 60 66" style={{ overflow: "visible" }}>
+      {renderFood()}
+    </svg>
+  );
+}
+
+/* ─── FOOD REWARD ─── falls from top into monkey's mouth */
 function FoodReward({ onComplete }) {
   useEffect(() => {
-    const t = setTimeout(onComplete, 1800);
+    const t = setTimeout(onComplete, 2200);
     return () => clearTimeout(t);
   }, [onComplete]);
-  const foods = ["🍌", "🍎", "🥕", "🍓", "🥜"];
+  const foods = ["strawberry", "nut", "banana", "apple", "carrot"];
   const food = foods[Math.floor(Math.random() * foods.length)];
   return (
     <div style={{
       position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden",
     }}>
       <style>{`
-        @keyframes foodFloat {
-          0% { transform: translate(-50%, 100%) scale(0.5); opacity: 0; }
-          15% { opacity: 1; transform: translate(-50%, 50%) scale(1.3); }
-          30% { transform: translate(-50%, 30%) scale(1) rotate(-10deg); }
-          50% { transform: translate(-50%, 10%) scale(1.1) rotate(8deg); }
-          80% { opacity: 1; transform: translate(-50%, -20%) scale(0.95) rotate(-5deg); }
-          100% { transform: translate(-50%, -60%) scale(0.7); opacity: 0; }
+        @keyframes foodFlyIntoMouth {
+          0% { transform: translate(-50%, -180%) scale(0.4) rotate(0deg); opacity: 0; }
+          15% { opacity: 1; transform: translate(-50%, -120%) scale(1) rotate(-15deg); }
+          35% { transform: translate(-50%, -50%) scale(1.2) rotate(15deg); }
+          55% { transform: translate(-50%, 20%) scale(1.1) rotate(-10deg); }
+          72% { transform: translate(-50%, 60%) scale(0.9) rotate(5deg); opacity: 1; }
+          85% { transform: translate(-50%, 80%) scale(0.4) rotate(0deg); opacity: 1; }
+          100% { transform: translate(-50%, 80%) scale(0) rotate(0deg); opacity: 0; }
         }
-        @keyframes sparkleFloat {
-          0% { transform: translate(var(--sx), 100%) scale(0); opacity: 0; }
+        @keyframes sparkleFloatBig {
+          0% { transform: translate(var(--sx), 50%) scale(0); opacity: 0; }
           30% { opacity: 1; }
-          100% { transform: translate(var(--sx), -50%) scale(1.3); opacity: 0; }
+          100% { transform: translate(var(--sx), -100%) scale(1.5); opacity: 0; }
+        }
+        @keyframes chompPuff {
+          0% { transform: translate(-50%, 80%) scale(0); opacity: 0; }
+          40% { opacity: 1; transform: translate(-50%, 70%) scale(1.5); }
+          100% { transform: translate(-50%, 50%) scale(2.5); opacity: 0; }
         }
       `}</style>
+      {/* Food falling into monkey's mouth (monkey is at center) */}
       <div style={{
-        position: "absolute", left: "50%", top: "50%", fontSize: 80,
-        animation: "foodFloat 1.8s ease-out forwards",
-        textShadow: "0 4px 16px rgba(237,184,48,0.5)",
-      }}>{food}</div>
-      {/* Yellow sparkles */}
-      {[0,1,2,3,4,5].map(i => (
+        position: "absolute", left: "50%", top: "50%",
+        animation: "foodFlyIntoMouth 2.2s ease-in forwards",
+      }}>
+        <WatercolorFood type={food} size={90} />
+      </div>
+      {/* Chomp puff at the moment of eating */}
+      <div style={{
+        position: "absolute", left: "50%", top: "50%",
+        fontSize: 50,
+        animation: "chompPuff 0.6s ease-out 1.7s forwards",
+        opacity: 0,
+      }}>💨</div>
+      {/* Yellow sparkles flying up after eating */}
+      {[0,1,2,3,4,5,6].map(i => (
         <div key={i} style={{
-          position: "absolute", left: "50%", top: "50%", fontSize: 24, color: C.gold,
-          "--sx": `${(i - 2.5) * 60}px`,
-          animation: `sparkleFloat ${1.5 + i * 0.1}s ease-out ${i * 0.1}s forwards`,
+          position: "absolute", left: "50%", top: "50%", fontSize: 22, color: C.gold,
+          "--sx": `${(i - 3) * 50}px`,
+          animation: `sparkleFloatBig ${1.2 + i * 0.08}s ease-out ${1.6 + i * 0.05}s forwards`,
+          opacity: 0,
         }}>✨</div>
       ))}
     </div>
@@ -1504,12 +1712,12 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
       setMonkeyHappy(true);
       setShowFood(true);
       onCorrect();
-      setTimeout(() => setMonkeyHappy(false), 1500);
+      setTimeout(() => setMonkeyHappy(false), 2200);
     } else {
       setMonkeyShake(true);
       setShowHawk(true);
       onWrong();
-      setTimeout(() => setMonkeyShake(false), 2200);
+      setTimeout(() => setMonkeyShake(false), 4200);
     }
   };
 
@@ -1573,13 +1781,25 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
         <div style={{ textAlign: "center", marginBottom: 16, height: 100 }}>
           <div style={{
             display: "inline-block",
-            animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none",
+            animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : showFood ? "monkeyLeapEat 2.2s ease-in-out forwards" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none",
           }}>
             <style>{`
               @keyframes monkeyShake { 0%,100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-6px) rotate(-5deg); } 75% { transform: translateX(6px) rotate(5deg); } }
               @keyframes monkeyJoy { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.05); } }
+              @keyframes monkeyLeapEat {
+                0% { transform: translateY(0) scale(1); }
+                30% { transform: translateY(-25px) scale(1.1); }
+                55% { transform: translateY(-35px) scale(1.2); }
+                75% { transform: translateY(-25px) scale(1.15); }
+                90% { transform: translateY(-5px) scale(1.05); }
+                100% { transform: translateY(0) scale(1); }
+              }
             `}</style>
-            <MonkeySVG size={90} mood={monkeyHappy ? "excited" : monkeyShake ? "neutral" : "happy"} variant={5} />
+            <MonkeySVG
+              size={90}
+              mood={showFood ? "eating" : monkeyHappy ? "excited" : monkeyShake ? "neutral" : "happy"}
+              variant={5}
+            />
           </div>
         </div>
 
