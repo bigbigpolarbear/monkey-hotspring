@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
-import { getTeachers, getStudents, addStudentToDB, updateStudent, deleteStudent, getQuizzes, setQuizForStudent, deleteQuizForStudent } from "./firebase";
+import {
+  getTeachers, getStudents, updateStudent, deleteStudent,
+  setQuizForStudent, deleteQuizForStudent, getQuizzes
+} from "./firebase";
 
-/* ─── Hover context ─── */
+/* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
 const HoverContext = createContext({ anyHovering: false, setAnyHovering: () => {} });
 
 /* ─── palette matched to original watercolor ─── */
@@ -16,6 +19,11 @@ const C = {
   gold: "#edb830", green: "#5caa5e",
 };
 
+/* ─── Firebase helpers ─── */
+// Firebase functions are imported from ./firebase.js
+// Teachers and Students are stored in Firestore, Quizzes are in collections
+const DEFAULT_TEACHERS = [{ id: "t1", username: "teacher", password: "1234", name: "Sensei" }];
+
 /* ─── daily wordle words (kid-friendly 5-letter) ─── */
 const WORDS = [
   "happy","smile","cloud","dream","light","music","dance","heart","beach","plant",
@@ -24,8 +32,8 @@ const WORDS = [
   "eagle","flame","grape","hover","ivory","juice","kneel","lemon","maple","novel",
   "olive","pearl","queen","robin","stone","train","ultra","voice","whale","zebra",
   "angel","bloom","crane","drift","earth","fairy","globe","honey","igloo","jewel",
-  "lunar","marsh","night","orbit","piano","quest","ridge","steam","tulip",
-  "valor","winds","yield","plaza","acorn","berry","coral","daisy",
+  "kite","lunar","marsh","night","orbit","piano","quest","ridge","steam","tulip",
+  "umbra","valor","winds","xenon","yield","plaza","acorn","berry","coral","daisy",
   "elbow","flock","grain","haste","inlet","joker","kayak","lilac","mango","nurse",
   "oasis","patch","radar","salad","table","urban","vault","wheat","album","badge",
   "camel","delta","ember","flute","giant","hazel","index","jelly","koala","llama",
@@ -75,7 +83,7 @@ function WatercolorFilters() {
   );
 }
 
-/* ─── PETS ─── */
+/* ─── PETS ─── catalog of pets students can buy with stars */
 const PET_CATALOG = [
   { id: "fish", name: "Goldfish", price: 100, emoji: "🐠", rarity: "common" },
   { id: "duck", name: "Duckling", price: 200, emoji: "🦆", rarity: "common" },
@@ -92,6 +100,7 @@ const RARITY_COLORS = {
   epic: "#a060c0", legendary: "#edb830", mythic: "#e06060",
 };
 
+/* ─── PET SVG ─── small companion that floats next to the monkey */
 function PetSVG({ petId, side = "right" }) {
   const [bob, setBob] = useState(0);
   const [blink, setBlink] = useState(false);
@@ -441,10 +450,12 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
     const animate = (now) => {
       if (!running) return;
       const t = (now - t0) / 1000;
+      // Bobbing intensifies when hovering (splash effect)
       const bobAmp = hoveringRef.current ? 9 : 5;
       const swayAmp = hoveringRef.current ? 7 : 3.5;
       setBob(Math.sin(t * (hoveringRef.current ? speed1 * 2.2 : speed1)) * bobAmp + Math.sin(t * 0.4) * 2);
       setSway(Math.sin(t * (hoveringRef.current ? speed2 * 2 : speed2) + 0.8) * swayAmp);
+      // Slow drift around the pool
       setDrift({
         x: Math.sin(t * driftSpeedX + phaseX) * 18 + Math.cos(t * driftSpeedX * 0.6) * 6,
         y: Math.cos(t * driftSpeedY + phaseY) * 10 + Math.sin(t * driftSpeedY * 0.7) * 4,
@@ -461,6 +472,7 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
     return () => { running = false; cancelAnimationFrame(frameRef.current); clearTimeout(blinkTimer.current); };
   }, [delay, variant]);
 
+  // Spawn splash droplets while hovering
   useEffect(() => {
     if (!hovering) return;
     const interval = setInterval(() => {
@@ -468,7 +480,8 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
       const angle = Math.random() * Math.PI * 2;
       const dist = 30 + Math.random() * 20;
       const newSplash = {
-        id, startX: 0, startY: 28,
+        id,
+        startX: 0, startY: 28,
         endX: Math.cos(angle) * dist,
         endY: 28 + Math.abs(Math.sin(angle)) * 12 + 8,
         size: 3 + Math.random() * 4,
@@ -507,6 +520,7 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         position: "relative",
         ...style,
       }}>
+      {/* Splash droplets */}
       <style>{`
         @keyframes splashDrop {
           0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
@@ -540,14 +554,18 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           <ellipse cx="0" cy="-18" rx="27" ry="25" fill={C.fur1} />
           <ellipse cx="-4" cy="-22" rx="14" ry="12" fill="white" opacity="0.08" />
         </g>
+        {/* Ears */}
         <ellipse cx="-26" cy="-25" rx="8" ry="7" fill={C.fur2} filter="url(#watercolorSoft)" />
         <ellipse cx="-26" cy="-25" rx="5" ry="4.5" fill={C.face} opacity="0.6" />
         <ellipse cx="26" cy="-25" rx="8" ry="7" fill={C.fur2} filter="url(#watercolorSoft)" />
         <ellipse cx="26" cy="-25" rx="5" ry="4.5" fill={C.face} opacity="0.6" />
+        {/* Face */}
         <ellipse cx="0" cy="-14" rx="20" ry="18.5" fill={C.face} filter="url(#watercolorSoft)" />
         <ellipse cx="0" cy="-8" rx="16" ry="10" fill={C.cheek} opacity="0.06" />
+        {/* Cheeks */}
         <circle cx="-12" cy="-5" r="7" fill="url(#cheekGrad)" />
         <circle cx="12" cy="-5" r="7" fill="url(#cheekGrad)" />
+        {/* Eyes */}
         {blink ? (
           <>
             <path d="M -11 -16 Q -8 -14 -5 -16" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round" />
@@ -565,11 +583,13 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
             <circle cx="8" cy="-14.5" r="0.6" fill="white" opacity="0.6" />
           </>
         )}
+        {/* Nose */}
         <ellipse cx="0" cy="-8" rx="4" ry="3" fill={C.nose} />
         <ellipse cx="0" cy="-8.5" rx="3" ry="2" fill={C.noseDark} opacity="0.3" />
         <ellipse cx="-1.5" cy="-7.5" rx="1" ry="0.7" fill={C.noseDark} opacity="0.5" />
         <ellipse cx="1.5" cy="-7.5" rx="1" ry="0.7" fill={C.noseDark} opacity="0.5" />
         <ellipse cx="-0.5" cy="-9.5" rx="1.5" ry="0.8" fill="white" opacity="0.3" />
+        {/* Mouth */}
         {mood === "excited" ? (
           <path d="M -6 -2 Q 0 6 6 -2" fill={C.noseDark} opacity="0.3" stroke={C.text} strokeWidth="1.2" strokeLinecap="round" />
         ) : mood === "happy" ? (
@@ -578,12 +598,14 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           <path d="M -3.5 0 Q 0 1 3.5 0" fill="none" stroke={C.text} strokeWidth="1.2" strokeLinecap="round" />
         )}
 
-        {/* ─── ACCESSORIES ─── */}
+        {/* ─── ACCESSORIES ─── rendered on top of face */}
         {accessories.includes("scarf") && (
           <g filter="url(#watercolorSoft)">
             <path d="M -22 14 Q 0 22 22 14 Q 24 22 22 28 Q 0 36 -22 28 Q -24 22 -22 14 Z"
               fill="#c94c4c" stroke="#a02828" strokeWidth="0.5" />
-            <path d="M -22 17 L -16 32 L -10 28 L -14 17" fill="#a02828" opacity="0.8" />
+            <path d="M -22 17 L -16 32 L -10 28 L -14 17"
+              fill="#a02828" opacity="0.8" />
+            {/* stripes */}
             <line x1="-18" y1="20" x2="18" y2="18" stroke="white" strokeWidth="1" opacity="0.4" />
             <line x1="-18" y1="24" x2="18" y2="22" stroke="white" strokeWidth="1" opacity="0.3" />
           </g>
@@ -595,42 +617,55 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
             <line x1="-2" y1="-16" x2="2" y2="-16" stroke="#444" strokeWidth="1.5" />
             <line x1="-16" y1="-15" x2="-19" y2="-13" stroke="#444" strokeWidth="1" />
             <line x1="16" y1="-15" x2="19" y2="-13" stroke="#444" strokeWidth="1" />
+            {/* lens shine */}
             <ellipse cx="-11" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
             <ellipse cx="7" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
           </g>
         )}
         {accessories.includes("hat") && (
           <g filter="url(#watercolorSoft)">
+            {/* hat brim */}
             <ellipse cx="0" cy="-38" rx="28" ry="5" fill="#3a4f6a" />
+            {/* hat top */}
             <path d="M -18 -38 Q -16 -55 0 -57 Q 16 -55 18 -38 Z"
               fill="#4a6080" stroke="#2a3a50" strokeWidth="0.8" />
+            {/* band */}
             <ellipse cx="0" cy="-40" rx="19" ry="2.5" fill="#2a3a50" />
+            {/* small accent */}
             <circle cx="-10" cy="-40" r="1.5" fill="#edb830" />
           </g>
         )}
         {accessories.includes("beanie") && (
           <g filter="url(#watercolorSoft)">
+            {/* beanie body */}
             <path d="M -26 -32 Q -28 -52 0 -56 Q 28 -52 26 -32 Q 13 -30 0 -30 Q -13 -30 -26 -32 Z"
               fill="#d96666" stroke="#a04040" strokeWidth="0.5" />
-            <path d="M -26 -32 Q 0 -28 26 -32 L 26 -28 Q 0 -24 -26 -28 Z" fill="#a04040" />
+            {/* fold */}
+            <path d="M -26 -32 Q 0 -28 26 -32 L 26 -28 Q 0 -24 -26 -28 Z"
+              fill="#a04040" />
+            {/* pom pom */}
             <circle cx="0" cy="-58" r="6" fill="#f5f0ea" filter="url(#furTexture)" />
             <circle cx="-2" cy="-60" r="2" fill="white" opacity="0.5" />
           </g>
         )}
         {accessories.includes("crown") && (
           <g filter="url(#watercolorSoft)">
+            {/* crown base */}
             <path d="M -22 -38 L -22 -45 L -14 -52 L -7 -45 L 0 -55 L 7 -45 L 14 -52 L 22 -45 L 22 -38 Z"
               fill="#edb830" stroke="#b88810" strokeWidth="0.8" />
             <rect x="-22" y="-40" width="44" height="3" fill="#b88810" />
+            {/* gems */}
             <circle cx="-14" cy="-45" r="2" fill="#e06060" />
             <circle cx="0" cy="-48" r="2.5" fill="#5a8fc7" />
             <circle cx="14" cy="-45" r="2" fill="#5caa5e" />
+            {/* shine */}
             <path d="M -20 -42 L -20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
             <path d="M 20 -42 L 20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
           </g>
         )}
         {accessories.includes("flower") && (
           <g filter="url(#watercolorSoft)">
+            {/* flower petals */}
             {[0, 72, 144, 216, 288].map((angle, i) => {
               const rad = angle * Math.PI / 180;
               const x = -22 + Math.cos(rad) * 5;
@@ -652,8 +687,10 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         )}
         {accessories.includes("headphones") && (
           <g>
+            {/* band */}
             <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
             <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
+            {/* ear cups */}
             <circle cx="-28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
             <circle cx="28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
             <circle cx="-28" cy="-22" r="3" fill="#e06060" />
@@ -661,16 +698,23 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           </g>
         )}
 
+        {/* Arms */}
         <ellipse cx="-28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
         <ellipse cx="28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
         <ellipse cx="-32" cy="22" rx="4" ry="3.5" fill={C.face} opacity="0.5" />
         <ellipse cx="32" cy="22" rx="4" ry="3.5" fill={C.face} opacity="0.5" />
+
+        {/* Water around monkey */}
         <ellipse cx="0" cy="30" rx="46" ry="10" fill={C.water1} opacity="0.55" />
         <ellipse cx="-8" cy="28" rx="20" ry="4" fill="white" opacity="0.12" />
         <ellipse cx="0" cy="35" rx="50" ry="14" fill={C.water2} opacity="0.35" />
         <ellipse cx="-20" cy="26" rx="8" ry="2" fill="white" opacity="0.15" />
         <ellipse cx="18" cy="27" rx="6" ry="1.5" fill="white" opacity="0.12" />
+
+        {/* Pet companion - rendered ON TOP of water */}
         {pet && <PetSVG petId={pet} side="right" />}
+
+        {/* Hover splash ring - expanding ripple */}
         {hovering && (
           <>
             <ellipse cx="0" cy="32" rx="50" ry="12" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5"
@@ -680,6 +724,7 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           </>
         )}
 
+        {/* Splash droplets */}
         {splashes.map(s => (
           <circle
             key={s.id}
@@ -725,6 +770,7 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
             }
           `}</style>
           ★ {points}
+          {/* Sparkles around the star */}
           {hovering && [0, 1, 2, 3, 4].map(i => {
             const angle = (i / 5) * Math.PI * 2 + Math.random();
             const dist = 22 + Math.random() * 8;
@@ -862,12 +908,15 @@ function BackgroundScene({ w, h }) {
         </linearGradient>
       </defs>
       <rect width={w} height={h} fill="url(#skyGrad)" />
+      {/* Far mountains */}
       <path d={`M0 ${h*0.35} Q${w*0.1} ${h*0.15} ${w*0.2} ${h*0.25} Q${w*0.3} ${h*0.12} ${w*0.42} ${h*0.28} Q${w*0.5} ${h*0.08} ${w*0.62} ${h*0.22} Q${w*0.75} ${h*0.1} ${w*0.85} ${h*0.2} Q${w*0.95} ${h*0.15} ${w} ${h*0.3} L${w} ${h*0.45} L0 ${h*0.45} Z`}
         fill="url(#mtnGrad2)" opacity="0.6" filter="url(#watercolor)" />
+      {/* Near snowbanks */}
       <path d={`M0 ${h*0.28} Q${w*0.08} ${h*0.18} ${w*0.15} ${h*0.22} L${w*0.2} ${h*0.45} L0 ${h*0.45} Z`} fill="url(#mtnGrad1)" filter="url(#rockTexture)" />
       <path d={`M0 ${h*0.2} Q${w*0.05} ${h*0.14} ${w*0.12} ${h*0.18} L${w*0.15} ${h*0.22} L0 ${h*0.28} Z`} fill={C.snow1} opacity="0.9" filter="url(#watercolorSoft)" />
       <path d={`M${w*0.8} ${h*0.2} Q${w*0.88} ${h*0.12} ${w} ${h*0.18} L${w} ${h*0.48} L${w*0.75} ${h*0.48} Z`} fill="url(#mtnGrad1)" filter="url(#rockTexture)" />
       <path d={`M${w*0.82} ${h*0.15} Q${w*0.9} ${h*0.08} ${w} ${h*0.12} L${w} ${h*0.2} L${w*0.8} ${h*0.22} Z`} fill={C.snow1} opacity="0.9" filter="url(#watercolorSoft)" />
+      {/* Rocks */}
       {[
         { x: w*0.02, y: h*0.38, rw: 140, rh: 90, c: C.rock1 },
         { x: w*0.85, y: h*0.35, rw: 160, rh: 100, c: C.rock2 },
@@ -885,7 +934,7 @@ function BackgroundScene({ w, h }) {
         </g>
       ))}
 
-      {/* Perch rocks at pool edge */}
+      {/* Perch rocks at pool edge - where monkeys can hang on */}
       {[
         { x: w*0.18, y: h*0.62, rw: 90, rh: 50, c: C.rock1 },
         { x: w*0.5, y: h*0.65, rw: 110, rh: 55, c: C.rock3 },
@@ -898,7 +947,7 @@ function BackgroundScene({ w, h }) {
         </g>
       ))}
 
-      {/* Dense bare trees - left */}
+      {/* DENSE BARE TREES - left side cluster */}
       {[
         { x: w*0.01, y: h*0.7, s: 1.4, sway: 0 },
         { x: w*0.04, y: h*0.78, s: 1.1, sway: 0.05 },
@@ -908,13 +957,16 @@ function BackgroundScene({ w, h }) {
       ].map((tree, i) => (
         <g key={`treeL${i}`} transform={`translate(${tree.x},${tree.y}) scale(${tree.s}) rotate(${tree.sway * 30})`}
            opacity="0.75" filter="url(#watercolorSoft)">
+          {/* Main trunk - tall and bare */}
           <line x1="0" y1="0" x2="-2" y2="-100" stroke={C.rock2} strokeWidth="3" strokeLinecap="round" />
+          {/* Major branches splaying out */}
           <line x1="-1" y1="-30" x2="-25" y2="-65" stroke={C.rock2} strokeWidth="2.2" strokeLinecap="round" />
           <line x1="-1" y1="-45" x2="22" y2="-72" stroke={C.rock2} strokeWidth="2.2" strokeLinecap="round" />
           <line x1="-1" y1="-55" x2="-30" y2="-85" stroke={C.rock2} strokeWidth="2" strokeLinecap="round" />
           <line x1="-1" y1="-65" x2="18" y2="-95" stroke={C.rock2} strokeWidth="2" strokeLinecap="round" />
           <line x1="-2" y1="-78" x2="-18" y2="-105" stroke={C.rock2} strokeWidth="1.8" strokeLinecap="round" />
           <line x1="-2" y1="-88" x2="14" y2="-112" stroke={C.rock2} strokeWidth="1.8" strokeLinecap="round" />
+          {/* Small twigs at branch tips */}
           <line x1="-25" y1="-65" x2="-32" y2="-72" stroke={C.rock2} strokeWidth="1" strokeLinecap="round" />
           <line x1="-25" y1="-65" x2="-30" y2="-58" stroke={C.rock2} strokeWidth="1" strokeLinecap="round" />
           <line x1="22" y1="-72" x2="30" y2="-78" stroke={C.rock2} strokeWidth="1" strokeLinecap="round" />
@@ -928,7 +980,7 @@ function BackgroundScene({ w, h }) {
         </g>
       ))}
 
-      {/* Dense bare trees - right */}
+      {/* DENSE BARE TREES - right side cluster */}
       {[
         { x: w*0.97, y: h*0.7, s: 1.3, sway: 0 },
         { x: w*0.94, y: h*0.78, s: 1.5, sway: -0.04 },
@@ -958,7 +1010,7 @@ function BackgroundScene({ w, h }) {
         </g>
       ))}
 
-      {/* Background trees */}
+      {/* Background trees - softer, behind rocks */}
       {[
         { x: w*0.22, y: h*0.43, s: 0.5 },
         { x: w*0.78, y: h*0.43, s: 0.55 },
@@ -976,11 +1028,11 @@ function BackgroundScene({ w, h }) {
   );
 }
 
-/* ─── PENGUIN ─── */
+/* ─── PENGUIN ─── individual cute penguin that waddles across the snow */
 function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused }) {
   const [pos, setPos] = useState({ x: startX, y: startY });
   const [waddle, setWaddle] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [direction, setDirection] = useState(1); // 1 = right, -1 = left
   const frameRef = useRef(0);
   const pausedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
@@ -997,12 +1049,17 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
       if (!pausedRef.current) {
         const s = stateRef.current;
         s.t += dt;
+        // Move horizontally
         s.x += s.dir * speed * 12 * dt;
+        // Bounce off horizontal edges (in % units)
         if (s.x > 95) { s.dir = -1; setDirection(-1); }
         else if (s.x < 2) { s.dir = 1; setDirection(1); }
+        // Slight random direction change occasionally
         if (Math.random() < 0.002) { s.dir = -s.dir; setDirection(s.dir); }
+        // Slight vertical drift
         const newY = startY + Math.sin(s.t * 0.4 + variant) * 1.5;
         setPos({ x: s.x, y: newY });
+        // Waddle (side-to-side wobble)
         setWaddle(Math.sin(s.t * 6) * 6);
       }
       frameRef.current = requestAnimationFrame(animate);
@@ -1020,21 +1077,30 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
       pointerEvents: "none", zIndex: 6,
     }}>
       <svg width={baseSize} height={baseSize * 1.3} viewBox="-25 -30 50 65" style={{ overflow: "visible" }}>
+        {/* Feet */}
         <ellipse cx={-6 + waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
         <ellipse cx={6 - waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
+        {/* Body - black back */}
         <ellipse cx="0" cy="6" rx="14" ry="20" fill="#2a2a2a" filter="url(#watercolorSoft)" />
+        {/* White belly */}
         <ellipse cx="0" cy="8" rx="10" ry="16" fill="#f5f0ea" filter="url(#watercolorSoft)" />
+        {/* Wings */}
         <ellipse cx={-13 + waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
           transform={`rotate(${waddle * 0.5} -13 6)`} />
         <ellipse cx={13 - waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
           transform={`rotate(${-waddle * 0.5} 13 6)`} />
+        {/* Head */}
         <ellipse cx="0" cy="-12" rx="11" ry="11" fill="#2a2a2a" filter="url(#watercolorSoft)" />
+        {/* Face - white area */}
         <ellipse cx="0" cy="-10" rx="7" ry="6" fill="#f5f0ea" />
+        {/* Eyes */}
         <circle cx="-3" cy="-13" r="1.2" fill="#1a1a1a" />
         <circle cx="3" cy="-13" r="1.2" fill="#1a1a1a" />
         <circle cx="-2.5" cy="-13.5" r="0.4" fill="white" />
         <circle cx="3.5" cy="-13.5" r="0.4" fill="white" />
+        {/* Beak */}
         <path d="M -2 -8 L 0 -5 L 2 -8 Z" fill="#e89020" />
+        {/* Cheek blush */}
         <circle cx="-5" cy="-9" r="1.5" fill="#ffb0b0" opacity="0.5" />
         <circle cx="5" cy="-9" r="1.5" fill="#ffb0b0" opacity="0.5" />
       </svg>
@@ -1042,6 +1108,7 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
   );
 }
 
+/* ─── PENGUIN FLOCK ─── handles a group of penguins, pauses when monkeys hovered */
 function PenguinFlock() {
   const { anyHovering } = useContext(HoverContext);
   const penguins = [
@@ -1054,10 +1121,13 @@ function PenguinFlock() {
   return (
     <>
       {penguins.map((p, i) => (
-        <Penguin key={i} startX={p.x} startY={p.y}
+        <Penguin key={i}
+          startX={p.x} startY={p.y}
           baseSize={p.size} speed={p.speed} variant={p.variant}
-          paused={anyHovering} />
+          paused={anyHovering}
+        />
       ))}
+      {/* Pause indicator - subtle "shh!" effect */}
       {anyHovering && (
         <div style={{
           position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)",
@@ -1073,7 +1143,7 @@ function PenguinFlock() {
   );
 }
 
-/* ─── WORDLE GAME ─── */
+/* ─── WORDLE GAME COMPONENT ─── */
 function WordleGame({ onWin, onClose }) {
   const answer = getTodaysWord();
   const [guesses, setGuesses] = useState([]);
@@ -1088,9 +1158,11 @@ function WordleGame({ onWin, onClose }) {
     const result = Array(5).fill("absent");
     const ansArr = answer.split("");
     const used = Array(5).fill(false);
+    // Green pass
     for (let i = 0; i < 5; i++) {
       if (guess[i] === ansArr[i]) { result[i] = "correct"; used[i] = true; }
     }
+    // Yellow pass
     for (let i = 0; i < 5; i++) {
       if (result[i] === "correct") continue;
       for (let j = 0; j < 5; j++) {
@@ -1159,6 +1231,8 @@ function WordleGame({ onWin, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
         <p style={{ color: C.textLight, fontSize: 14, margin: "0 0 16px", textAlign: "center" }}>Guess the 5-letter word! Solve it for +1 point</p>
+
+        {/* Grid */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center", marginBottom: 16 }}>
           {Array.from({ length: maxGuesses }, (_, row) => {
             const guess = guesses[row];
@@ -1188,6 +1262,8 @@ function WordleGame({ onWin, onClose }) {
             );
           })}
         </div>
+
+        {/* Message */}
         {message && (
           <div style={{
             textAlign: "center", padding: "10px 16px", borderRadius: 12, marginBottom: 12,
@@ -1197,6 +1273,8 @@ function WordleGame({ onWin, onClose }) {
             {won && "🎉 "}{message}
           </div>
         )}
+
+        {/* Keyboard */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
           {kbRows.map((row, ri) => (
             <div key={ri} style={{ display: "flex", gap: 4 }}>
@@ -1225,7 +1303,7 @@ function WordleGame({ onWin, onClose }) {
   );
 }
 
-/* ─── CSV Parser ─── */
+/* ─── CSV Parser ─── tolerant of quotes, commas inside quoted strings */
 function parseCSV(text) {
   const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim());
   if (lines.length === 0) return [];
@@ -1244,6 +1322,7 @@ function parseCSV(text) {
     return out.map(s => s.trim());
   };
   const headers = parseLine(lines[0]).map(h => h.toLowerCase());
+  // Try to find columns: question, a/b/c/d (or option1-4), correct/answer
   const qIdx = headers.findIndex(h => h.includes("question") || h === "q");
   const aIdx = headers.findIndex(h => h === "a" || h === "option1" || h === "choice1");
   const bIdx = headers.findIndex(h => h === "b" || h === "option2" || h === "choice2");
@@ -1256,6 +1335,7 @@ function parseCSV(text) {
     const cols = parseLine(lines[i]);
     if (!cols[qIdx]) continue;
     let correct = (cols[ansIdx] || "").toUpperCase().trim();
+    // Accept A/B/C/D or 1/2/3/4 or actual answer text
     let correctIdx = -1;
     if (["A","B","C","D"].includes(correct)) correctIdx = "ABCD".indexOf(correct);
     else if (["1","2","3","4"].includes(correct)) correctIdx = parseInt(correct) - 1;
@@ -1275,14 +1355,16 @@ function parseCSV(text) {
   return questions;
 }
 
-/* ─── HAWK ATTACK ─── */
+/* ─── HAWK SVG ─── swoops in when student gets answer wrong */
 function HawkAttack({ onComplete }) {
   useEffect(() => {
     const t = setTimeout(onComplete, 2400);
     return () => clearTimeout(t);
   }, [onComplete]);
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden" }}>
+    <div style={{
+      position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden",
+    }}>
       <style>{`
         @keyframes hawkSwoop {
           0% { transform: translate(-200px, -100px) rotate(15deg) scale(0.8); }
@@ -1297,29 +1379,44 @@ function HawkAttack({ onComplete }) {
           20%, 40%, 60%, 80% { transform: translate(3px, -1px); }
         }
       `}</style>
-      <div style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%",
-        background: "rgba(180,30,30,0.08)", animation: "screenShake 0.4s ease 0.5s 4" }} />
-      <div style={{ position: "absolute", left: 0, top: 0, animation: "hawkSwoop 2.2s ease-in-out forwards" }}>
+      <div style={{
+        position: "absolute", left: 0, top: 0, width: "100%", height: "100%",
+        background: "rgba(180,30,30,0.08)",
+        animation: "screenShake 0.4s ease 0.5s 4",
+      }} />
+      <div style={{
+        position: "absolute", left: 0, top: 0,
+        animation: "hawkSwoop 2.2s ease-in-out forwards",
+      }}>
         <svg width="160" height="120" viewBox="-80 -60 160 120" style={{ overflow: "visible" }}>
+          {/* Wings spread */}
           <path d="M -10 0 Q -50 -20 -75 -10 Q -55 0 -40 5 Q -25 8 -10 5 Z"
             fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
           <path d="M 10 0 Q 50 -20 75 -10 Q 55 0 40 5 Q 25 8 10 5 Z"
             fill="#5a3a28" stroke="#3a2418" strokeWidth="1" filter="url(#watercolorSoft)" />
+          {/* Wing feather details */}
           <path d="M -20 2 L -55 -8 M -25 6 L -60 0 M -15 -2 L -45 -14"
             stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
           <path d="M 20 2 L 55 -8 M 25 6 L 60 0 M 15 -2 L 45 -14"
             stroke="#3a2418" strokeWidth="1" fill="none" opacity="0.6" />
+          {/* Body */}
           <ellipse cx="0" cy="2" rx="12" ry="18" fill="#7a4e34" filter="url(#watercolorSoft)" />
           <ellipse cx="0" cy="6" rx="8" ry="12" fill="#a06a48" opacity="0.5" />
+          {/* Head */}
           <ellipse cx="0" cy="-14" rx="10" ry="9" fill="#6a4028" filter="url(#watercolorSoft)" />
+          {/* Sharp eyes */}
           <ellipse cx="-3" cy="-15" rx="2" ry="1.5" fill="#ffd000" />
           <ellipse cx="3" cy="-15" rx="2" ry="1.5" fill="#ffd000" />
           <circle cx="-3" cy="-15" r="0.8" fill="#1a1a1a" />
           <circle cx="3" cy="-15" r="0.8" fill="#1a1a1a" />
+          {/* Sharp beak */}
           <path d="M -2 -10 L 0 -4 L 2 -10 L 0 -8 Z" fill="#ffb030" stroke="#a06020" strokeWidth="0.5" />
+          {/* Talons */}
           <path d="M -5 18 L -7 24 M -3 18 L -3 26 M -1 18 L 1 25" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
           <path d="M 5 18 L 7 24 M 3 18 L 3 26 M 1 18 L -1 25" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
+          {/* Tail */}
           <path d="M -4 18 L -8 28 L 0 24 L 8 28 L 4 18 Z" fill="#5a3a28" filter="url(#watercolorSoft)" />
+          {/* Angry brow */}
           <path d="M -8 -19 L -2 -17 M 8 -19 L 2 -17" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </div>
@@ -1327,7 +1424,7 @@ function HawkAttack({ onComplete }) {
   );
 }
 
-/* ─── FOOD REWARD ─── */
+/* ─── FOOD REWARD ─── floats up when student gets answer correct */
 function FoodReward({ onComplete }) {
   useEffect(() => {
     const t = setTimeout(onComplete, 1800);
@@ -1336,7 +1433,9 @@ function FoodReward({ onComplete }) {
   const foods = ["🍌", "🍎", "🥕", "🍓", "🥜"];
   const food = foods[Math.floor(Math.random() * foods.length)];
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden" }}>
+    <div style={{
+      position: "absolute", inset: 0, pointerEvents: "none", zIndex: 100, overflow: "hidden",
+    }}>
       <style>{`
         @keyframes foodFloat {
           0% { transform: translate(-50%, 100%) scale(0.5); opacity: 0; }
@@ -1352,9 +1451,12 @@ function FoodReward({ onComplete }) {
           100% { transform: translate(var(--sx), -50%) scale(1.3); opacity: 0; }
         }
       `}</style>
-      <div style={{ position: "absolute", left: "50%", top: "50%", fontSize: 80,
+      <div style={{
+        position: "absolute", left: "50%", top: "50%", fontSize: 80,
         animation: "foodFloat 1.8s ease-out forwards",
-        textShadow: "0 4px 16px rgba(237,184,48,0.5)" }}>{food}</div>
+        textShadow: "0 4px 16px rgba(237,184,48,0.5)",
+      }}>{food}</div>
+      {/* Yellow sparkles */}
       {[0,1,2,3,4,5].map(i => (
         <div key={i} style={{
           position: "absolute", left: "50%", top: "50%", fontSize: 24, color: C.gold,
@@ -1366,7 +1468,7 @@ function FoodReward({ onComplete }) {
   );
 }
 
-/* ─── QUIZ GAME ─── */
+/* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
 function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWrong }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selected, setSelected] = useState(null);
@@ -1412,8 +1514,13 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
   };
 
   const nextQuestion = () => {
-    if (isLast) setFinished(true);
-    else { setCurrentIdx(i => i + 1); setSelected(null); setShowResult(false); }
+    if (isLast) {
+      setFinished(true);
+    } else {
+      setCurrentIdx(i => i + 1);
+      setSelected(null);
+      setShowResult(false);
+    }
   };
 
   if (finished) {
@@ -1437,8 +1544,12 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
   return (
     <div style={modalBackdropStyle}>
       <div style={{ ...modalCardStyle, width: 580, maxWidth: "95vw", position: "relative", overflow: "hidden" }}>
+        {/* Hawk overlay */}
         {showHawk && <HawkAttack onComplete={() => setShowHawk(false)} />}
+        {/* Food overlay */}
         {showFood && <FoodReward onComplete={() => setShowFood(false)} />}
+
+        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>📚 Quiz Time!</h2>
@@ -1448,13 +1559,22 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
+
+        {/* Progress bar */}
         <div style={{ height: 8, background: `${C.fur2}30`, borderRadius: 4, marginBottom: 16, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${((currentIdx + (showResult ? 1 : 0)) / questions.length) * 100}%`,
-            background: `linear-gradient(90deg, ${C.gold}, ${C.green})`, transition: "width 0.4s" }} />
+          <div style={{
+            height: "100%", width: `${((currentIdx + (showResult ? 1 : 0)) / questions.length) * 100}%`,
+            background: `linear-gradient(90deg, ${C.gold}, ${C.green})`,
+            transition: "width 0.4s",
+          }} />
         </div>
+
+        {/* Mini monkey reacting */}
         <div style={{ textAlign: "center", marginBottom: 16, height: 100 }}>
-          <div style={{ display: "inline-block",
-            animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none" }}>
+          <div style={{
+            display: "inline-block",
+            animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none",
+          }}>
             <style>{`
               @keyframes monkeyShake { 0%,100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-6px) rotate(-5deg); } 75% { transform: translateX(6px) rotate(5deg); } }
               @keyframes monkeyJoy { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.05); } }
@@ -1462,11 +1582,17 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
             <MonkeySVG size={90} mood={monkeyHappy ? "excited" : monkeyShake ? "neutral" : "happy"} variant={5} />
           </div>
         </div>
-        <div style={{ background: `${C.snow1}80`, borderRadius: 16, padding: "18px 22px", marginBottom: 16,
+
+        {/* Question */}
+        <div style={{
+          background: `${C.snow1}80`, borderRadius: 16, padding: "18px 22px", marginBottom: 16,
           fontSize: 20, color: C.text, fontWeight: 600, textAlign: "center",
-          minHeight: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          minHeight: 60, display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
           {currentQ.q}
         </div>
+
+        {/* Options */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           {currentQ.options.map((opt, idx) => {
             const isCorrect = idx === currentQ.correct;
@@ -1481,18 +1607,23 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
             }
             return (
               <button key={idx} onClick={() => pickAnswer(idx)} disabled={showResult}
-                style={{ padding: "16px 14px", borderRadius: 14, border: "none",
+                style={{
+                  padding: "16px 14px", borderRadius: 14, border: "none",
                   background: bg, color: textColor,
                   fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
                   cursor: showResult ? "default" : "pointer",
                   transition: "all 0.3s, transform 0.15s",
                   boxShadow: isSelected ? `0 0 0 3px ${C.text}` : "0 3px 8px rgba(0,0,0,0.1)",
-                  textAlign: "left", display: "flex", alignItems: "center", gap: 10, minHeight: 60 }}
+                  textAlign: "left", display: "flex", alignItems: "center", gap: 10,
+                  minHeight: 60,
+                }}
                 onMouseEnter={e => !showResult && (e.currentTarget.style.transform = "translateY(-2px)")}
                 onMouseLeave={e => !showResult && (e.currentTarget.style.transform = "translateY(0)")}>
-                <span style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.3)",
+                <span style={{
+                  width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.3)",
                   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  fontSize: 16, fontWeight: 700 }}>{"ABCD"[idx]}</span>
+                  fontSize: 16, fontWeight: 700,
+                }}>{"ABCD"[idx]}</span>
                 <span style={{ flex: 1 }}>{opt}</span>
                 {showResult && isCorrect && <span style={{ fontSize: 22 }}>✓</span>}
                 {showResult && isSelected && !isCorrect && <span style={{ fontSize: 22 }}>✗</span>}
@@ -1500,10 +1631,14 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
             );
           })}
         </div>
+
+        {/* Next/result message */}
         {showResult && (
           <div style={{ textAlign: "center" }}>
-            <p style={{ color: selected === currentQ.correct ? C.green : C.accent,
-              fontSize: 18, fontWeight: 700, margin: "0 0 12px" }}>
+            <p style={{
+              color: selected === currentQ.correct ? C.green : C.accent,
+              fontSize: 18, fontWeight: 700, margin: "0 0 12px",
+            }}>
               {selected === currentQ.correct
                 ? "🎉 Correct! Your monkey gets a treat!"
                 : "🦅 Yikes! A hawk attacked your monkey!"}
@@ -1535,24 +1670,22 @@ const primaryBtnStyle = {
   color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, fontWeight: 700,
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   MAIN APP — uses Firebase Firestore for all data persistence
-   ═══════════════════════════════════════════════════════════════ */
-export default function App() {
+/* ─── MAIN APP ─── */
+export default function SnowMonkeyTracker() {
   const [anyHovering, setAnyHovering] = useState(false);
   return (
     <HoverContext.Provider value={{ anyHovering, setAnyHovering }}>
-      <AppInner />
+      <SnowMonkeyTrackerInner />
     </HoverContext.Provider>
   );
 }
 
-function AppInner() {
+function SnowMonkeyTrackerInner() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("login");
   const [loginTab, setLoginTab] = useState("teacher");
   const [user, setUser] = useState(null);
-  const [teachers, setTeachers] = useState([]);
+  const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
   const [students, setStudents] = useState([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -1567,15 +1700,14 @@ function AppInner() {
   const [showManage, setShowManage] = useState(false);
   const [showWordle, setShowWordle] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [quizzes, setQuizzes] = useState({});
+  const [showPetMart, setShowPetMart] = useState(false);
+  const [quizzes, setQuizzes] = useState({}); // { studentId: [questions] }
   const [showQuizUpload, setShowQuizUpload] = useState(false);
   const [showAccessories, setShowAccessories] = useState(false);
-  const [showPetMart, setShowPetMart] = useState(false);
   const [quizUploadStudentId, setQuizUploadStudentId] = useState(null);
   const [csvText, setCsvText] = useState("");
   const [csvError, setCsvError] = useState("");
 
-  // Load from Firebase on mount
   useEffect(() => {
     (async () => {
       try {
@@ -1584,59 +1716,67 @@ function AppInner() {
         const q = await getQuizzes();
         setTeachers(t);
         setStudents(s);
-        setQuizzes(q);
-      } catch (err) {
-        console.error("Firebase load error:", err);
+        // getQuizzes returns object keyed by studentId already
+        setQuizzes(q || {});
+      } catch (error) {
+        console.error("Failed to load data:", error);
       }
       setLoading(false);
     })();
   }, []);
 
-  const refreshStudents = async () => {
-    const s = await getStudents();
-    setStudents(s);
-  };
+  const persist = useCallback(async (newT, newS, newQ) => {
+    if (newT) { setTeachers(newT); }
+    if (newS) {
+      setStudents(newS);
+      // Update each changed student in Firebase
+      for (const student of newS) {
+        try {
+          await updateStudent(student.id, student);
+        } catch (error) {
+          console.error("Failed to update student:", error);
+        }
+      }
+    }
+    if (newQ) {
+      setQuizzes(newQ);
+      // Update quizzes in Firebase
+      for (const studentId in newQ) {
+        try {
+          await setQuizForStudent(studentId, newQ[studentId]);
+        } catch (error) {
+          console.error("Failed to update quiz:", error);
+        }
+      }
+    }
+  }, []);
 
-  const refreshQuizzes = async () => {
-    const q = await getQuizzes();
-    setQuizzes(q);
-  };
-
-  const uploadQuizForStudent = async (studentId, csvData) => {
+  const uploadQuizForStudent = (studentId, csvData) => {
     const parsed = parseCSV(csvData);
     if (!parsed) return { error: "Couldn't parse CSV. Make sure your file has columns: question, A, B, C, D, correct" };
     if (parsed.length === 0) return { error: "No questions found in CSV" };
-    try {
-      await setQuizForStudent(studentId, parsed);
-      await refreshQuizzes();
-      return { success: parsed.length };
-    } catch (err) {
-      return { error: "Error saving quiz: " + err.message };
-    }
+    const newQuizzes = { ...quizzes, [studentId]: parsed };
+    persist(null, null, newQuizzes);
+    return { success: parsed.length };
   };
 
-  const removeQuizForStudent = async (studentId) => {
-    try {
-      await deleteQuizForStudent(studentId);
-      await refreshQuizzes();
-    } catch (err) {
-      notify("Error removing quiz", "error");
-    }
+  const removeQuizForStudent = (studentId) => {
+    const newQuizzes = { ...quizzes };
+    delete newQuizzes[studentId];
+    persist(null, null, newQuizzes);
   };
 
   const handleQuizCorrect = async () => {
     if (!user) return;
     const st = students.find(s => s.id === user.id);
     if (!st) return;
-    try {
-      await updateStudent(user.id, { points: st.points + 1 });
-      await refreshStudents();
-    } catch (err) {
-      console.error("Quiz point update error:", err);
-    }
+    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + 1 } : s);
+    persist(null, newS);
   };
 
-  const handleQuizWrong = () => {};
+  const handleQuizWrong = () => {
+    // Just visual, no point loss for now (could add if you want)
+  };
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type }); setTimeout(() => setNotification(null), 2500);
@@ -1655,117 +1795,85 @@ function AppInner() {
     }
   };
 
-  const addStudentHandler = async () => {
+  const addStudent = () => {
     if (!newStudentName.trim() || !newStudentUser.trim() || !newStudentPass.trim()) { notify("Please fill in all fields", "error"); return; }
     if (students.find(s => s.username === newStudentUser) || teachers.find(t => t.username === newStudentUser)) { notify("Username already taken", "error"); return; }
-    try {
-      await addStudentToDB({
-        username: newStudentUser.trim(),
-        password: newStudentPass.trim(),
-        name: newStudentName.trim(),
-        points: 0,
-        lastChallengeDate: "",
-      });
-      await refreshStudents();
-      setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
-      notify(`${newStudentName.trim()} joined the hot spring!`);
-    } catch (err) {
-      notify("Error adding student", "error");
-      console.error(err);
-    }
+    const newS = [...students, { id: "s" + Date.now(), username: newStudentUser.trim(), password: newStudentPass.trim(), name: newStudentName.trim(), points: 0 }];
+    persist(null, newS);
+    setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
+    notify(`${newStudentName.trim()} joined the hot spring!`);
   };
 
-  const removeStudentHandler = async (id) => {
-    try {
-      await deleteStudent(id);
-      await refreshStudents();
-      if (selectedStudent === id) setSelectedStudent(null);
-      notify("Student removed");
-    } catch (err) {
-      notify("Error removing student", "error");
-    }
+  const removeStudent = (id) => {
+    persist(null, students.filter(s => s.id !== id));
+    if (selectedStudent === id) setSelectedStudent(null); notify("Student removed");
   };
 
-  const addPoints = async (id, amount) => {
+  const addPoints = (id, amount) => {
+    const newS = students.map(s => s.id === id ? { ...s, points: Math.max(0, s.points + amount) } : s);
+    persist(null, newS);
     const st = students.find(s => s.id === id);
-    if (!st) return;
-    const newPts = Math.max(0, st.points + amount);
-    try {
-      await updateStudent(id, { points: newPts });
-      await refreshStudents();
-      notify(`${amount > 0 ? "+" : ""}${amount} point${Math.abs(amount) !== 1 ? "s" : ""} for ${st.name}!`);
-    } catch (err) {
-      notify("Error updating points", "error");
-    }
+    notify(`${amount > 0 ? "+" : ""}${amount} point${Math.abs(amount) !== 1 ? "s" : ""} for ${st?.name}!`);
   };
 
-  const toggleAccessory = async (studentId, accessory) => {
-    const st = students.find(s => s.id === studentId);
-    if (!st) return;
-    const current = st.accessories || [];
-    const has = current.includes(accessory);
-    const headwear = ["hat", "beanie", "crown", "flower", "headphones"];
-    let next;
-    if (has) {
-      next = current.filter(a => a !== accessory);
-    } else if (headwear.includes(accessory)) {
-      next = [...current.filter(a => !headwear.includes(a)), accessory];
-    } else {
-      next = [...current, accessory];
-    }
-    try {
-      await updateStudent(studentId, { accessories: next });
-      await refreshStudents();
-    } catch (err) {
-      notify("Error updating accessories", "error");
-    }
+  const toggleAccessory = (studentId, accessory) => {
+    const newS = students.map(s => {
+      if (s.id !== studentId) return s;
+      const current = s.accessories || [];
+      const has = current.includes(accessory);
+      // Only one headwear at a time (hat, beanie, crown, flower, headphones)
+      const headwear = ["hat", "beanie", "crown", "flower", "headphones"];
+      let next;
+      if (has) {
+        next = current.filter(a => a !== accessory);
+      } else if (headwear.includes(accessory)) {
+        next = [...current.filter(a => !headwear.includes(a)), accessory];
+      } else {
+        next = [...current, accessory];
+      }
+      return { ...s, accessories: next };
+    });
+    persist(null, newS);
   };
 
-  const clearAccessories = async (studentId) => {
-    try {
-      await updateStudent(studentId, { accessories: [] });
-      await refreshStudents();
-      notify("Accessories cleared!");
-    } catch (err) {
-      notify("Error clearing accessories", "error");
-    }
+  const clearAccessories = (studentId) => {
+    const newS = students.map(s => s.id === studentId ? { ...s, accessories: [] } : s);
+    persist(null, newS);
+    notify("Accessories cleared!");
   };
 
-  const buyPet = async (studentId, petId) => {
+  const buyPet = (studentId, petId) => {
     const pet = PET_CATALOG.find(p => p.id === petId);
     const st = students.find(s => s.id === studentId);
     if (!pet || !st) return;
     if (st.pet === petId) {
-      // unequip
-      try {
-        await updateStudent(studentId, { pet: null });
-        await refreshStudents();
-        notify(`${pet.name} sent home for now`);
-      } catch (err) { notify("Error", "error"); }
+      // Already equipped - unequip
+      const newS = students.map(s => s.id === studentId ? { ...s, pet: null } : s);
+      persist(null, newS);
+      notify(`${pet.name} sent home for now`);
       return;
     }
     const ownedPets = st.ownedPets || [];
     if (ownedPets.includes(petId)) {
-      try {
-        await updateStudent(studentId, { pet: petId });
-        await refreshStudents();
-        notify(`${pet.emoji} ${pet.name} is by your side!`);
-      } catch (err) { notify("Error", "error"); }
+      // Already owned - just equip
+      const newS = students.map(s => s.id === studentId ? { ...s, pet: petId } : s);
+      persist(null, newS);
+      notify(`${pet.emoji} ${pet.name} is by your side!`);
       return;
     }
+    // Need to purchase
     if (st.points < pet.price) {
       notify(`Not enough stars! Need ${pet.price - st.points} more ★`, "error");
       return;
     }
-    try {
-      await updateStudent(studentId, {
-        points: st.points - pet.price,
-        pet: petId,
-        ownedPets: [...ownedPets, petId],
-      });
-      await refreshStudents();
-      notify(`🎉 You adopted a ${pet.name}! ${pet.emoji}`);
-    } catch (err) { notify("Error buying pet", "error"); }
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points - pet.price,
+      pet: petId,
+      ownedPets: [...ownedPets, petId],
+    } : s);
+    persist(null, newS);
+    notify(`🎉 You adopted a ${pet.name}! ${pet.emoji}`);
   };
 
   const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowQuizUpload(false); setShowAccessories(false); setShowPetMart(false); };
@@ -1776,18 +1884,12 @@ function AppInner() {
     return s?.lastChallengeDate === todayKey;
   };
 
-  const handleWordleWin = async () => {
+  const handleWordleWin = () => {
     if (!user || hasCompletedChallenge(user.id)) return;
-    const st = students.find(s => s.id === user.id);
-    if (!st) return;
-    try {
-      await updateStudent(user.id, { points: st.points + 1, lastChallengeDate: todayKey });
-      await refreshStudents();
-      setShowWordle(false);
-      notify("🎉 Challenge complete! +1 point!");
-    } catch (err) {
-      notify("Error awarding point", "error");
-    }
+    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + 1, lastChallengeDate: todayKey } : s);
+    persist(null, newS);
+    setShowWordle(false);
+    notify("🎉 Challenge complete! +1 point!");
   };
 
   const monkeyPositions = [
@@ -1868,6 +1970,7 @@ function AppInner() {
             {notification.msg}
           </div>
         )}
+        {/* Top bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20` }}>
           <div>
             <h1 style={{ fontSize: 26, color: C.text, margin: 0 }}>♨️ Monkey Hot Spring</h1>
@@ -1886,13 +1989,14 @@ function AppInner() {
           </div>
         </div>
 
+        {/* Panels */}
         {showAddStudent && (
           <div style={{ position: "absolute", top: 72, right: 28, zIndex: 30, background: C.card, borderRadius: 22, padding: 28, width: 310, boxShadow: "0 16px 48px rgba(0,0,0,0.15)", border: `2px solid ${C.green}30` }}>
             <h3 style={{ margin: "0 0 16px", color: C.text, fontSize: 22 }}>New Student</h3>
             {[{ val: newStudentName, set: setNewStudentName, ph: "Display Name" }, { val: newStudentUser, set: setNewStudentUser, ph: "Username" }, { val: newStudentPass, set: setNewStudentPass, ph: "Password", type: "password" }].map((f, i) => (
               <input key={i} value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.ph} type={f.type || "text"} style={{ ...inputStyle, marginBottom: 10 }} />
             ))}
-            <button onClick={addStudentHandler} style={{ width: "100%", padding: 13, borderRadius: 14, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, marginTop: 4 }}>Add to Hot Spring!</button>
+            <button onClick={addStudent} style={{ width: "100%", padding: 13, borderRadius: 14, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, marginTop: 4 }}>Add to Hot Spring!</button>
           </div>
         )}
         {showManage && (
@@ -1908,7 +2012,7 @@ function AppInner() {
                       <div style={{ fontSize: 16, color: C.text, fontWeight: 600 }}>{s.name}</div>
                       <div style={{ fontSize: 12, color: C.textLight }}>@{s.username} · ★ {s.points} pts</div>
                     </div>
-                    <button onClick={() => { if (confirm(`Remove ${s.name}?`)) removeStudentHandler(s.id); }} style={{ padding: "5px 11px", borderRadius: 8, border: "none", background: `${C.accent}15`, color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 14 }}>✕</button>
+                    <button onClick={() => { if (confirm(`Remove ${s.name}?`)) removeStudent(s.id); }} style={{ padding: "5px 11px", borderRadius: 8, border: "none", background: `${C.accent}15`, color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 14 }}>✕</button>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <button onClick={() => { setQuizUploadStudentId(s.id); setShowQuizUpload(true); setCsvText(""); setCsvError(""); }}
@@ -1931,6 +2035,7 @@ function AppInner() {
           </div>
         )}
 
+        {/* Quiz CSV Upload Modal */}
         {showQuizUpload && (() => {
           const targetStudent = students.find(s => s.id === quizUploadStudentId);
           const handleFileUpload = (e) => {
@@ -1940,9 +2045,9 @@ function AppInner() {
             reader.onload = (ev) => setCsvText(ev.target.result);
             reader.readAsText(file);
           };
-          const submitQuiz = async () => {
+          const submitQuiz = () => {
             if (!csvText.trim()) { setCsvError("Please paste CSV or upload a file"); return; }
-            const result = await uploadQuizForStudent(quizUploadStudentId, csvText);
+            const result = uploadQuizForStudent(quizUploadStudentId, csvText);
             if (result.error) { setCsvError(result.error); return; }
             notify(`Quiz set for ${targetStudent?.name}: ${result.success} questions!`);
             setShowQuizUpload(false);
@@ -1957,7 +2062,7 @@ function AppInner() {
                 <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: 14, marginBottom: 14, fontSize: 13, color: C.textLight }}>
                   <strong style={{ color: C.text }}>CSV Format:</strong> Headers must be <code>question, A, B, C, D, correct</code><br/>
                   The "correct" column should be A, B, C, or D (matching the right answer).<br/>
-                  <span style={{ color: C.green }}>Example row:</span> <code>What is 2+2?,3,4,5,6,B</code>
+                  <span style={{ color: C.green }}>Example:</span> <code>What is 2+2?,3,4,5,6,B</code>
                 </div>
                 <input type="file" accept=".csv,.txt" onChange={handleFileUpload}
                   style={{ marginBottom: 10, fontFamily: "'Patrick Hand', cursive", fontSize: 14, color: C.text }} />
@@ -1978,6 +2083,7 @@ function AppInner() {
           );
         })()}
 
+        {/* Scene */}
         <div style={{ position: "relative", margin: "8px auto 0", width: "96%", maxWidth: 1300, height: "calc(100vh - 90px)", borderRadius: 20, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
           <BackgroundScene w={1300} h={800} />
           <div style={{ position: "absolute", top: "30%", left: "6%", right: "6%", bottom: "6%", borderRadius: 20, overflow: "hidden" }}>
@@ -2002,6 +2108,7 @@ function AppInner() {
           </div>
         </div>
 
+        {/* Points bar */}
         {sel && (
           <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: `${C.card}f0`, borderRadius: 22, padding: "14px 24px", boxShadow: `0 10px 36px rgba(0,0,0,0.18), 0 0 0 2px ${C.gold}30`, display: "flex", alignItems: "center", gap: 14, zIndex: 50, backdropFilter: "blur(12px)" }}>
             <div style={{ fontSize: 18, color: C.text, fontWeight: 700 }}>
@@ -2022,16 +2129,17 @@ function AppInner() {
           </div>
         )}
 
+        {/* Accessories Picker Modal */}
         {showAccessories && sel && (() => {
           const accessoryOptions = [
-            { id: "hat", emoji: "🎩", label: "Top Hat" },
-            { id: "beanie", emoji: "🧢", label: "Beanie" },
-            { id: "crown", emoji: "👑", label: "Crown" },
-            { id: "flower", emoji: "🌸", label: "Flower" },
-            { id: "headphones", emoji: "🎧", label: "Headphones" },
-            { id: "sunglasses", emoji: "🕶️", label: "Sunglasses" },
-            { id: "scarf", emoji: "🧣", label: "Scarf" },
-            { id: "bowtie", emoji: "🎀", label: "Bow Tie" },
+            { id: "hat", emoji: "🎩", label: "Top Hat", category: "head" },
+            { id: "beanie", emoji: "🧢", label: "Beanie", category: "head" },
+            { id: "crown", emoji: "👑", label: "Crown", category: "head" },
+            { id: "flower", emoji: "🌸", label: "Flower", category: "head" },
+            { id: "headphones", emoji: "🎧", label: "Headphones", category: "head" },
+            { id: "sunglasses", emoji: "🕶️", label: "Sunglasses", category: "face" },
+            { id: "scarf", emoji: "🧣", label: "Scarf", category: "neck" },
+            { id: "bowtie", emoji: "🎀", label: "Bow Tie", category: "neck" },
           ];
           const current = sel.accessories || [];
           return (
@@ -2041,6 +2149,8 @@ function AppInner() {
                   <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>✨ Dress up {sel.name}</h2>
                   <button onClick={() => setShowAccessories(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
                 </div>
+
+                {/* Preview of monkey with current accessories */}
                 <div style={{
                   display: "flex", justifyContent: "center", alignItems: "center",
                   background: `${C.snow1}80`, borderRadius: 18, padding: 16, marginBottom: 18,
@@ -2050,9 +2160,12 @@ function AppInner() {
                     variant={students.findIndex(st => st.id === sel.id)}
                     accessories={current} />
                 </div>
+
                 <p style={{ color: C.textLight, fontSize: 13, margin: "0 0 10px", textAlign: "center" }}>
                   Tap to toggle on/off. Only one head accessory at a time.
                 </p>
+
+                {/* Accessory grid */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
                   {accessoryOptions.map(opt => {
                     const active = current.includes(opt.id);
@@ -2075,6 +2188,7 @@ function AppInner() {
                     );
                   })}
                 </div>
+
                 <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
                   <button onClick={() => clearAccessories(sel.id)}
                     style={{ padding: "9px 16px", borderRadius: 10, border: `2px solid ${C.accent}40`, background: "transparent", color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 600 }}>
@@ -2104,13 +2218,7 @@ function AppInner() {
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
         <WatercolorFilters /><SnowParticles />
 
-        {notification && (
-          <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 1000, background: notification.type === "error" ? C.accentDark : C.green, color: "white", padding: "14px 32px", borderRadius: 18, fontSize: 19, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.2)", animation: "notifIn 0.35s ease" }}>
-            <style>{`@keyframes notifIn { from { opacity:0; transform:translateX(-50%) translateY(-16px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }`}</style>
-            {notification.msg}
-          </div>
-        )}
-
+        {/* Top bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <h1 style={{ fontSize: 26, color: C.text, margin: 0 }}>♨️ Monkey Hot Spring</h1>
@@ -2123,8 +2231,10 @@ function AppInner() {
           <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
         </div>
 
+        {/* Wordle modal */}
         {showWordle && <WordleGame onWin={handleWordleWin} onClose={() => setShowWordle(false)} />}
 
+        {/* Quiz modal */}
         {showQuiz && (
           <QuizGame
             studentId={me?.id}
@@ -2136,6 +2246,7 @@ function AppInner() {
           />
         )}
 
+        {/* Action buttons - top center */}
         {(() => {
           const done = hasCompletedChallenge(me?.id);
           const hasQuiz = quizzes[me?.id] && quizzes[me?.id].length > 0;
@@ -2186,6 +2297,7 @@ function AppInner() {
           );
         })()}
 
+        {/* Pet Mart modal */}
         {showPetMart && me && (() => {
           const owned = me.ownedPets || [];
           const equipped = me.pet;
@@ -2224,12 +2336,14 @@ function AppInner() {
                         position: "relative",
                         opacity: !isOwned && !canAfford ? 0.6 : 1,
                       }}>
+                        {/* Rarity badge */}
                         <div style={{
                           position: "absolute", top: 8, right: 8,
                           background: rarityColor, color: "white",
                           fontSize: 10, fontWeight: 700, padding: "2px 8px",
                           borderRadius: 8, letterSpacing: 0.5, textTransform: "uppercase",
                         }}>{pet.rarity}</div>
+
                         {isEquipped && (
                           <div style={{
                             position: "absolute", top: 8, left: 8,
@@ -2238,6 +2352,7 @@ function AppInner() {
                             borderRadius: 8,
                           }}>EQUIPPED</div>
                         )}
+
                         <div style={{ fontSize: 56, textAlign: "center", marginTop: 16, marginBottom: 6 }}>
                           {pet.emoji}
                         </div>
@@ -2247,6 +2362,7 @@ function AppInner() {
                         <div style={{ fontSize: 14, color: C.gold, fontWeight: 700, textAlign: "center", marginBottom: 10 }}>
                           ★ {pet.price.toLocaleString()}
                         </div>
+
                         <button onClick={() => buyPet(me.id, pet.id)}
                           disabled={!isOwned && !canAfford}
                           style={{
@@ -2270,6 +2386,7 @@ function AppInner() {
           );
         })()}
 
+        {/* Full scene (same as teacher but no click actions) */}
         <div style={{ position: "relative", margin: "8px auto 0", width: "96%", maxWidth: 1300, height: "calc(100vh - 90px)", borderRadius: 20, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
           <BackgroundScene w={1300} h={800} />
           <div style={{ position: "absolute", top: "30%", left: "6%", right: "6%", bottom: "6%", borderRadius: 20, overflow: "hidden" }}>
@@ -2278,18 +2395,28 @@ function AppInner() {
           <SteamParticles count={18} />
           <PenguinFlock />
 
+          {/* All monkeys in the scene (view only, student's own monkey glows) */}
           <div style={{ position: "absolute", top: "28%", left: "5%", right: "5%", bottom: "5%", zIndex: 10 }}>
             {students.map((s, i) => {
               const pos = monkeyPositions[i % monkeyPositions.length];
               const isMe = s.id === me?.id;
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: isMe ? 18 : 15 }}>
-                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} selected={isMe} />
+                  <MonkeySVG
+                    size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110}
+                    mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
+                    label={s.name} points={s.points}
+                    delay={i * 0.4} variant={i}
+                    accessories={s.accessories || []}
+                    pet={s.pet}
+                    selected={isMe}
+                  />
                 </div>
               );
             })}
           </div>
 
+          {/* Compact corner leaderboard - Top 3 fixed, rest scrollable */}
           <div style={{
             position: "absolute", bottom: 16, right: 16, zIndex: 30,
             background: `${C.card}e8`, borderRadius: 18, padding: "14px 16px",
@@ -2311,11 +2438,16 @@ function AppInner() {
                     marginBottom: 4,
                     border: isMe ? `1.5px solid ${C.gold}80` : "1.5px solid transparent",
                   }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0 }}>
+                    <span style={{
+                      fontSize: 18, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0,
+                    }}>
                       {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
                     </span>
-                    <span style={{ flex: 1, fontSize: 14, color: C.text, fontWeight: 700,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{
+                      flex: 1, fontSize: 14, color: C.text,
+                      fontWeight: 700,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
                       {s.name}{isMe ? " ✦" : ""}
                     </span>
                     <span style={{ fontSize: 14, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
@@ -2324,49 +2456,58 @@ function AppInner() {
               })}
             </div>
 
-            {/* Rest scrollable */}
+            {/* Rest of the list - scrollable */}
             {sorted.length > 3 && (
               <>
                 <div style={{
                   fontSize: 11, color: C.textLight, textAlign: "center",
                   marginBottom: 4, opacity: 0.7, letterSpacing: 0.5,
                 }}>— rest of the troop —</div>
-                <style>{`
-                  .leaderboard-scroll::-webkit-scrollbar { width: 5px; }
-                  .leaderboard-scroll::-webkit-scrollbar-track { background: transparent; }
-                  .leaderboard-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
-                  .leaderboard-scroll::-webkit-scrollbar-thumb:hover { background: ${C.fur3}; }
-                `}</style>
-                <div className="leaderboard-scroll" style={{
-                  maxHeight: 140, overflowY: "auto", paddingRight: 4,
-                  scrollbarWidth: "thin", scrollbarColor: `${C.fur2} transparent`,
+                <div style={{
+                  maxHeight: 140, overflowY: "auto",
+                  paddingRight: 4,
+                  scrollbarWidth: "thin",
+                  scrollbarColor: `${C.fur2} transparent`,
                 }}>
-                  {sorted.slice(3).map((s, i) => {
-                    const isMe = s.id === me?.id;
-                    const rank = i + 4;
-                    return (
-                      <div key={s.id} style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "5px 8px", borderRadius: 8,
-                        background: isMe ? `${C.gold}18` : "transparent",
-                        marginBottom: 2,
-                      }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0, color: C.textLight }}>
-                          #{rank}
-                        </span>
-                        <span style={{ flex: 1, fontSize: 13, color: C.text, fontWeight: isMe ? 700 : 400,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {s.name}{isMe ? " ✦" : ""}
-                        </span>
-                        <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
-                      </div>
-                    );
-                  })}
+                  <style>{`
+                    .leaderboard-scroll::-webkit-scrollbar { width: 5px; }
+                    .leaderboard-scroll::-webkit-scrollbar-track { background: transparent; }
+                    .leaderboard-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
+                    .leaderboard-scroll::-webkit-scrollbar-thumb:hover { background: ${C.fur3}; }
+                  `}</style>
+                  <div className="leaderboard-scroll" style={{ maxHeight: 140, overflowY: "auto" }}>
+                    {sorted.slice(3).map((s, i) => {
+                      const isMe = s.id === me?.id;
+                      const rank = i + 4;
+                      return (
+                        <div key={s.id} style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "5px 8px", borderRadius: 8,
+                          background: isMe ? `${C.gold}18` : "transparent",
+                          marginBottom: 2,
+                        }}>
+                          <span style={{
+                            fontSize: 12, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0,
+                            color: C.textLight,
+                          }}>#{rank}</span>
+                          <span style={{
+                            flex: 1, fontSize: 13, color: C.text,
+                            fontWeight: isMe ? 700 : 400,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          }}>
+                            {s.name}{isMe ? " ✦" : ""}
+                          </span>
+                          <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}
           </div>
 
+          {/* My stats badge - bottom left */}
           <div style={{
             position: "absolute", bottom: 16, left: 16, zIndex: 30,
             background: `${C.card}e8`, borderRadius: 18, padding: "14px 20px",
