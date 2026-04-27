@@ -1707,6 +1707,7 @@ function SnowMonkeyTrackerInner() {
   const [quizUploadStudentId, setQuizUploadStudentId] = useState(null);
   const [csvText, setCsvText] = useState("");
   const [csvError, setCsvError] = useState("");
+  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -2416,96 +2417,129 @@ function SnowMonkeyTrackerInner() {
             })}
           </div>
 
-          {/* Compact corner leaderboard - Top 3 fixed, rest scrollable */}
-          <div style={{
-            position: "absolute", bottom: 16, right: 16, zIndex: 30,
-            background: `${C.card}e8`, borderRadius: 18, padding: "14px 16px",
-            boxShadow: "0 8px 28px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
-            border: `2px solid ${C.gold}25`, width: 240,
-          }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 10, textAlign: "center" }}>🏆 Leaderboard</div>
+          {/* Leaderboard - top-right, collapsible */}
+          {!leaderboardOpen ? (
+            <button
+              onClick={() => setLeaderboardOpen(true)}
+              style={{
+                position: "absolute", top: 16, right: 16, zIndex: 30,
+                background: `${C.card}e8`, borderRadius: 999, padding: "10px 16px",
+                boxShadow: "0 6px 20px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+                border: `2px solid ${C.gold}40`, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+                fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
+              }}
+              title="Show leaderboard"
+            >
+              🏆 <span>Rank #{rank}</span>
+            </button>
+          ) : (
+            <div style={{
+              position: "absolute", top: 16, right: 16, zIndex: 30,
+              background: `${C.card}e8`, borderRadius: 18, padding: "12px 14px",
+              boxShadow: "0 8px 28px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+              border: `2px solid ${C.gold}25`, width: 220,
+            }}>
+              {/* Header with collapse button */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 10,
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>🏆 Leaderboard</div>
+                <button
+                  onClick={() => setLeaderboardOpen(false)}
+                  style={{
+                    background: "transparent", border: "none", cursor: "pointer",
+                    fontSize: 18, color: C.textLight, padding: "0 4px",
+                    lineHeight: 1, fontWeight: 700,
+                  }}
+                  title="Hide leaderboard"
+                >×</button>
+              </div>
 
-            {/* Top 3 - always visible */}
-            <div style={{ marginBottom: sorted.length > 3 ? 8 : 0 }}>
-              {sorted.slice(0, 3).map((s, i) => {
-                const isMe = s.id === me?.id;
-                const podiumBg = i === 0 ? `${C.gold}25` : i === 1 ? "#b0b0b020" : "#cd7f3220";
-                return (
-                  <div key={s.id} style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "8px 10px", borderRadius: 10,
-                    background: isMe ? `${C.gold}30` : podiumBg,
-                    marginBottom: 4,
-                    border: isMe ? `1.5px solid ${C.gold}80` : "1.5px solid transparent",
+              {/* Top 3 - always visible */}
+              <div style={{ marginBottom: sorted.length > 3 ? 8 : 0 }}>
+                {sorted.slice(0, 3).map((s, i) => {
+                  const isMe = s.id === me?.id;
+                  const podiumBg = i === 0 ? `${C.gold}25` : i === 1 ? "#b0b0b020" : "#cd7f3220";
+                  return (
+                    <div key={s.id} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "7px 9px", borderRadius: 10,
+                      background: isMe ? `${C.gold}30` : podiumBg,
+                      marginBottom: 4,
+                      border: isMe ? `1.5px solid ${C.gold}80` : "1.5px solid transparent",
+                    }}>
+                      <span style={{
+                        fontSize: 16, fontWeight: 700, width: 22, textAlign: "center", flexShrink: 0,
+                      }}>
+                        {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
+                      </span>
+                      <span style={{
+                        flex: 1, fontSize: 13, color: C.text,
+                        fontWeight: 700,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {s.name}{isMe ? " ✦" : ""}
+                      </span>
+                      <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Rest of the list - scrollable */}
+              {sorted.length > 3 && (
+                <>
+                  <div style={{
+                    fontSize: 11, color: C.textLight, textAlign: "center",
+                    marginBottom: 4, opacity: 0.7, letterSpacing: 0.5,
+                  }}>— rest of the troop —</div>
+                  <div style={{
+                    maxHeight: 120, overflowY: "auto",
+                    paddingRight: 4,
+                    scrollbarWidth: "thin",
+                    scrollbarColor: `${C.fur2} transparent`,
                   }}>
-                    <span style={{
-                      fontSize: 18, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0,
-                    }}>
-                      {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
-                    </span>
-                    <span style={{
-                      flex: 1, fontSize: 14, color: C.text,
-                      fontWeight: 700,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    }}>
-                      {s.name}{isMe ? " ✦" : ""}
-                    </span>
-                    <span style={{ fontSize: 14, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Rest of the list - scrollable */}
-            {sorted.length > 3 && (
-              <>
-                <div style={{
-                  fontSize: 11, color: C.textLight, textAlign: "center",
-                  marginBottom: 4, opacity: 0.7, letterSpacing: 0.5,
-                }}>— rest of the troop —</div>
-                <div style={{
-                  maxHeight: 140, overflowY: "auto",
-                  paddingRight: 4,
-                  scrollbarWidth: "thin",
-                  scrollbarColor: `${C.fur2} transparent`,
-                }}>
-                  <style>{`
-                    .leaderboard-scroll::-webkit-scrollbar { width: 5px; }
-                    .leaderboard-scroll::-webkit-scrollbar-track { background: transparent; }
-                    .leaderboard-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
-                    .leaderboard-scroll::-webkit-scrollbar-thumb:hover { background: ${C.fur3}; }
-                  `}</style>
-                  <div className="leaderboard-scroll" style={{ maxHeight: 140, overflowY: "auto" }}>
-                    {sorted.slice(3).map((s, i) => {
-                      const isMe = s.id === me?.id;
-                      const rank = i + 4;
-                      return (
-                        <div key={s.id} style={{
-                          display: "flex", alignItems: "center", gap: 8,
-                          padding: "5px 8px", borderRadius: 8,
-                          background: isMe ? `${C.gold}18` : "transparent",
-                          marginBottom: 2,
-                        }}>
-                          <span style={{
-                            fontSize: 12, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0,
-                            color: C.textLight,
-                          }}>#{rank}</span>
-                          <span style={{
-                            flex: 1, fontSize: 13, color: C.text,
-                            fontWeight: isMe ? 700 : 400,
-                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    <style>{`
+                      .leaderboard-scroll::-webkit-scrollbar { width: 5px; }
+                      .leaderboard-scroll::-webkit-scrollbar-track { background: transparent; }
+                      .leaderboard-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
+                      .leaderboard-scroll::-webkit-scrollbar-thumb:hover { background: ${C.fur3}; }
+                    `}</style>
+                    <div className="leaderboard-scroll" style={{ maxHeight: 120, overflowY: "auto" }}>
+                      {sorted.slice(3).map((s, i) => {
+                        const isMe = s.id === me?.id;
+                        const rnk = i + 4;
+                        return (
+                          <div key={s.id} style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "5px 8px", borderRadius: 8,
+                            background: isMe ? `${C.gold}18` : "transparent",
+                            marginBottom: 2,
                           }}>
-                            {s.name}{isMe ? " ✦" : ""}
-                          </span>
-                          <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
-                        </div>
-                      );
-                    })}
+                            <span style={{
+                              fontSize: 12, fontWeight: 700, width: 26, textAlign: "center", flexShrink: 0,
+                              color: C.textLight,
+                            }}>#{rnk}</span>
+                            <span style={{
+                              flex: 1, fontSize: 13, color: C.text,
+                              fontWeight: isMe ? 700 : 400,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>
+                              {s.name}{isMe ? " ✦" : ""}
+                            </span>
+                            <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
+
 
           {/* My stats badge - bottom left */}
           <div style={{
