@@ -45,23 +45,62 @@ export async function deleteStudent(id) {
   await deleteDoc(doc(db, "students", id));
 }
 
-/* ─── Quiz helpers ─── stored as documents keyed by studentId */
+/* ─── Quiz helpers ─── 
+   Stored as documents keyed by studentId, with structure:
+   { quizzes: [{id, subject, name, points, questions[]}] }
+   (Backward compat: old format had { questions: [...] } directly)
+*/
 export async function getQuizzes() {
   const snap = await getDocs(collection(db, "quizzes"));
   const quizzes = {};
   snap.docs.forEach(d => {
     const data = d.data();
-    quizzes[d.id] = data.questions || [];
+    if (Array.isArray(data.quizzes)) {
+      quizzes[d.id] = data.quizzes;
+    } else if (Array.isArray(data.questions)) {
+      // Migrate old format on read
+      quizzes[d.id] = [{
+        id: "default",
+        subject: "General",
+        name: "Quiz",
+        points: 1,
+        questions: data.questions,
+      }];
+    } else {
+      quizzes[d.id] = [];
+    }
   });
   return quizzes;
 }
 
-export async function setQuizForStudent(studentId, questions) {
-  await setDoc(doc(db, "quizzes", studentId), { questions });
+export async function setQuizzesForStudent(studentId, quizzes) {
+  await setDoc(doc(db, "quizzes", studentId), { quizzes });
 }
 
-export async function deleteQuizForStudent(studentId) {
+export async function deleteQuizzesForStudent(studentId) {
   await deleteDoc(doc(db, "quizzes", studentId));
+}
+
+/* ─── Mission helpers ─── 
+   Stored as documents keyed by studentId, with structure:
+   { missions: [{id, name, points, questions[]}] }
+*/
+export async function getMissions() {
+  const snap = await getDocs(collection(db, "missions"));
+  const missions = {};
+  snap.docs.forEach(d => {
+    const data = d.data();
+    missions[d.id] = Array.isArray(data.missions) ? data.missions : [];
+  });
+  return missions;
+}
+
+export async function setMissionsForStudent(studentId, missions) {
+  await setDoc(doc(db, "missions", studentId), { missions });
+}
+
+export async function deleteMissionsForStudent(studentId) {
+  await deleteDoc(doc(db, "missions", studentId));
 }
 
 export { db };
