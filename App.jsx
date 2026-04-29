@@ -100,6 +100,32 @@ const RARITY_COLORS = {
   epic: "#a060c0", legendary: "#edb830", mythic: "#e06060",
 };
 
+/* ─── STREAK LEVELS ─── each level gives the monkey visual upgrades */
+const STREAK_LEVELS = [
+  { days: 0,   id: "sprout",    name: "Sprout",    icon: "🌱", color: "#7cc080", desc: "Just getting started!" },
+  { days: 3,   id: "bronze",    name: "Bronze",    icon: "🥉", color: "#cd7f32", desc: "Three days strong!" },
+  { days: 7,   id: "silver",    name: "Silver",    icon: "🥈", color: "#c0c0c0", desc: "A whole week!" },
+  { days: 14,  id: "gold",      name: "Gold",      icon: "🥇", color: "#edb830", desc: "Two weeks of glory!" },
+  { days: 30,  id: "crystal",   name: "Crystal",   icon: "💎", color: "#7adcdc", desc: "A full month!" },
+  { days: 60,  id: "rainbow",   name: "Rainbow",   icon: "🌈", color: "#ff80c0", desc: "Two months — incredible!" },
+  { days: 100, id: "legendary", name: "Legendary", icon: "⭐", color: "#ff6020", desc: "100 days! A legend!" },
+];
+
+function getStreakLevel(streak) {
+  let level = STREAK_LEVELS[0];
+  for (const lvl of STREAK_LEVELS) {
+    if (streak >= lvl.days) level = lvl;
+  }
+  return level;
+}
+
+function getNextStreakLevel(streak) {
+  for (const lvl of STREAK_LEVELS) {
+    if (streak < lvl.days) return lvl;
+  }
+  return null; // Max level
+}
+
 /* ─── PET SVG ─── small companion that floats next to the monkey */
 function PetSVG({ petId, side = "right" }) {
   const [bob, setBob] = useState(0);
@@ -426,7 +452,7 @@ function PetSVG({ petId, side = "right" }) {
 }
 
 /* ─── IMPROVED MONKEY SVG ─── */
-function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null }) {
+function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null, streakLevel = "sprout" }) {
   const { setAnyHovering } = useContext(HoverContext);
   const [bob, setBob] = useState(0);
   const [sway, setSway] = useState(0);
@@ -534,6 +560,110 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         }
       `}</style>
       <svg width={size} height={size * 1.15} viewBox="-60 -62 120 135" style={{ overflow: "visible" }}>
+        {/* ─── STREAK AURA ─── visual upgrades for daily streaks */}
+        {streakLevel !== "sprout" && (() => {
+          const lvl = STREAK_LEVELS.find(l => l.id === streakLevel);
+          if (!lvl) return null;
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <style>{`
+                @keyframes streakPulse-${streakLevel} {
+                  0%, 100% { opacity: 0.35; transform: scale(1); }
+                  50% { opacity: 0.55; transform: scale(1.08); }
+                }
+                @keyframes streakRotate-${streakLevel} {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+                @keyframes streakSparkle-${streakLevel} {
+                  0%, 100% { opacity: 0; transform: scale(0.5); }
+                  50% { opacity: 1; transform: scale(1.2); }
+                }
+              `}</style>
+              {/* Outer aura glow */}
+              <ellipse cx="0" cy="-10" rx="48" ry="55" fill={lvl.color} opacity="0.18"
+                style={{ animation: `streakPulse-${streakLevel} 2.5s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
+              {/* Inner aura */}
+              <ellipse cx="0" cy="-10" rx="38" ry="44" fill={lvl.color} opacity="0.12" />
+
+              {/* Bronze: subtle warm shimmer */}
+              {streakLevel === "bronze" && (
+                <>
+                  <circle cx="-30" cy="-25" r="1.5" fill="#d4a060" opacity="0.8"
+                    style={{ animation: `streakSparkle-bronze 2s ease-in-out infinite` }} />
+                  <circle cx="32" cy="-15" r="1.5" fill="#d4a060" opacity="0.8"
+                    style={{ animation: `streakSparkle-bronze 2s ease-in-out 0.7s infinite` }} />
+                </>
+              )}
+
+              {/* Silver: floating sparkles */}
+              {streakLevel === "silver" && [
+                {x: -34, y: -20, d: 0}, {x: 32, y: -28, d: 0.5}, {x: -28, y: 8, d: 1}, {x: 30, y: 5, d: 1.5}
+              ].map((s, i) => (
+                <g key={i} style={{ animation: `streakSparkle-silver 1.8s ease-in-out ${s.d}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                  <path d={`M ${s.x} ${s.y - 3} L ${s.x + 1} ${s.y} L ${s.x + 3} ${s.y + 1} L ${s.x + 1} ${s.y + 2} L ${s.x} ${s.y + 5} L ${s.x - 1} ${s.y + 2} L ${s.x - 3} ${s.y + 1} L ${s.x - 1} ${s.y} Z`} fill="#e8e8e8" />
+                </g>
+              ))}
+
+              {/* Gold: golden sparkles + crown circle */}
+              {streakLevel === "gold" && (
+                <>
+                  <circle cx="0" cy="-50" r="32" fill="none" stroke="#edb830" strokeWidth="0.8" strokeDasharray="3 4" opacity="0.6"
+                    style={{ animation: `streakRotate-gold 12s linear infinite`, transformOrigin: "0 -10px" }} />
+                  {[{x: -38, y: -28}, {x: 38, y: -28}, {x: -42, y: 5}, {x: 42, y: 5}, {x: 0, y: -55}].map((s, i) => (
+                    <text key={i} x={s.x} y={s.y} fontSize="11" fill="#edb830" textAnchor="middle"
+                      style={{ animation: `streakSparkle-gold 2s ease-in-out ${i * 0.3}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>✦</text>
+                  ))}
+                </>
+              )}
+
+              {/* Crystal: ethereal blue glow + ice crystals */}
+              {streakLevel === "crystal" && (
+                <>
+                  <ellipse cx="0" cy="-10" rx="55" ry="62" fill="none" stroke="#7adcdc" strokeWidth="1" opacity="0.5"
+                    style={{ animation: `streakPulse-crystal 2s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
+                  {[{x: -40, y: -30, r: 0}, {x: 42, y: -32, r: 30}, {x: -45, y: 10, r: 60}, {x: 45, y: 8, r: 90}, {x: 0, y: -58, r: 45}].map((s, i) => (
+                    <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.r})`}
+                      style={{ animation: `streakSparkle-crystal 2.5s ease-in-out ${i * 0.4}s infinite` }}>
+                      <path d="M 0 -5 L 1 0 L 0 5 L -1 0 Z M -5 0 L 0 1 L 5 0 L 0 -1 Z" fill="#7adcdc" stroke="#a0e8e8" strokeWidth="0.4" />
+                    </g>
+                  ))}
+                </>
+              )}
+
+              {/* Rainbow: colorful aura + rainbow sparkles */}
+              {streakLevel === "rainbow" && (
+                <>
+                  {["#ff6080", "#ffa040", "#edb830", "#5caa5e", "#5a8fc7", "#a060c0"].map((color, i) => (
+                    <ellipse key={i} cx="0" cy="-10" rx={50 - i * 4} ry={56 - i * 4} fill="none" stroke={color} strokeWidth="0.8" opacity="0.4"
+                      style={{ animation: `streakRotate-rainbow ${15 + i * 2}s linear ${i % 2 ? "reverse" : "normal"} infinite`, transformOrigin: "0 -10px" }} />
+                  ))}
+                  {[{x: -38, y: -25, c: "#ff6080"}, {x: 40, y: -30, c: "#5caa5e"}, {x: -42, y: 8, c: "#5a8fc7"}, {x: 42, y: 5, c: "#a060c0"}, {x: 0, y: -58, c: "#edb830"}].map((s, i) => (
+                    <text key={i} x={s.x} y={s.y} fontSize="12" fill={s.c} textAnchor="middle"
+                      style={{ animation: `streakSparkle-rainbow 1.6s ease-in-out ${i * 0.25}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>✦</text>
+                  ))}
+                </>
+              )}
+
+              {/* Legendary: cosmic halo + stars */}
+              {streakLevel === "legendary" && (
+                <>
+                  <ellipse cx="0" cy="-10" rx="60" ry="68" fill="none" stroke="#ff6020" strokeWidth="1.5" opacity="0.5"
+                    style={{ animation: `streakPulse-legendary 1.5s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
+                  <ellipse cx="0" cy="-10" rx="52" ry="58" fill="none" stroke="#edb830" strokeWidth="1" opacity="0.6"
+                    style={{ animation: `streakRotate-legendary 8s linear infinite`, transformOrigin: "0 -10px" }} strokeDasharray="6 8" />
+                  <ellipse cx="0" cy="-10" rx="44" ry="50" fill="none" stroke="#fff" strokeWidth="0.6" opacity="0.5"
+                    style={{ animation: `streakRotate-legendary 6s linear reverse infinite`, transformOrigin: "0 -10px" }} strokeDasharray="2 6" />
+                  {[{x: -45, y: -28}, {x: 47, y: -32}, {x: -48, y: 8}, {x: 48, y: 6}, {x: 0, y: -62}, {x: -25, y: -55}, {x: 25, y: -55}].map((s, i) => (
+                    <text key={i} x={s.x} y={s.y} fontSize="14" fill={i % 2 ? "#ff6020" : "#edb830"} textAnchor="middle" fontWeight="bold"
+                      style={{ animation: `streakSparkle-legendary 1.8s ease-in-out ${i * 0.2}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>⭐</text>
+                  ))}
+                </>
+              )}
+            </g>
+          );
+        })()}
+
         <g filter="url(#furTexture)">
           {bodyTufts.map((t, i) => (
             <ellipse key={`bt${i}`} cx={t.x} cy={t.y} rx={t.r} ry={t.r * 0.85} fill={furColors[t.shade]} opacity={0.7 + (i % 2) * 0.15} />
@@ -1928,6 +2058,7 @@ function SnowMonkeyTrackerInner() {
   const [csvText, setCsvText] = useState("");
   const [csvError, setCsvError] = useState("");
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  const [streakOpen, setStreakOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -2145,12 +2276,55 @@ function SnowMonkeyTrackerInner() {
     return s?.lastChallengeDate === todayKey;
   };
 
+  // Effective streak: returns 0 if student missed a day (broken streak)
+  const getEffectiveStreak = (student) => {
+    if (!student?.streak) return 0;
+    if (!student.lastChallengeDate) return 0;
+    const last = new Date(student.lastChallengeDate);
+    const today = new Date(todayKey);
+    const diffDays = Math.floor((today - last) / (1000 * 60 * 60 * 24));
+    if (diffDays > 1) return 0; // Missed a day - streak broken
+    return student.streak;
+  };
+
   const handleWordleWin = () => {
     if (!user || hasCompletedChallenge(user.id)) return;
-    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + 1, lastChallengeDate: todayKey } : s);
+    const me = students.find(s => s.id === user.id);
+    if (!me) return;
+
+    // Calculate new streak
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+    const oldStreak = me.streak || 0;
+    const oldLevel = getStreakLevel(oldStreak).id;
+    let newStreak;
+    if (me.lastChallengeDate === yesterdayKey) {
+      newStreak = oldStreak + 1; // Continued streak
+    } else if (me.lastChallengeDate === todayKey) {
+      newStreak = oldStreak; // Same day - shouldn't happen due to guard above
+    } else {
+      newStreak = 1; // Reset streak (broken or first time)
+    }
+    const newLevel = getStreakLevel(newStreak).id;
+    const leveledUp = newLevel !== oldLevel;
+
+    const newS = students.map(s => s.id === user.id ? {
+      ...s,
+      points: s.points + 1,
+      lastChallengeDate: todayKey,
+      streak: newStreak,
+      bestStreak: Math.max(s.bestStreak || 0, newStreak),
+    } : s);
     persist(null, newS);
     setShowWordle(false);
-    notify("🎉 Challenge complete! +1 point!");
+    if (leveledUp) {
+      const lvl = getStreakLevel(newStreak);
+      notify(`🎉 ${lvl.icon} Streak ${newStreak}! You leveled up to ${lvl.name}!`);
+    } else {
+      notify(`🎉 +1 point! Streak: ${newStreak} 🔥`);
+    }
   };
 
   const monkeyPositions = [
@@ -2362,7 +2536,7 @@ function SnowMonkeyTrackerInner() {
               const pos = monkeyPositions[i % monkeyPositions.length];
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: 15 }}>
-                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
+                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
                 </div>
               );
             })}
@@ -2670,12 +2844,162 @@ function SnowMonkeyTrackerInner() {
                     delay={i * 0.4} variant={i}
                     accessories={s.accessories || []}
                     pet={s.pet}
+                    streakLevel={getStreakLevel(getEffectiveStreak(s)).id}
                     selected={isMe}
                   />
                 </div>
               );
             })}
           </div>
+
+          {/* Streak Tracker - top-left, collapsible */}
+          {(() => {
+            const myStreak = getEffectiveStreak(me);
+            const myLevel = getStreakLevel(myStreak);
+            const nextLevel = getNextStreakLevel(myStreak);
+            const daysToNext = nextLevel ? nextLevel.days - myStreak : 0;
+            const progress = nextLevel ? Math.min(100, ((myStreak - myLevel.days) / (nextLevel.days - myLevel.days)) * 100) : 100;
+
+            return !streakOpen ? (
+              <button
+                onClick={() => setStreakOpen(true)}
+                style={{
+                  position: "absolute", top: 16, left: 16, zIndex: 30,
+                  background: `${C.card}e8`, borderRadius: 999, padding: "8px 16px",
+                  boxShadow: `0 6px 20px ${myLevel.color}40`, backdropFilter: "blur(10px)",
+                  border: `2px solid ${myLevel.color}80`, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                  fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
+                }}
+                title="Show streak progress"
+              >
+                <span style={{ fontSize: 18 }}>🔥</span>
+                <span>{myStreak} day{myStreak !== 1 ? "s" : ""}</span>
+                <span style={{ fontSize: 14 }}>{myLevel.icon}</span>
+              </button>
+            ) : (
+              <div style={{
+                position: "absolute", top: 16, left: 16, zIndex: 30,
+                background: `${C.card}f0`, borderRadius: 18, padding: "14px 18px",
+                boxShadow: `0 8px 28px ${myLevel.color}30`, backdropFilter: "blur(10px)",
+                border: `2px solid ${myLevel.color}60`, width: 260,
+              }}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>🔥 Streak Roadmap</div>
+                  <button
+                    onClick={() => setStreakOpen(false)}
+                    style={{
+                      background: "transparent", border: "none", cursor: "pointer",
+                      fontSize: 20, color: C.textLight, padding: "0 4px",
+                      lineHeight: 1, fontWeight: 700,
+                    }}
+                    title="Hide"
+                  >×</button>
+                </div>
+
+                {/* Current status */}
+                <div style={{
+                  background: `${myLevel.color}20`,
+                  borderRadius: 14,
+                  padding: "10px 12px",
+                  marginBottom: 12,
+                  border: `1.5px solid ${myLevel.color}50`,
+                  textAlign: "center",
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 2 }}>{myLevel.icon}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 2 }}>
+                    {myStreak} day{myStreak !== 1 ? "s" : ""} · {myLevel.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textLight }}>{myLevel.desc}</div>
+                  {(me?.bestStreak || 0) > myStreak && (
+                    <div style={{ fontSize: 11, color: C.textLight, marginTop: 4, opacity: 0.8 }}>
+                      Best: {me.bestStreak} day{me.bestStreak !== 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
+
+                {/* Progress to next */}
+                {nextLevel && (
+                  <>
+                    <div style={{ fontSize: 12, color: C.textLight, marginBottom: 5, textAlign: "center" }}>
+                      {daysToNext} day{daysToNext !== 1 ? "s" : ""} to <strong style={{ color: nextLevel.color }}>{nextLevel.icon} {nextLevel.name}</strong>
+                    </div>
+                    <div style={{
+                      height: 8,
+                      background: `${C.fur2}30`,
+                      borderRadius: 4,
+                      overflow: "hidden",
+                      marginBottom: 14,
+                    }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${progress}%`,
+                        background: `linear-gradient(90deg, ${myLevel.color}, ${nextLevel.color})`,
+                        transition: "width 0.6s ease",
+                        borderRadius: 4,
+                      }} />
+                    </div>
+                  </>
+                )}
+
+                {/* Roadmap of all levels */}
+                <div style={{
+                  maxHeight: 180,
+                  overflowY: "auto",
+                  paddingRight: 4,
+                }}>
+                  <style>{`
+                    .streak-scroll::-webkit-scrollbar { width: 5px; }
+                    .streak-scroll::-webkit-scrollbar-track { background: transparent; }
+                    .streak-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
+                  `}</style>
+                  <div className="streak-scroll" style={{ maxHeight: 180, overflowY: "auto" }}>
+                    {STREAK_LEVELS.map((lvl, i) => {
+                      const reached = myStreak >= lvl.days;
+                      const isCurrent = lvl.id === myLevel.id;
+                      return (
+                        <div key={lvl.id} style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "7px 9px",
+                          borderRadius: 10,
+                          background: isCurrent ? `${lvl.color}25` : reached ? `${lvl.color}10` : "transparent",
+                          border: isCurrent ? `1.5px solid ${lvl.color}` : "1.5px solid transparent",
+                          marginBottom: 3,
+                          opacity: reached ? 1 : 0.55,
+                        }}>
+                          <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>
+                            {reached ? lvl.icon : "🔒"}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: reached ? C.text : C.textLight,
+                              lineHeight: 1.2,
+                            }}>
+                              {lvl.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: C.textLight, lineHeight: 1.2 }}>
+                              {lvl.days === 0 ? "Start" : `${lvl.days} day${lvl.days !== 1 ? "s" : ""}`}
+                            </div>
+                          </div>
+                          {reached && !isCurrent && (
+                            <span style={{ fontSize: 11, color: lvl.color, fontWeight: 700 }}>✓</span>
+                          )}
+                          {isCurrent && (
+                            <span style={{ fontSize: 10, color: lvl.color, fontWeight: 700, background: `${lvl.color}20`, padding: "2px 6px", borderRadius: 8 }}>
+                              YOU
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Leaderboard - top-right, collapsible */}
           {!leaderboardOpen ? (
@@ -2809,7 +3133,7 @@ function SnowMonkeyTrackerInner() {
             border: `2px solid ${C.gold}25`, display: "flex", alignItems: "center", gap: 14,
           }}>
             <div style={{ width: 50, height: 50, position: "relative" }}>
-              <MonkeySVG size={50} mood={me?.points > 20 ? "excited" : me?.points > 5 ? "happy" : "neutral"} delay={0} variant={myIndex >= 0 ? myIndex : 0} accessories={me?.accessories || []} pet={me?.pet} />
+              <MonkeySVG size={50} mood={me?.points > 20 ? "excited" : me?.points > 5 ? "happy" : "neutral"} delay={0} variant={myIndex >= 0 ? myIndex : 0} accessories={me?.accessories || []} pet={me?.pet} streakLevel={getStreakLevel(getEffectiveStreak(me)).id} />
             </div>
             <div>
               <div style={{ fontSize: 16, color: C.text, fontWeight: 700 }}>{me?.name}</div>
