@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import {
-  getTeachers, getStudents, updateStudent, deleteStudent,
+  getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent,
   setQuizForStudent, deleteQuizForStudent, getQuizzes
 } from "./firebase";
 
@@ -1949,28 +1949,47 @@ function SnowMonkeyTrackerInner() {
   const persist = useCallback(async (newT, newS, newQ) => {
     if (newT) { setTeachers(newT); }
     if (newS) {
+      // Find which students actually changed and only update those
+      const prevStudents = students;
       setStudents(newS);
-      // Update each changed student in Firebase
       for (const student of newS) {
-        try {
-          await updateStudent(student.id, student);
-        } catch (error) {
-          console.error("Failed to update student:", error);
+        const prev = prevStudents.find(p => p.id === student.id);
+        // Only update if student exists in DB (has been synced) AND something changed
+        if (prev && JSON.stringify(prev) !== JSON.stringify(student)) {
+          try {
+            const { id, ...data } = student;
+            await updateStudent(id, data);
+          } catch (error) {
+            console.error("Failed to update student:", student.name, error);
+          }
         }
       }
     }
     if (newQ) {
       setQuizzes(newQ);
-      // Update quizzes in Firebase
+      // Only update quizzes that changed
+      const prevQuizzes = quizzes;
       for (const studentId in newQ) {
-        try {
-          await setQuizForStudent(studentId, newQ[studentId]);
-        } catch (error) {
-          console.error("Failed to update quiz:", error);
+        if (JSON.stringify(prevQuizzes[studentId]) !== JSON.stringify(newQ[studentId])) {
+          try {
+            await setQuizForStudent(studentId, newQ[studentId]);
+          } catch (error) {
+            console.error("Failed to update quiz:", error);
+          }
+        }
+      }
+      // Also handle deletions
+      for (const studentId in prevQuizzes) {
+        if (!(studentId in newQ)) {
+          try {
+            await deleteQuizForStudent(studentId);
+          } catch (error) {
+            console.error("Failed to delete quiz:", error);
+          }
         }
       }
     }
-  }, []);
+  }, [students, quizzes]);
 
   const uploadQuizForStudent = (studentId, csvData) => {
     const parsed = parseCSV(csvData);
@@ -2016,18 +2035,39 @@ function SnowMonkeyTrackerInner() {
     }
   };
 
-  const addStudent = () => {
+  const addStudent = async () => {
     if (!newStudentName.trim() || !newStudentUser.trim() || !newStudentPass.trim()) { notify("Please fill in all fields", "error"); return; }
     if (students.find(s => s.username === newStudentUser) || teachers.find(t => t.username === newStudentUser)) { notify("Username already taken", "error"); return; }
-    const newS = [...students, { id: "s" + Date.now(), username: newStudentUser.trim(), password: newStudentPass.trim(), name: newStudentName.trim(), points: 0 }];
-    persist(null, newS);
-    setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
-    notify(`${newStudentName.trim()} joined the hot spring!`);
+    try {
+      const studentData = {
+        username: newStudentUser.trim(),
+        password: newStudentPass.trim(),
+        name: newStudentName.trim(),
+        points: 0,
+        accessories: [],
+        ownedPets: [],
+        pet: null,
+      };
+      const newStudent = await addStudentToDB(studentData);
+      setStudents([...students, newStudent]);
+      setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
+      notify(`${newStudentName.trim()} joined the hot spring!`);
+    } catch (error) {
+      console.error("Failed to add student:", error);
+      notify("Failed to add student. Try again.", "error");
+    }
   };
 
-  const removeStudent = (id) => {
-    persist(null, students.filter(s => s.id !== id));
-    if (selectedStudent === id) setSelectedStudent(null); notify("Student removed");
+  const removeStudent = async (id) => {
+    try {
+      await deleteStudent(id);
+      setStudents(students.filter(s => s.id !== id));
+      if (selectedStudent === id) setSelectedStudent(null);
+      notify("Student removed");
+    } catch (error) {
+      console.error("Failed to remove student:", error);
+      notify("Failed to remove student", "error");
+    }
   };
 
   const addPoints = (id, amount) => {
