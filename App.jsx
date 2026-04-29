@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import {
-  getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent,
+  getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent, addTeacherToDB,
   setQuizzesForStudent, deleteQuizzesForStudent, getQuizzes,
   setMissionsForStudent, deleteMissionsForStudent, getMissions
 } from "./firebase";
@@ -9,7 +9,8 @@ import {
 const HoverContext = createContext({ anyHovering: false, setAnyHovering: () => {} });
 
 /* ─── palette matched to original watercolor ─── */
-const C = {
+/* ─── THEME SYSTEM ─── light + dark mode, swap by mutating the C object */
+const C_LIGHT = {
   water1: "#6cc4b8", water2: "#8fd4ca", water3: "#4db0a4", water4: "#3a9e92",
   snow1: "#f2f0f5", snow2: "#e4e0eb", snow3: "#d2cdd9",
   rock1: "#8b6352", rock2: "#6b4a3a", rock3: "#a3796a", rock4: "#553928",
@@ -20,10 +21,54 @@ const C = {
   gold: "#edb830", green: "#5caa5e",
 };
 
+const C_DARK = {
+  // Water tones - slightly more saturated and darker for night
+  water1: "#3a8a82", water2: "#4d9a92", water3: "#2e6f68", water4: "#1f534e",
+  // Snow becomes deeper "moonlit ground" — cool dark blues/greys
+  snow1: "#2a2837", snow2: "#21202c", snow3: "#181722",
+  // Rocks stay roughly the same (they're already brown)
+  rock1: "#8b6352", rock2: "#6b4a3a", rock3: "#a3796a", rock4: "#553928",
+  // Monkey face colors stay the same so monkeys still look cute
+  face: "#f5cdd0", cheek: "#e06060", nose: "#cc3333", noseDark: "#a82828",
+  fur1: "#ede6dc", fur2: "#dbd2c4", fur3: "#c9bfae", fur4: "#b8ac98",
+  // Accents brighter on dark
+  accent: "#ff7878", accentDark: "#e06060",
+  // BG / card / text inverted
+  bg: "#0f1018", card: "#1c1d28", text: "#f0e8dc", textLight: "#a09a90",
+  gold: "#fac850", green: "#7ac87c",
+};
+
+// Mutable C object that points at the active theme.
+// Components read C.text, C.bg, etc. — when theme changes, we mutate C in place
+// then trigger re-renders via React state, so every render reads the latest values.
+const C = { ...C_LIGHT };
+function applyTheme(mode) {
+  const src = mode === "dark" ? C_DARK : C_LIGHT;
+  Object.keys(C).forEach(k => delete C[k]);
+  Object.assign(C, src);
+}
+
+// Persist preference
+let _themeMode = "light";
+try {
+  if (typeof localStorage !== "undefined") {
+    const stored = localStorage.getItem("monkeyTracker_theme");
+    if (stored === "dark" || stored === "light") _themeMode = stored;
+  }
+} catch {}
+applyTheme(_themeMode);
+
+function getTheme() { return _themeMode; }
+function setTheme(mode) {
+  _themeMode = mode === "dark" ? "dark" : "light";
+  applyTheme(_themeMode);
+  try { if (typeof localStorage !== "undefined") localStorage.setItem("monkeyTracker_theme", _themeMode); } catch {}
+}
+
 /* ─── Firebase helpers ─── */
 // Firebase functions are imported from ./firebase.js
 // Teachers and Students are stored in Firestore, Quizzes are in collections
-const DEFAULT_TEACHERS = [{ id: "t1", username: "teacher", password: "1234", name: "Sensei" }];
+const DEFAULT_TEACHERS = [];
 
 /* ─── daily wordle words (kid-friendly 5-letter) ─── */
 const WORDS = [
@@ -977,15 +1022,15 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         {/* Eyes */}
         {blink ? (
           <>
-            <path d="M -11 -16 Q -8 -14 -5 -16" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round" />
-            <path d="M 5 -16 Q 8 -14 11 -16" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round" />
+            <path d="M -11 -16 Q -8 -14 -5 -16" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 5 -16 Q 8 -14 11 -16" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
           </>
         ) : (
           <>
-            <ellipse cx="-8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.9" />
-            <ellipse cx="8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.9" />
-            <circle cx="-7.5" cy="-15.5" r="2.8" fill={C.text} />
-            <circle cx="8.5" cy="-15.5" r="2.8" fill={C.text} />
+            <ellipse cx="-8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+            <ellipse cx="8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+            <circle cx="-7.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
+            <circle cx="8.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
             <circle cx="-6.5" cy="-16.8" r="1.1" fill="white" />
             <circle cx="9.5" cy="-16.8" r="1.1" fill="white" />
             <circle cx="-8" cy="-14.5" r="0.6" fill="white" opacity="0.6" />
@@ -1006,11 +1051,11 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
             <path d="M -3 -3 Q 0 -2 3 -3" stroke="white" strokeWidth="0.8" fill="none" />
           </>
         ) : mood === "excited" ? (
-          <path d="M -6 -2 Q 0 6 6 -2" fill={C.noseDark} opacity="0.3" stroke={C.text} strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M -6 -2 Q 0 6 6 -2" fill={C.noseDark} opacity="0.3" stroke="#3a2a1a" strokeWidth="1.2" strokeLinecap="round" />
         ) : mood === "happy" ? (
-          <path d="M -5 -2 Q 0 4 5 -2" fill="none" stroke={C.text} strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M -5 -2 Q 0 4 5 -2" fill="none" stroke="#3a2a1a" strokeWidth="1.3" strokeLinecap="round" />
         ) : (
-          <path d="M -3.5 0 Q 0 1 3.5 0" fill="none" stroke={C.text} strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M -3.5 0 Q 0 1 3.5 0" fill="none" stroke="#3a2a1a" strokeWidth="1.2" strokeLinecap="round" />
         )}
 
         {/* ─── ACCESSORIES ─── rendered on top of face */}
@@ -2538,21 +2583,38 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
   );
 }
 
+// modalBackdropStyle is theme-independent (just a dark overlay)
 const modalBackdropStyle = {
   position: "fixed", inset: 0, zIndex: 2000, display: "flex",
   alignItems: "center", justifyContent: "center",
   background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
 };
-const modalCardStyle = {
-  background: C.card, borderRadius: 24, padding: "28px 32px", width: 420, maxWidth: "95vw",
-  boxShadow: "0 24px 64px rgba(0,0,0,0.25)", border: `2px solid ${C.gold}30`,
-  fontFamily: "'Patrick Hand', cursive",
-};
-const primaryBtnStyle = {
-  padding: "12px 28px", borderRadius: 14, border: "none", cursor: "pointer",
-  background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
-  color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, fontWeight: 700,
-};
+// These styles use getters that read live C values, so they update when theme changes.
+// Using Object.defineProperty so spread/destructure works properly.
+const modalCardStyle = {};
+Object.defineProperties(modalCardStyle, {
+  background: { get: () => C.card, enumerable: true, configurable: true },
+  borderRadius: { value: 24, enumerable: true, configurable: true },
+  padding: { value: "28px 32px", enumerable: true, configurable: true },
+  width: { value: 420, enumerable: true, configurable: true },
+  maxWidth: { value: "95vw", enumerable: true, configurable: true },
+  boxShadow: { value: "0 24px 64px rgba(0,0,0,0.25)", enumerable: true, configurable: true },
+  border: { get: () => `2px solid ${C.gold}30`, enumerable: true, configurable: true },
+  fontFamily: { value: "'Patrick Hand', cursive", enumerable: true, configurable: true },
+});
+
+const primaryBtnStyle = {};
+Object.defineProperties(primaryBtnStyle, {
+  padding: { value: "12px 28px", enumerable: true, configurable: true },
+  borderRadius: { value: 14, enumerable: true, configurable: true },
+  border: { value: "none", enumerable: true, configurable: true },
+  cursor: { value: "pointer", enumerable: true, configurable: true },
+  background: { get: () => `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`, enumerable: true, configurable: true },
+  color: { value: "white", enumerable: true, configurable: true },
+  fontFamily: { value: "'Patrick Hand', cursive", enumerable: true, configurable: true },
+  fontSize: { value: 18, enumerable: true, configurable: true },
+  fontWeight: { value: 700, enumerable: true, configurable: true },
+});
 
 /* ─── RUNNER MISSION ─── Chrome dino-style game with monkey jumping over fruits */
 const RUNNER_OBSTACLES = [
@@ -3729,6 +3791,14 @@ function SnowMonkeyTrackerInner() {
     setSoundOn(next);
     if (next) setTimeout(() => SFX.click(), 50); // Confirm sound is back
   };
+  // Theme (light/dark)
+  const [themeMode, setThemeModeState] = useState(getTheme());
+  const toggleTheme = () => {
+    const next = themeMode === "dark" ? "light" : "dark";
+    setTheme(next); // mutates global C
+    setThemeModeState(next); // triggers re-render
+    SFX.click();
+  };
 
   useEffect(() => {
     (async () => {
@@ -4186,9 +4256,21 @@ function SnowMonkeyTrackerInner() {
   /* ── LOGIN ── */
   if (screen === "login") {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(160deg, ${C.snow1} 0%, ${C.bg} 40%, #e2d0c0 100%)`, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(160deg, ${C.snow1} 0%, ${C.bg} 40%, ${themeMode === "dark" ? "#0a0c14" : "#e2d0c0"} 100%)`, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
         <WatercolorFilters /><SnowParticles />
+        {/* Theme toggle in top-right corner */}
+        <button onClick={toggleTheme}
+          title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          style={{
+            position: "absolute", top: 18, right: 18, zIndex: 50,
+            padding: "10px 14px", borderRadius: 999, border: `2px solid ${C.fur2}40`,
+            background: `${C.card}ee`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+            fontSize: 20, cursor: "pointer", lineHeight: 1, minWidth: 48,
+            boxShadow: "0 4px 14px rgba(0,0,0,0.1)",
+          }}>
+          {themeMode === "dark" ? "☀️" : "🌙"}
+        </button>
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "35%", background: `linear-gradient(to top, ${C.water1}30, transparent)`, borderRadius: "50% 50% 0 0" }} />
         <div style={{ position: "absolute", left: "4%", bottom: "8%", opacity: 0.5 }}><MonkeySVG size={90} mood="happy" delay={0} variant={1} /></div>
         <div style={{ position: "absolute", right: "6%", bottom: "12%", opacity: 0.5 }}><MonkeySVG size={75} mood="excited" delay={1.2} variant={2} /></div>
@@ -4219,7 +4301,7 @@ function SnowMonkeyTrackerInner() {
             </button>
           </div>
           <p style={{ textAlign: "center", color: C.textLight, fontSize: 13, marginTop: 18, marginBottom: 0 }}>
-            {loginTab === "teacher" ? "Default: teacher / 1234" : "Ask your teacher for login details"}
+            {loginTab === "teacher" ? "Use your teacher credentials to log in" : "Ask your teacher for login details"}
           </p>
         </div>
       </div>
@@ -4246,6 +4328,15 @@ function SnowMonkeyTrackerInner() {
             <p style={{ color: C.textLight, margin: 0, fontSize: 14 }}>Welcome, {user?.name}! · {students.length} student{students.length !== 1 ? "s" : ""}</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={toggleTheme}
+              title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {themeMode === "dark" ? "☀️" : "🌙"}
+            </button>
             <button onClick={toggleSound}
               title={soundOn ? "Mute sounds" : "Unmute sounds"}
               style={{
@@ -4782,6 +4873,15 @@ function SnowMonkeyTrackerInner() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={toggleTheme}
+              title={themeMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {themeMode === "dark" ? "☀️" : "🌙"}
+            </button>
             <button onClick={toggleSound}
               title={soundOn ? "Mute sounds" : "Unmute sounds"}
               style={{
