@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import {
   getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent,
-  setQuizForStudent, deleteQuizForStudent, getQuizzes
+  setQuizzesForStudent, deleteQuizzesForStudent, getQuizzes,
+  setMissionsForStudent, deleteMissionsForStudent, getMissions
 } from "./firebase";
 
 /* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
@@ -1807,7 +1808,7 @@ function FoodReward({ onComplete }) {
 }
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
-function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWrong }) {
+function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
@@ -1817,6 +1818,10 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
   const [monkeyShake, setMonkeyShake] = useState(false);
   const [monkeyHappy, setMonkeyHappy] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+
+  const questions = quiz?.questions || [];
+  const totalReward = quiz?.points || 1;
 
   if (!questions || questions.length === 0) {
     return (
@@ -1841,19 +1846,24 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
       setScore(s => s + 1);
       setMonkeyHappy(true);
       setShowFood(true);
-      onCorrect();
       setTimeout(() => setMonkeyHappy(false), 2200);
     } else {
       setMonkeyShake(true);
       setShowHawk(true);
-      onWrong();
       setTimeout(() => setMonkeyShake(false), 4200);
     }
   };
 
   const nextQuestion = () => {
     if (isLast) {
+      // Calculate proportional reward
+      const pct = score / questions.length;
+      const earned = Math.round(totalReward * pct);
       setFinished(true);
+      if (!rewarded && earned > 0) {
+        setRewarded(true);
+        onComplete(earned);
+      }
     } else {
       setCurrentIdx(i => i + 1);
       setSelected(null);
@@ -1863,17 +1873,21 @@ function QuizGame({ studentId, studentName, questions, onClose, onCorrect, onWro
 
   if (finished) {
     const pct = Math.round((score / questions.length) * 100);
+    const earned = Math.round(totalReward * (score / questions.length));
     return (
       <div style={modalBackdropStyle} onClick={onClose}>
         <div style={{ ...modalCardStyle, textAlign: "center", width: 460 }} onClick={e => e.stopPropagation()}>
           <h2 style={{ color: C.text, margin: "0 0 8px", fontSize: 28 }}>🎉 Quiz Complete!</h2>
-          <p style={{ color: C.textLight, fontSize: 18, margin: "0 0 20px" }}>{studentName}, you finished!</p>
+          <p style={{ color: C.textLight, fontSize: 18, margin: "0 0 20px" }}>{studentName}, you finished {quiz?.name}!</p>
           <div style={{ fontSize: 64, color: C.gold, fontWeight: 700, marginBottom: 8 }}>{score} / {questions.length}</div>
           <div style={{ fontSize: 22, color: pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent, fontWeight: 700, marginBottom: 16 }}>
             {pct >= 80 ? "Amazing!" : pct >= 50 ? "Good job!" : "Keep practicing!"}
           </div>
-          <p style={{ color: C.textLight, fontSize: 16 }}>You earned {score} point{score !== 1 ? "s" : ""}!</p>
-          <button onClick={onClose} style={{ ...primaryBtnStyle, marginTop: 16 }}>Back to the Hot Spring</button>
+          <div style={{ background: `${C.gold}20`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "inline-block" }}>
+            <div style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{earned} ★</strong></div>
+            <div style={{ fontSize: 12, color: C.textLight }}>(out of {totalReward} possible)</div>
+          </div>
+          <button onClick={onClose} style={{ ...primaryBtnStyle, marginTop: 4 }}>Back to the Hot Spring</button>
         </div>
       </div>
     );
@@ -2020,6 +2034,318 @@ const primaryBtnStyle = {
   color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, fontWeight: 700,
 };
 
+/* ─── BLOCK BLAST MISSION ─── 8x8 grid where each block placement requires a quiz answer */
+const BB_SIZE = 8;
+const BB_SHAPES = [
+  // Each shape is a list of [r, c] cells relative to origin
+  [[0,0]],                        // single
+  [[0,0],[0,1]],                  // 2-horiz
+  [[0,0],[1,0]],                  // 2-vert
+  [[0,0],[0,1],[0,2]],            // 3-horiz
+  [[0,0],[1,0],[2,0]],            // 3-vert
+  [[0,0],[0,1],[1,0],[1,1]],      // 2x2
+  [[0,0],[0,1],[1,0]],            // L small
+  [[0,0],[0,1],[1,1]],            // L mirror
+];
+const BB_COLORS = ["#e84050", "#edb830", "#5caa5e", "#5a8fc7", "#a060c0", "#ff8030"];
+
+function generateShape() {
+  const shape = BB_SHAPES[Math.floor(Math.random() * BB_SHAPES.length)];
+  const color = BB_COLORS[Math.floor(Math.random() * BB_COLORS.length)];
+  return { cells: shape, color, id: Math.random() };
+}
+
+function MissionGame({ studentName, mission, onClose, onComplete }) {
+  const [grid, setGrid] = useState(() => Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
+  const [tray, setTray] = useState(() => [generateShape(), generateShape(), generateShape()]);
+  const [selectedShapeIdx, setSelectedShapeIdx] = useState(null);
+  const [hoverCell, setHoverCell] = useState(null);
+  const [score, setScore] = useState(0);
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [pendingPlacement, setPendingPlacement] = useState(null); // { shapeIdx, r, c }
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [questionResult, setQuestionResult] = useState(null); // null | 'correct' | 'wrong'
+  const [selected, setSelected] = useState(null);
+  const [questionsCompleted, setQuestionsCompleted] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+
+  const questions = mission?.questions || [];
+  const totalReward = mission?.points || 5;
+  // Mission complete when all questions answered correctly
+  const targetQuestions = questions.length;
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🚀 No Mission Yet</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>Your teacher hasn't assigned a mission yet!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  const canPlace = (shape, r, c) => {
+    for (const [dr, dc] of shape.cells) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= BB_SIZE || nc < 0 || nc >= BB_SIZE) return false;
+      if (grid[nr][nc]) return false;
+    }
+    return true;
+  };
+
+  const handleCellClick = (r, c) => {
+    if (selectedShapeIdx === null) return;
+    const shape = tray[selectedShapeIdx];
+    if (!shape || !canPlace(shape, r, c)) return;
+    // Show question first
+    setPendingPlacement({ shapeIdx: selectedShapeIdx, r, c });
+    setQuestionIdx(questionsCompleted % questions.length);
+    setSelected(null);
+    setQuestionResult(null);
+    setShowQuestion(true);
+  };
+
+  const checkClearLines = (g) => {
+    const newGrid = g.map(row => [...row]);
+    let cleared = 0;
+    // Check rows
+    for (let r = 0; r < BB_SIZE; r++) {
+      if (newGrid[r].every(c => c)) {
+        for (let c = 0; c < BB_SIZE; c++) newGrid[r][c] = null;
+        cleared++;
+      }
+    }
+    // Check columns
+    for (let c = 0; c < BB_SIZE; c++) {
+      if (newGrid.every(row => row[c])) {
+        for (let r = 0; r < BB_SIZE; r++) newGrid[r][c] = null;
+        cleared++;
+      }
+    }
+    return { grid: newGrid, cleared };
+  };
+
+  const placeShape = () => {
+    if (!pendingPlacement) return;
+    const { shapeIdx, r, c } = pendingPlacement;
+    const shape = tray[shapeIdx];
+    const newGrid = grid.map(row => [...row]);
+    for (const [dr, dc] of shape.cells) {
+      newGrid[r + dr][c + dc] = shape.color;
+    }
+    const { grid: clearedGrid, cleared } = checkClearLines(newGrid);
+    setGrid(clearedGrid);
+    setScore(s => s + shape.cells.length + cleared * 10);
+    // Remove placed shape, regenerate if all empty
+    const newTray = [...tray];
+    newTray[shapeIdx] = null;
+    if (newTray.every(s => s === null)) {
+      setTray([generateShape(), generateShape(), generateShape()]);
+    } else {
+      setTray(newTray);
+    }
+    setSelectedShapeIdx(null);
+    setPendingPlacement(null);
+  };
+
+  const answerQuestion = (idx) => {
+    if (selected !== null) return;
+    setSelected(idx);
+    const isCorrect = idx === questions[questionIdx].correct;
+    setQuestionResult(isCorrect ? "correct" : "wrong");
+    setTimeout(() => {
+      setShowQuestion(false);
+      if (isCorrect) {
+        placeShape();
+        setQuestionsCompleted(q => {
+          const newCount = q + 1;
+          // Win condition: answered correctly N times where N = number of questions
+          if (newCount >= targetQuestions && !rewarded) {
+            setRewarded(true);
+            setGameOver(true);
+            onComplete(totalReward);
+          }
+          return newCount;
+        });
+      }
+      // If wrong: don't place, lose turn
+      setPendingPlacement(null);
+      setSelected(null);
+      setQuestionResult(null);
+    }, isCorrect ? 800 : 1500);
+  };
+
+  const cellSize = 36;
+  const currentQ = questions[questionIdx];
+  const progress = (questionsCompleted / targetQuestions) * 100;
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={{ ...modalCardStyle, width: 560, maxWidth: "95vw", maxHeight: "94vh", overflowY: "auto", position: "relative" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+              {questionsCompleted} / {targetQuestions} answered · {totalReward} ★ reward
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ height: 8, background: `${C.fur2}30`, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.gold}, ${C.green})`, transition: "width 0.4s" }} />
+        </div>
+
+        {gameOver ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div style={{ fontSize: 64, marginBottom: 8 }}>🎉</div>
+            <h2 style={{ color: C.text, margin: "0 0 8px", fontSize: 26 }}>Mission Complete!</h2>
+            <p style={{ color: C.textLight, fontSize: 16 }}>{studentName}, you answered all {targetQuestions} questions!</p>
+            <div style={{ background: `${C.gold}20`, borderRadius: 14, padding: "12px 16px", margin: "16px auto", display: "inline-block" }}>
+              <div style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{totalReward} ★</strong></div>
+            </div>
+            <div><button onClick={onClose} style={primaryBtnStyle}>Back to the Hot Spring</button></div>
+          </div>
+        ) : (
+          <>
+            {/* Grid */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${BB_SIZE}, ${cellSize}px)`, gap: 2, background: `${C.fur2}30`, padding: 4, borderRadius: 10 }}>
+                {grid.map((row, r) => row.map((cell, c) => {
+                  // Hover preview
+                  let preview = false;
+                  if (selectedShapeIdx !== null && hoverCell && tray[selectedShapeIdx]) {
+                    const shape = tray[selectedShapeIdx];
+                    for (const [dr, dc] of shape.cells) {
+                      if (hoverCell.r + dr === r && hoverCell.c + dc === c) preview = true;
+                    }
+                  }
+                  const previewColor = (selectedShapeIdx !== null && tray[selectedShapeIdx]) ? tray[selectedShapeIdx].color : null;
+                  const previewValid = preview && selectedShapeIdx !== null && hoverCell && canPlace(tray[selectedShapeIdx], hoverCell.r, hoverCell.c);
+                  return (
+                    <div
+                      key={`${r}-${c}`}
+                      onClick={() => handleCellClick(r, c)}
+                      onMouseEnter={() => setHoverCell({ r, c })}
+                      onMouseLeave={() => setHoverCell(null)}
+                      style={{
+                        width: cellSize, height: cellSize,
+                        background: cell || (preview ? (previewValid ? `${previewColor}80` : "#ff404060") : `${C.snow1}`),
+                        borderRadius: 6,
+                        cursor: selectedShapeIdx !== null ? "pointer" : "default",
+                        border: cell ? `1px solid ${cell}` : "1px solid #d0d0d0",
+                        transition: "background 0.1s",
+                      }}
+                    />
+                  );
+                }))}
+              </div>
+            </div>
+
+            {/* Score */}
+            <div style={{ textAlign: "center", fontSize: 16, color: C.textLight, marginBottom: 10 }}>
+              Block score: <strong style={{ color: C.gold, fontSize: 20 }}>{score}</strong>
+            </div>
+
+            {/* Tray */}
+            <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 6 }}>
+              {tray.map((shape, idx) => {
+                if (!shape) return <div key={idx} style={{ width: 80, height: 80, opacity: 0.3, display: "flex", alignItems: "center", justifyContent: "center", color: C.textLight, fontSize: 12 }}>—</div>;
+                const maxR = Math.max(...shape.cells.map(c => c[0]));
+                const maxC = Math.max(...shape.cells.map(c => c[1]));
+                const traySize = 18;
+                const isSelected = selectedShapeIdx === idx;
+                return (
+                  <div key={idx} onClick={() => setSelectedShapeIdx(idx)}
+                    style={{
+                      cursor: "pointer", padding: 8, borderRadius: 10,
+                      background: isSelected ? `${C.gold}30` : "transparent",
+                      border: isSelected ? `2px solid ${C.gold}` : `2px solid transparent`,
+                      transition: "all 0.2s",
+                    }}>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${maxC + 1}, ${traySize}px)`, gap: 2 }}>
+                      {Array(maxR + 1).fill(null).map((_, r) => Array(maxC + 1).fill(null).map((__, c) => {
+                        const filled = shape.cells.some(([cr, cc]) => cr === r && cc === c);
+                        return <div key={`${r}-${c}`} style={{ width: traySize, height: traySize, background: filled ? shape.color : "transparent", borderRadius: 3 }} />;
+                      }))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: "center", fontSize: 12, color: C.textLight }}>
+              {selectedShapeIdx === null ? "👆 Pick a shape, then click on the grid" : "Click a cell to place — you'll need to answer a question!"}
+            </div>
+          </>
+        )}
+
+        {/* Question modal overlay */}
+        {showQuestion && currentQ && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 24, padding: 16, zIndex: 50,
+          }}>
+            <div style={{
+              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            }}>
+              <div style={{ fontSize: 14, color: C.textLight, marginBottom: 6 }}>Answer to place block</div>
+              <div style={{
+                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
+                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {currentQ.q}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct;
+                  const isSelected = idx === selected;
+                  const colors = [C.accent, C.gold, "#5a8fc7", C.green];
+                  let bg = colors[idx], textColor = "white";
+                  if (selected !== null) {
+                    if (isCorrect) bg = C.green;
+                    else if (isSelected) bg = "#a85050";
+                    else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
+                  }
+                  return (
+                    <button key={idx} onClick={() => answerQuestion(idx)} disabled={selected !== null}
+                      style={{
+                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        background: bg, color: textColor,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        cursor: selected !== null ? "default" : "pointer", textAlign: "left",
+                        minHeight: 50,
+                      }}>
+                      <strong>{["A","B","C","D"][idx]}.</strong> {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              {questionResult === "wrong" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                  ❌ Wrong! You can't place that block. Try another shape.
+                </div>
+              )}
+              {questionResult === "correct" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                  ✅ Correct! Placing block...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── MAIN APP ─── */
 export default function SnowMonkeyTracker() {
   const [anyHovering, setAnyHovering] = useState(false);
@@ -2050,13 +2376,24 @@ function SnowMonkeyTrackerInner() {
   const [showManage, setShowManage] = useState(false);
   const [showWordle, setShowWordle] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [showMission, setShowMission] = useState(false);
+  const [showQuizPicker, setShowQuizPicker] = useState(false);
+  const [showMissionPicker, setShowMissionPicker] = useState(false);
+  const [activeQuizId, setActiveQuizId] = useState(null);
+  const [activeMissionId, setActiveMissionId] = useState(null);
   const [showPetMart, setShowPetMart] = useState(false);
-  const [quizzes, setQuizzes] = useState({}); // { studentId: [questions] }
+  const [quizzes, setQuizzes] = useState({}); // { studentId: [{id, subject, name, points, questions[]}] }
+  const [missions, setMissions] = useState({}); // { studentId: [{id, name, points, questions[]}] }
   const [showQuizUpload, setShowQuizUpload] = useState(false);
+  const [showMissionUpload, setShowMissionUpload] = useState(false);
   const [showAccessories, setShowAccessories] = useState(false);
   const [quizUploadStudentId, setQuizUploadStudentId] = useState(null);
+  const [missionUploadStudentId, setMissionUploadStudentId] = useState(null);
   const [csvText, setCsvText] = useState("");
   const [csvError, setCsvError] = useState("");
+  const [csvSubject, setCsvSubject] = useState("");
+  const [csvName, setCsvName] = useState("");
+  const [csvPoints, setCsvPoints] = useState(1);
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [streakOpen, setStreakOpen] = useState(false);
 
@@ -2066,10 +2403,11 @@ function SnowMonkeyTrackerInner() {
         const t = await getTeachers();
         const s = await getStudents();
         const q = await getQuizzes();
+        const m = await getMissions();
         setTeachers(t);
         setStudents(s);
-        // getQuizzes returns object keyed by studentId already
         setQuizzes(q || {});
+        setMissions(m || {});
       } catch (error) {
         console.error("Failed to load data:", error);
       }
@@ -2077,15 +2415,13 @@ function SnowMonkeyTrackerInner() {
     })();
   }, []);
 
-  const persist = useCallback(async (newT, newS, newQ) => {
+  const persist = useCallback(async (newT, newS, newQ, newM) => {
     if (newT) { setTeachers(newT); }
     if (newS) {
-      // Find which students actually changed and only update those
       const prevStudents = students;
       setStudents(newS);
       for (const student of newS) {
         const prev = prevStudents.find(p => p.id === student.id);
-        // Only update if student exists in DB (has been synced) AND something changed
         if (prev && JSON.stringify(prev) !== JSON.stringify(student)) {
           try {
             const { id, ...data } = student;
@@ -2098,56 +2434,121 @@ function SnowMonkeyTrackerInner() {
     }
     if (newQ) {
       setQuizzes(newQ);
-      // Only update quizzes that changed
       const prevQuizzes = quizzes;
       for (const studentId in newQ) {
         if (JSON.stringify(prevQuizzes[studentId]) !== JSON.stringify(newQ[studentId])) {
           try {
-            await setQuizForStudent(studentId, newQ[studentId]);
+            if (newQ[studentId] && newQ[studentId].length > 0) {
+              await setQuizzesForStudent(studentId, newQ[studentId]);
+            } else {
+              await deleteQuizzesForStudent(studentId);
+            }
           } catch (error) {
             console.error("Failed to update quiz:", error);
           }
         }
       }
-      // Also handle deletions
       for (const studentId in prevQuizzes) {
         if (!(studentId in newQ)) {
-          try {
-            await deleteQuizForStudent(studentId);
-          } catch (error) {
-            console.error("Failed to delete quiz:", error);
-          }
+          try { await deleteQuizzesForStudent(studentId); } catch (e) { console.error(e); }
         }
       }
     }
-  }, [students, quizzes]);
+    if (newM) {
+      setMissions(newM);
+      const prevMissions = missions;
+      for (const studentId in newM) {
+        if (JSON.stringify(prevMissions[studentId]) !== JSON.stringify(newM[studentId])) {
+          try {
+            if (newM[studentId] && newM[studentId].length > 0) {
+              await setMissionsForStudent(studentId, newM[studentId]);
+            } else {
+              await deleteMissionsForStudent(studentId);
+            }
+          } catch (error) {
+            console.error("Failed to update mission:", error);
+          }
+        }
+      }
+      for (const studentId in prevMissions) {
+        if (!(studentId in newM)) {
+          try { await deleteMissionsForStudent(studentId); } catch (e) { console.error(e); }
+        }
+      }
+    }
+  }, [students, quizzes, missions]);
 
-  const uploadQuizForStudent = (studentId, csvData) => {
+  const addQuizForStudent = (studentId, csvData, subject, name, points) => {
     const parsed = parseCSV(csvData);
     if (!parsed) return { error: "Couldn't parse CSV. Make sure your file has columns: question, A, B, C, D, correct" };
     if (parsed.length === 0) return { error: "No questions found in CSV" };
-    const newQuizzes = { ...quizzes, [studentId]: parsed };
+    const newQuiz = {
+      id: "q" + Date.now(),
+      subject: subject?.trim() || "General",
+      name: name?.trim() || "Quiz",
+      points: Math.max(1, parseInt(points) || 1),
+      questions: parsed,
+    };
+    const existing = quizzes[studentId] || [];
+    const newQuizzes = { ...quizzes, [studentId]: [...existing, newQuiz] };
     persist(null, null, newQuizzes);
     return { success: parsed.length };
   };
 
-  const removeQuizForStudent = (studentId) => {
+  const removeQuizFromStudent = (studentId, quizId) => {
+    const existing = quizzes[studentId] || [];
+    const filtered = existing.filter(q => q.id !== quizId);
     const newQuizzes = { ...quizzes };
-    delete newQuizzes[studentId];
+    if (filtered.length > 0) newQuizzes[studentId] = filtered;
+    else delete newQuizzes[studentId];
     persist(null, null, newQuizzes);
+  };
+
+  const addMissionForStudent = (studentId, csvData, name, points) => {
+    const parsed = parseCSV(csvData);
+    if (!parsed) return { error: "Couldn't parse CSV. Make sure your file has columns: question, A, B, C, D, correct" };
+    if (parsed.length === 0) return { error: "No questions found in CSV" };
+    const newMission = {
+      id: "m" + Date.now(),
+      name: name?.trim() || "Mission",
+      points: Math.max(1, parseInt(points) || 5),
+      questions: parsed,
+    };
+    const existing = missions[studentId] || [];
+    const newMissions = { ...missions, [studentId]: [...existing, newMission] };
+    persist(null, null, null, newMissions);
+    return { success: parsed.length };
+  };
+
+  const removeMissionFromStudent = (studentId, missionId) => {
+    const existing = missions[studentId] || [];
+    const filtered = existing.filter(m => m.id !== missionId);
+    const newMissions = { ...missions };
+    if (filtered.length > 0) newMissions[studentId] = filtered;
+    else delete newMissions[studentId];
+    persist(null, null, null, newMissions);
   };
 
   const handleQuizCorrect = async () => {
     if (!user) return;
-    const st = students.find(s => s.id === user.id);
-    if (!st) return;
-    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + 1 } : s);
-    persist(null, newS);
+    // Reward is given on quiz completion, not per-question now
   };
 
-  const handleQuizWrong = () => {
-    // Just visual, no point loss for now (could add if you want)
+  const handleQuizComplete = async (pointsEarned) => {
+    if (!user) return;
+    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + pointsEarned } : s);
+    persist(null, newS);
+    notify(`🎉 Quiz complete! +${pointsEarned} ★`);
   };
+
+  const handleMissionComplete = async (pointsEarned) => {
+    if (!user) return;
+    const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + pointsEarned } : s);
+    persist(null, newS);
+    notify(`🚀 Mission complete! +${pointsEarned} ★`);
+  };
+
+  const handleQuizWrong = () => {};
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type }); setTimeout(() => setNotification(null), 2500);
@@ -2268,7 +2669,7 @@ function SnowMonkeyTrackerInner() {
     notify(`🎉 You adopted a ${pet.name}! ${pet.emoji}`);
   };
 
-  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowQuizUpload(false); setShowAccessories(false); setShowPetMart(false); };
+  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); };
 
   const todayKey = getTodayKey();
   const hasCompletedChallenge = (studentId) => {
@@ -2435,34 +2836,80 @@ function SnowMonkeyTrackerInner() {
           </div>
         )}
         {showManage && (
-          <div style={{ position: "absolute", top: 72, right: 28, zIndex: 30, background: C.card, borderRadius: 22, padding: 24, width: 380, boxShadow: "0 16px 48px rgba(0,0,0,0.15)", border: `2px solid ${C.accent}30`, maxHeight: "75vh", overflowY: "auto" }}>
+          <div style={{ position: "absolute", top: 72, right: 28, zIndex: 30, background: C.card, borderRadius: 22, padding: 24, width: 420, boxShadow: "0 16px 48px rgba(0,0,0,0.15)", border: `2px solid ${C.accent}30`, maxHeight: "82vh", overflowY: "auto" }}>
             <h3 style={{ margin: "0 0 14px", color: C.text, fontSize: 22 }}>Student List</h3>
             {students.length === 0 && <p style={{ color: C.textLight }}>No students yet!</p>}
             {students.map(s => {
-              const hasQuiz = quizzes[s.id] && quizzes[s.id].length > 0;
+              const studentQuizzes = quizzes[s.id] || [];
+              const studentMissions = missions[s.id] || [];
               return (
-                <div key={s.id} style={{ padding: "10px 14px", borderRadius: 14, background: `${C.snow1}80`, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div key={s.id} style={{ padding: "12px 14px", borderRadius: 14, background: `${C.snow1}80`, marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                     <div>
                       <div style={{ fontSize: 16, color: C.text, fontWeight: 600 }}>{s.name}</div>
                       <div style={{ fontSize: 12, color: C.textLight }}>@{s.username} · ★ {s.points} pts</div>
                     </div>
                     <button onClick={() => { if (confirm(`Remove ${s.name}?`)) removeStudent(s.id); }} style={{ padding: "5px 11px", borderRadius: 8, border: "none", background: `${C.accent}15`, color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 14 }}>✕</button>
                   </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <button onClick={() => { setQuizUploadStudentId(s.id); setShowQuizUpload(true); setCsvText(""); setCsvError(""); }}
-                      style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: "none",
-                        background: hasQuiz ? `${C.green}25` : `${C.accent}15`,
-                        color: hasQuiz ? C.green : C.accent,
-                        fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                      📚 {hasQuiz ? `Quiz set (${quizzes[s.id].length} Qs)` : "Set Quiz"}
-                    </button>
-                    {hasQuiz && (
-                      <button onClick={() => { if (confirm(`Remove quiz for ${s.name}?`)) removeQuizForStudent(s.id); }}
-                        style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: `${C.accent}15`, color: C.accentDark, cursor: "pointer", fontSize: 12, fontFamily: "'Patrick Hand', cursive" }}>
-                        Clear
+
+                  {/* Quizzes section */}
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>📚 Quizzes ({studentQuizzes.length})</div>
+                      <button onClick={() => { setQuizUploadStudentId(s.id); setShowQuizUpload(true); setCsvText(""); setCsvSubject(""); setCsvName(""); setCsvPoints(1); setCsvError(""); }}
+                        style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: `${C.accent}25`, color: C.accent, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700 }}>
+                        + Add
                       </button>
-                    )}
+                    </div>
+                    {studentQuizzes.length === 0 && <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", paddingLeft: 4 }}>No quizzes yet</div>}
+                    {(() => {
+                      // Group by subject
+                      const bySubject = {};
+                      studentQuizzes.forEach(q => {
+                        const sub = q.subject || "General";
+                        if (!bySubject[sub]) bySubject[sub] = [];
+                        bySubject[sub].push(q);
+                      });
+                      return Object.entries(bySubject).map(([sub, qs]) => (
+                        <div key={sub} style={{ marginBottom: 4 }}>
+                          <div style={{ fontSize: 11, color: C.textLight, fontWeight: 700, marginBottom: 2 }}>{sub}</div>
+                          {qs.map(q => (
+                            <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.accent}10`, borderRadius: 6, marginBottom: 2 }}>
+                              <div style={{ flex: 1, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {q.name} · {q.questions.length}Q · {q.points}★
+                              </div>
+                              <button onClick={() => { if (confirm(`Remove "${q.name}"?`)) removeQuizFromStudent(s.id, q.id); }}
+                                style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+
+                  {/* Missions section */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>🚀 Missions ({studentMissions.length})</div>
+                      <button onClick={() => { setMissionUploadStudentId(s.id); setShowMissionUpload(true); setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvError(""); }}
+                        style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: `${C.green}25`, color: C.green, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700 }}>
+                        + Add
+                      </button>
+                    </div>
+                    {studentMissions.length === 0 && <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", paddingLeft: 4 }}>No missions yet</div>}
+                    {studentMissions.map(m => (
+                      <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.green}15`, borderRadius: 6, marginBottom: 2 }}>
+                        <div style={{ flex: 1, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {m.name} · {m.questions.length}Q · {m.points}★
+                        </div>
+                        <button onClick={() => { if (confirm(`Remove "${m.name}"?`)) removeMissionFromStudent(s.id, m.id); }}
+                          style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -2482,36 +2929,117 @@ function SnowMonkeyTrackerInner() {
           };
           const submitQuiz = () => {
             if (!csvText.trim()) { setCsvError("Please paste CSV or upload a file"); return; }
-            const result = uploadQuizForStudent(quizUploadStudentId, csvText);
+            const result = addQuizForStudent(quizUploadStudentId, csvText, csvSubject, csvName, csvPoints);
             if (result.error) { setCsvError(result.error); return; }
-            notify(`Quiz set for ${targetStudent?.name}: ${result.success} questions!`);
+            notify(`Quiz "${csvName || "Quiz"}" added for ${targetStudent?.name}: ${result.success} questions!`);
             setShowQuizUpload(false);
+            setCsvText(""); setCsvSubject(""); setCsvName(""); setCsvPoints(1); setCsvError("");
           };
           return (
             <div style={modalBackdropStyle} onClick={() => setShowQuizUpload(false)}>
-              <div style={{ ...modalCardStyle, width: 580 }} onClick={e => e.stopPropagation()}>
+              <div style={{ ...modalCardStyle, width: 580, maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>📚 Set Quiz for {targetStudent?.name}</h2>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>📚 Add Quiz for {targetStudent?.name}</h2>
                   <button onClick={() => setShowQuizUpload(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
                 </div>
-                <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: 14, marginBottom: 14, fontSize: 13, color: C.textLight }}>
-                  <strong style={{ color: C.text }}>CSV Format:</strong> Headers must be <code>question, A, B, C, D, correct</code><br/>
-                  The "correct" column should be A, B, C, or D (matching the right answer).<br/>
-                  <span style={{ color: C.green }}>Example:</span> <code>What is 2+2?,3,4,5,6,B</code>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>Subject</label>
+                    <input type="text" value={csvSubject} onChange={e => setCsvSubject(e.target.value)}
+                      placeholder="e.g. Math, Science"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>Quiz name</label>
+                    <input type="text" value={csvName} onChange={e => setCsvName(e.target.value)}
+                      placeholder="e.g. Chapter 3 Test"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>★ Points to award (max, scaled by % correct)</label>
+                  <input type="number" min="1" max="100" value={csvPoints} onChange={e => setCsvPoints(e.target.value)}
+                    style={{ width: 100, padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: 12, marginBottom: 10, fontSize: 12, color: C.textLight }}>
+                  <strong style={{ color: C.text }}>CSV Format:</strong> <code>question, A, B, C, D, correct</code> (correct = A/B/C/D)
                 </div>
                 <input type="file" accept=".csv,.txt" onChange={handleFileUpload}
                   style={{ marginBottom: 10, fontFamily: "'Patrick Hand', cursive", fontSize: 14, color: C.text }} />
                 <textarea value={csvText} onChange={e => { setCsvText(e.target.value); setCsvError(""); }}
-                  placeholder={"question,A,B,C,D,correct\nWhat is the capital of France?,Berlin,Madrid,Paris,Rome,C\nWhat is 5+3?,7,8,9,10,B"}
+                  placeholder={"question,A,B,C,D,correct\nWhat is the capital of France?,Berlin,Madrid,Paris,Rome,C"}
                   style={{
-                    width: "100%", height: 180, padding: 12, borderRadius: 10,
+                    width: "100%", height: 140, padding: 12, borderRadius: 10,
                     border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`,
                     fontFamily: "monospace", fontSize: 13, color: C.text,
                     resize: "vertical", outline: "none", boxSizing: "border-box",
                   }} />
                 {csvError && <p style={{ color: C.accentDark, fontSize: 14, margin: "8px 0 0" }}>{csvError}</p>}
                 <button onClick={submitQuiz} style={{ ...primaryBtnStyle, width: "100%", marginTop: 14 }}>
-                  Save Quiz
+                  Add Quiz
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Mission CSV Upload Modal */}
+        {showMissionUpload && (() => {
+          const targetStudent = students.find(s => s.id === missionUploadStudentId);
+          const handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => setCsvText(ev.target.result);
+            reader.readAsText(file);
+          };
+          const submitMission = () => {
+            if (!csvText.trim()) { setCsvError("Please paste CSV or upload a file"); return; }
+            const result = addMissionForStudent(missionUploadStudentId, csvText, csvName, csvPoints);
+            if (result.error) { setCsvError(result.error); return; }
+            notify(`Mission "${csvName || "Mission"}" added for ${targetStudent?.name}: ${result.success} questions!`);
+            setShowMissionUpload(false);
+            setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvError("");
+          };
+          return (
+            <div style={modalBackdropStyle} onClick={() => setShowMissionUpload(false)}>
+              <div style={{ ...modalCardStyle, width: 580, maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 Add Mission for {targetStudent?.name}</h2>
+                  <button onClick={() => setShowMissionUpload(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                </div>
+                <div style={{ background: `${C.green}15`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13, color: C.text, border: `1px solid ${C.green}30` }}>
+                  <strong>🚀 Block Blast Mission:</strong> The student plays a Tetris-like puzzle. Every time they place a block, they must answer one of these questions correctly. Mission completes when they answer all questions correctly.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>Mission name</label>
+                    <input type="text" value={csvName} onChange={e => setCsvName(e.target.value)}
+                      placeholder="e.g. Math Mission Week 1"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>★ Reward</label>
+                    <input type="number" min="1" max="100" value={csvPoints} onChange={e => setCsvPoints(e.target.value)}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
+                  </div>
+                </div>
+                <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: 12, marginBottom: 10, fontSize: 12, color: C.textLight }}>
+                  <strong style={{ color: C.text }}>CSV Format:</strong> <code>question, A, B, C, D, correct</code>
+                </div>
+                <input type="file" accept=".csv,.txt" onChange={handleFileUpload}
+                  style={{ marginBottom: 10, fontFamily: "'Patrick Hand', cursive", fontSize: 14, color: C.text }} />
+                <textarea value={csvText} onChange={e => { setCsvText(e.target.value); setCsvError(""); }}
+                  placeholder={"question,A,B,C,D,correct\nWhat is 12 x 8?,84,96,108,112,B"}
+                  style={{
+                    width: "100%", height: 140, padding: 12, borderRadius: 10,
+                    border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`,
+                    fontFamily: "monospace", fontSize: 13, color: C.text,
+                    resize: "vertical", outline: "none", boxSizing: "border-box",
+                  }} />
+                {csvError && <p style={{ color: C.accentDark, fontSize: 14, margin: "8px 0 0" }}>{csvError}</p>}
+                <button onClick={submitMission} style={{ ...primaryBtnStyle, width: "100%", marginTop: 14, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)` }}>
+                  Add Mission
                 </button>
               </div>
             </div>
@@ -2541,6 +3069,87 @@ function SnowMonkeyTrackerInner() {
               );
             })}
           </div>
+
+          {/* Teacher leaderboard - top-right, collapsible */}
+          {(() => {
+            const teacherSorted = [...students].sort((a, b) => b.points - a.points);
+            return !leaderboardOpen ? (
+              <button
+                onClick={() => setLeaderboardOpen(true)}
+                style={{
+                  position: "absolute", top: 16, right: 16, zIndex: 30,
+                  background: `${C.card}e8`, borderRadius: 999, padding: "10px 16px",
+                  boxShadow: "0 6px 20px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+                  border: `2px solid ${C.gold}40`, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 6,
+                  fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
+                }}
+                title="Show leaderboard"
+              >
+                🏆 <span>Leaderboard</span>
+              </button>
+            ) : (
+              <div style={{
+                position: "absolute", top: 16, right: 16, zIndex: 30,
+                background: `${C.card}e8`, borderRadius: 18, padding: "12px 14px",
+                boxShadow: "0 8px 28px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+                border: `2px solid ${C.gold}25`, width: 230,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>🏆 Leaderboard</div>
+                  <button
+                    onClick={() => setLeaderboardOpen(false)}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 18, color: C.textLight, padding: "0 4px", lineHeight: 1, fontWeight: 700 }}
+                    title="Hide"
+                  >×</button>
+                </div>
+                <div style={{ marginBottom: teacherSorted.length > 3 ? 8 : 0 }}>
+                  {teacherSorted.slice(0, 3).map((s, i) => {
+                    const podiumBg = i === 0 ? `${C.gold}25` : i === 1 ? "#b0b0b020" : "#cd7f3220";
+                    return (
+                      <div key={s.id} style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "7px 9px", borderRadius: 10,
+                        background: podiumBg,
+                        marginBottom: 4,
+                      }}>
+                        <span style={{ fontSize: 16, fontWeight: 700, width: 22, textAlign: "center" }}>
+                          {i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 13, color: C.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {s.name}
+                        </span>
+                        <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>★{s.points}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {teacherSorted.length > 3 && (
+                  <>
+                    <div style={{ fontSize: 11, color: C.textLight, textAlign: "center", marginBottom: 4, opacity: 0.7 }}>— rest of the troop —</div>
+                    <div style={{ maxHeight: 140, overflowY: "auto", paddingRight: 4 }}>
+                      <style>{`
+                        .lb-teacher::-webkit-scrollbar { width: 5px; }
+                        .lb-teacher::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
+                      `}</style>
+                      <div className="lb-teacher" style={{ maxHeight: 140, overflowY: "auto" }}>
+                        {teacherSorted.slice(3).map((s, i) => (
+                          <div key={s.id} style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "5px 8px", borderRadius: 8, marginBottom: 2,
+                          }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, width: 26, textAlign: "center", color: C.textLight }}>#{i + 4}</span>
+                            <span style={{ flex: 1, fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                            <span style={{ fontSize: 13, color: C.gold, fontWeight: 700 }}>★{s.points}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Points bar */}
@@ -2669,24 +3278,139 @@ function SnowMonkeyTrackerInner() {
         {/* Wordle modal */}
         {showWordle && <WordleGame onWin={handleWordleWin} onClose={() => setShowWordle(false)} />}
 
+        {/* Quiz Picker modal - choose which quiz to play */}
+        {showQuizPicker && me && (() => {
+          const myQuizzes = quizzes[me.id] || [];
+          const bySubject = {};
+          myQuizzes.forEach(q => {
+            const sub = q.subject || "General";
+            if (!bySubject[sub]) bySubject[sub] = [];
+            bySubject[sub].push(q);
+          });
+          return (
+            <div style={modalBackdropStyle} onClick={() => setShowQuizPicker(false)}>
+              <div style={{ ...modalCardStyle, width: 520, maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>📚 Pick a Quiz</h2>
+                  <button onClick={() => setShowQuizPicker(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                </div>
+                {myQuizzes.length === 0 ? (
+                  <p style={{ color: C.textLight, textAlign: "center", padding: 20 }}>No quizzes assigned yet!</p>
+                ) : (
+                  Object.entries(bySubject).map(([sub, qs]) => (
+                    <div key={sub} style={{ marginBottom: 14 }}>
+                      <h3 style={{ fontSize: 14, color: C.textLight, fontWeight: 700, margin: "0 0 6px", letterSpacing: 0.5 }}>{sub.toUpperCase()}</h3>
+                      {qs.map(q => (
+                        <button key={q.id}
+                          onClick={() => { setActiveQuizId(q.id); setShowQuizPicker(false); setShowQuiz(true); }}
+                          style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            width: "100%", padding: "12px 14px", borderRadius: 12,
+                            background: `${C.accent}15`, border: `2px solid ${C.accent}30`,
+                            cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                            color: C.text, fontSize: 16, marginBottom: 6, textAlign: "left",
+                            transition: "all 0.2s",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = `${C.accent}25`}
+                          onMouseLeave={e => e.currentTarget.style.background = `${C.accent}15`}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700 }}>{q.name}</div>
+                            <div style={{ fontSize: 12, color: C.textLight }}>{q.questions.length} questions</div>
+                          </div>
+                          <div style={{ background: C.gold, color: "white", padding: "4px 10px", borderRadius: 999, fontSize: 14, fontWeight: 700 }}>
+                            ★ {q.points}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Mission Picker modal */}
+        {showMissionPicker && me && (() => {
+          const myMissions = missions[me.id] || [];
+          return (
+            <div style={modalBackdropStyle} onClick={() => setShowMissionPicker(false)}>
+              <div style={{ ...modalCardStyle, width: 520, maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 Pick a Mission</h2>
+                  <button onClick={() => setShowMissionPicker(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                </div>
+                {myMissions.length === 0 ? (
+                  <p style={{ color: C.textLight, textAlign: "center", padding: 20 }}>No missions assigned yet!</p>
+                ) : (
+                  myMissions.map(m => (
+                    <button key={m.id}
+                      onClick={() => { setActiveMissionId(m.id); setShowMissionPicker(false); setShowMission(true); }}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        width: "100%", padding: "14px 16px", borderRadius: 12,
+                        background: `${C.green}15`, border: `2px solid ${C.green}40`,
+                        cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                        color: C.text, fontSize: 16, marginBottom: 8, textAlign: "left",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = `${C.green}25`}
+                      onMouseLeave={e => e.currentTarget.style.background = `${C.green}15`}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 17 }}>🚀 {m.name}</div>
+                        <div style={{ fontSize: 12, color: C.textLight }}>Block Blast · {m.questions.length} questions</div>
+                      </div>
+                      <div style={{ background: C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700 }}>
+                        ★ {m.points}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Quiz modal */}
-        {showQuiz && (
-          <QuizGame
-            studentId={me?.id}
-            studentName={me?.name}
-            questions={quizzes[me?.id]}
-            onClose={() => setShowQuiz(false)}
-            onCorrect={handleQuizCorrect}
-            onWrong={handleQuizWrong}
-          />
-        )}
+        {showQuiz && me && (() => {
+          const activeQuiz = (quizzes[me.id] || []).find(q => q.id === activeQuizId);
+          if (!activeQuiz) { setShowQuiz(false); return null; }
+          return (
+            <QuizGame
+              studentId={me.id}
+              studentName={me.name}
+              quiz={activeQuiz}
+              onClose={() => { setShowQuiz(false); setActiveQuizId(null); }}
+              onComplete={handleQuizComplete}
+            />
+          );
+        })()}
+
+        {/* Mission modal */}
+        {showMission && me && (() => {
+          const activeMission = (missions[me.id] || []).find(m => m.id === activeMissionId);
+          if (!activeMission) { setShowMission(false); return null; }
+          return (
+            <MissionGame
+              studentName={me.name}
+              mission={activeMission}
+              onClose={() => { setShowMission(false); setActiveMissionId(null); }}
+              onComplete={handleMissionComplete}
+            />
+          );
+        })()}
 
         {/* Action buttons - top center */}
         {(() => {
           const done = hasCompletedChallenge(me?.id);
-          const hasQuiz = quizzes[me?.id] && quizzes[me?.id].length > 0;
+          const myQuizzes = quizzes[me?.id] || [];
+          const myMissions = missions[me?.id] || [];
+          const hasQuiz = myQuizzes.length > 0;
+          const hasMission = myMissions.length > 0;
           return (
-            <div style={{ position: "absolute", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 25, display: "flex", gap: 10 }}>
+            <div style={{ position: "absolute", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 25, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", maxWidth: "90%" }}>
               <button onClick={() => !done && setShowWordle(true)}
                 style={{
                   padding: "10px 22px", borderRadius: 16, border: `2px solid ${done ? C.green + "40" : C.gold + "50"}`,
@@ -2698,21 +3422,35 @@ function SnowMonkeyTrackerInner() {
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
                 }}>
-                {done ? "✅ Challenge Complete!" : "🧩 Daily Challenge — Earn +1 ★"}
+                {done ? "✅ Daily Done!" : "🧩 Daily Challenge"}
               </button>
-              <button onClick={() => setShowQuiz(true)}
+              <button onClick={() => hasQuiz && setShowQuizPicker(true)}
                 style={{
                   padding: "10px 22px", borderRadius: 16,
                   border: `2px solid ${hasQuiz ? C.accent + "60" : C.fur2 + "50"}`,
                   background: hasQuiz ? `${C.card}ee` : `${C.card}cc`,
                   color: hasQuiz ? C.text : C.textLight,
                   fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: "pointer",
+                  cursor: hasQuiz ? "pointer" : "default",
                   boxShadow: hasQuiz ? `0 4px 14px ${C.accent}30` : "none",
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
                 }}>
-                {hasQuiz ? `📚 Quiz Time! (${quizzes[me?.id].length} Qs)` : "📚 No Quiz Yet"}
+                {hasQuiz ? `📚 Quizzes (${myQuizzes.length})` : "📚 No Quizzes"}
+              </button>
+              <button onClick={() => hasMission && setShowMissionPicker(true)}
+                style={{
+                  padding: "10px 22px", borderRadius: 16,
+                  border: `2px solid ${hasMission ? C.green + "70" : C.fur2 + "50"}`,
+                  background: hasMission ? `${C.card}ee` : `${C.card}cc`,
+                  color: hasMission ? C.text : C.textLight,
+                  fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
+                  cursor: hasMission ? "pointer" : "default",
+                  boxShadow: hasMission ? `0 4px 14px ${C.green}30` : "none",
+                  transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
+                  backdropFilter: "blur(8px)",
+                }}>
+                {hasMission ? `🚀 Missions (${myMissions.length})` : "🚀 No Missions"}
               </button>
               <button onClick={() => setShowPetMart(true)}
                 style={{
