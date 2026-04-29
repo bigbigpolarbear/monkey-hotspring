@@ -84,22 +84,163 @@ function WatercolorFilters() {
   );
 }
 
-/* ─── PETS ─── catalog of pets students can buy with stars */
+/* ─── PETS ─── catalog of pets students get from mystery packs
+   weeklyIncome = stars earned per week if equipped (capped, no compounding)
+*/
 const PET_CATALOG = [
-  { id: "fish", name: "Goldfish", price: 100, emoji: "🐠", rarity: "common" },
-  { id: "duck", name: "Duckling", price: 200, emoji: "🦆", rarity: "common" },
-  { id: "turtle", name: "Turtle", price: 350, emoji: "🐢", rarity: "uncommon" },
-  { id: "bunny", name: "Snow Bunny", price: 500, emoji: "🐰", rarity: "uncommon" },
-  { id: "fox", name: "Arctic Fox", price: 750, emoji: "🦊", rarity: "rare" },
-  { id: "otter", name: "River Otter", price: 1000, emoji: "🦦", rarity: "rare" },
-  { id: "owl", name: "Snowy Owl", price: 1500, emoji: "🦉", rarity: "epic" },
-  { id: "panda", name: "Tiny Panda", price: 2500, emoji: "🐼", rarity: "legendary" },
-  { id: "dragon", name: "Baby Dragon", price: 5000, emoji: "🐲", rarity: "mythic" },
+  // Common (low income)
+  { id: "fish",   name: "Crystal Goldie",   emoji: "🐠", rarity: "common",    weeklyIncome: 5  },
+  { id: "duck",   name: "Splash Sprout",    emoji: "🦆", rarity: "common",    weeklyIncome: 5  },
+  // Uncommon
+  { id: "turtle", name: "Mossback Sage",    emoji: "🐢", rarity: "uncommon",  weeklyIncome: 10 },
+  { id: "bunny",  name: "Frostpaw",         emoji: "🐰", rarity: "uncommon",  weeklyIncome: 10 },
+  // Rare
+  { id: "fox",    name: "Aurora Fox",       emoji: "🦊", rarity: "rare",      weeklyIncome: 18 },
+  { id: "otter",  name: "River Spirit",     emoji: "🦦", rarity: "rare",      weeklyIncome: 18 },
+  // Epic
+  { id: "owl",    name: "Moonlit Sentinel", emoji: "🦉", rarity: "epic",      weeklyIncome: 28 },
+  // Legendary
+  { id: "panda",  name: "Bamboo Guardian",  emoji: "🐼", rarity: "legendary", weeklyIncome: 40 },
+  // Mythic
+  { id: "dragon", name: "Ember Wyrmling",   emoji: "🐲", rarity: "mythic",    weeklyIncome: 60 },
 ];
+function getPet(id) { return PET_CATALOG.find(p => p.id === id); }
+
 const RARITY_COLORS = {
   common: "#9aaab8", uncommon: "#5caa5e", rare: "#5a8fc7",
   epic: "#a060c0", legendary: "#edb830", mythic: "#e06060",
 };
+
+/* ─── MYSTERY PACKS ─── students buy packs, get random pet based on rarity weights */
+const MYSTERY_PACKS = [
+  {
+    id: "starter",
+    name: "Starter Bubble Pack",
+    flavor: "🫧",
+    description: "A simple pack with friendly common pets. Everyone gets something!",
+    price: 150,
+    color: "#8eb6cf",
+    odds: { common: 80, uncommon: 20, rare: 0, epic: 0, legendary: 0, mythic: 0 },
+  },
+  {
+    id: "jelly",
+    name: "Jelly Drop Pack",
+    flavor: "🍮",
+    description: "Squishy and sweet — chance for an uncommon or rare pet!",
+    price: 400,
+    color: "#c980c0",
+    odds: { common: 50, uncommon: 35, rare: 14, epic: 1, legendary: 0, mythic: 0 },
+  },
+  {
+    id: "frost",
+    name: "Frost Glimmer Pack",
+    flavor: "❄️",
+    description: "Icy mystery — solid chance for a rare companion. Could be epic!",
+    price: 900,
+    color: "#7adcdc",
+    odds: { common: 25, uncommon: 35, rare: 30, epic: 8, legendary: 2, mythic: 0 },
+  },
+  {
+    id: "sparkle",
+    name: "Sparkle Surge Pack",
+    flavor: "✨",
+    description: "Glittering with magic. Big shot at epic and even legendary pets!",
+    price: 1800,
+    color: "#edb830",
+    odds: { common: 10, uncommon: 25, rare: 30, epic: 25, legendary: 9, mythic: 1 },
+  },
+  {
+    id: "mythic",
+    name: "Cosmic Mythstone Pack",
+    flavor: "🌌",
+    description: "Forged from stars themselves. Best odds for legendary AND mythic!",
+    price: 4000,
+    color: "#a060c0",
+    odds: { common: 0, uncommon: 10, rare: 25, epic: 35, legendary: 23, mythic: 7 },
+  },
+];
+
+function rollPack(packId, ownedIds = []) {
+  const pack = MYSTERY_PACKS.find(p => p.id === packId);
+  if (!pack) return null;
+  const total = Object.values(pack.odds).reduce((s, v) => s + v, 0);
+  let roll = Math.random() * total;
+  let chosenRarity = "common";
+  for (const [rarity, weight] of Object.entries(pack.odds)) {
+    if (roll < weight) { chosenRarity = rarity; break; }
+    roll -= weight;
+  }
+  const candidates = PET_CATALOG.filter(p => p.rarity === chosenRarity);
+  if (candidates.length === 0) {
+    return PET_CATALOG.find(p => p.rarity === "common");
+  }
+  const unowned = candidates.filter(p => !ownedIds.includes(p.id));
+  // Prefer unowned, but allow duplicates (will yield consolation stars)
+  const pool = unowned.length > 0 ? unowned : candidates;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Weekly income calculator: 1 payout per 7 days, no compounding
+function calculatePendingIncome(student, now = Date.now()) {
+  if (!student?.pet) return 0;
+  const pet = getPet(student.pet);
+  if (!pet) return 0;
+  const lastCollected = student.lastIncomeCollected || student.petAcquiredAt || now;
+  const daysSince = (now - lastCollected) / (1000 * 60 * 60 * 24);
+  if (daysSince < 7) return 0;
+  return pet.weeklyIncome;
+}
+function getNextIncomeDate(student) {
+  if (!student?.pet) return null;
+  const last = student.lastIncomeCollected || student.petAcquiredAt;
+  if (!last) return null;
+  return new Date(last + 7 * 24 * 60 * 60 * 1000);
+}
+
+
+/* ─── ACCESSORIES ─── catalog of items students can equip
+   slot: "head" (only one) | "face" | "neck" | "hold" (held in hand) | "back" | "body"
+   Free items have price 0. Paid items cost stars.
+*/
+const ACCESSORY_CATALOG = [
+  // ─── FREE BASICS ───
+  { id: "hat",         name: "Top Hat",         emoji: "🎩", slot: "head", price: 0,    rarity: "common" },
+  { id: "beanie",      name: "Cozy Beanie",     emoji: "🧢", slot: "head", price: 0,    rarity: "common" },
+  { id: "flower",      name: "Flower",          emoji: "🌸", slot: "head", price: 0,    rarity: "common" },
+  { id: "sunglasses",  name: "Sunglasses",      emoji: "🕶️", slot: "face", price: 0,    rarity: "common" },
+  { id: "scarf",       name: "Cozy Scarf",      emoji: "🧣", slot: "neck", price: 0,    rarity: "common" },
+  { id: "bowtie",      name: "Bow Tie",         emoji: "🎀", slot: "neck", price: 0,    rarity: "common" },
+
+  // ─── PAID COOL ITEMS ───
+  // Royalty / fashion
+  { id: "crown",       name: "Royal Crown",     emoji: "👑", slot: "head", price: 800,  rarity: "rare" },
+  { id: "earphones",   name: "Wired Earphones", emoji: "🎧", slot: "head", price: 250,  rarity: "uncommon" },
+  { id: "vrheadset",   name: "VR Headset",      emoji: "🥽", slot: "head", price: 1200, rarity: "epic" },
+  { id: "halo",        name: "Glowing Halo",    emoji: "😇", slot: "head", price: 3000, rarity: "legendary" },
+
+  // Held items (sports / cool)
+  { id: "tennis",      name: "Tennis Racket",   emoji: "🎾", slot: "hold", price: 400,  rarity: "uncommon" },
+  { id: "basketball",  name: "Basketball",      emoji: "🏀", slot: "hold", price: 400,  rarity: "uncommon" },
+  { id: "controller",  name: "Game Controller", emoji: "🎮", slot: "hold", price: 600,  rarity: "rare" },
+  { id: "guitar",      name: "Mini Guitar",     emoji: "🎸", slot: "hold", price: 700,  rarity: "rare" },
+  { id: "microphone",  name: "Microphone",      emoji: "🎤", slot: "hold", price: 500,  rarity: "uncommon" },
+  { id: "umbrella",    name: "Cute Umbrella",   emoji: "☂️", slot: "hold", price: 350,  rarity: "uncommon" },
+  { id: "lightsaber",  name: "Glow Saber",      emoji: "⚔️", slot: "hold", price: 1500, rarity: "epic" },
+  { id: "magicwand",   name: "Magic Wand",      emoji: "🪄", slot: "hold", price: 2000, rarity: "legendary" },
+  { id: "icecream",    name: "Ice Cream",       emoji: "🍦", slot: "hold", price: 200,  rarity: "common" },
+
+  // Back items
+  { id: "backpack",    name: "School Backpack", emoji: "🎒", slot: "back", price: 350,  rarity: "uncommon" },
+  { id: "wings",       name: "Butterfly Wings", emoji: "🦋", slot: "back", price: 1800, rarity: "epic" },
+  { id: "cape",        name: "Hero Cape",       emoji: "🦸", slot: "back", price: 1000, rarity: "rare" },
+];
+
+const ACCESSORY_SLOTS = ["head", "face", "neck", "hold", "back"];
+function getAccessory(id) { return ACCESSORY_CATALOG.find(a => a.id === id); }
+function isFreeAccessory(id) { const a = getAccessory(id); return a && a.price === 0; }
+function getAccessoryBySlot(equippedIds, slot) {
+  return equippedIds.map(getAccessory).find(a => a && a.slot === slot);
+}
 
 /* ─── STREAK LEVELS ─── each level gives the monkey visual upgrades */
 const STREAK_LEVELS = [
@@ -126,6 +267,143 @@ function getNextStreakLevel(streak) {
   }
   return null; // Max level
 }
+
+/* ─── SOUND SYSTEM ─── lazy Web Audio, works on iPad/iPhone/desktop */
+let _audioCtx = null;
+let _soundsEnabled = true;
+const SFX_KEY = "monkeyTracker_soundsEnabled";
+
+// Try to load preference (this runs on module load)
+try {
+  if (typeof localStorage !== "undefined") {
+    const v = localStorage.getItem(SFX_KEY);
+    if (v !== null) _soundsEnabled = v === "true";
+  }
+} catch {}
+
+function setSoundsEnabled(on) {
+  _soundsEnabled = on;
+  try { if (typeof localStorage !== "undefined") localStorage.setItem(SFX_KEY, String(on)); } catch {}
+}
+function getSoundsEnabled() { return _soundsEnabled; }
+
+function getAudioCtx() {
+  if (!_soundsEnabled) return null;
+  if (typeof window === "undefined") return null;
+  if (!_audioCtx) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      _audioCtx = new Ctx();
+    } catch { return null; }
+  }
+  // iOS unlock - resume if suspended
+  if (_audioCtx.state === "suspended") {
+    _audioCtx.resume().catch(() => {});
+  }
+  return _audioCtx;
+}
+
+// Schedule a tone with envelope
+function _tone({ freq = 440, duration = 0.15, type = "sine", attack = 0.01, decay = null, peak = 0.18, when = 0, slideTo = null, slideTime = null }) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + when;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (slideTo !== null) {
+    osc.frequency.linearRampToValueAtTime(slideTo, t0 + (slideTime || duration));
+  }
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(peak, t0 + attack);
+  if (decay !== null) {
+    gain.gain.linearRampToValueAtTime(peak * 0.6, t0 + attack + decay);
+  }
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.05);
+}
+
+// Brief noise burst for percussive sounds
+function _noise({ duration = 0.08, peak = 0.12, when = 0, filterFreq = 2000 }) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + when;
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = filterFreq;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(peak, t0 + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start(t0);
+  src.stop(t0 + duration + 0.02);
+}
+
+const SFX = {
+  click: () => _tone({ freq: 800, duration: 0.06, type: "triangle", peak: 0.08 }),
+  correct: () => {
+    // Cheery 3-note ascending arpeggio: C-E-G
+    _tone({ freq: 523, duration: 0.12, type: "triangle", peak: 0.18, when: 0 });
+    _tone({ freq: 659, duration: 0.12, type: "triangle", peak: 0.18, when: 0.08 });
+    _tone({ freq: 784, duration: 0.22, type: "triangle", peak: 0.20, when: 0.16 });
+  },
+  wrong: () => {
+    // Descending sad buzzer
+    _tone({ freq: 220, duration: 0.18, type: "sawtooth", peak: 0.14, when: 0, slideTo: 110, slideTime: 0.18 });
+    _tone({ freq: 165, duration: 0.18, type: "sawtooth", peak: 0.10, when: 0.18, slideTo: 80, slideTime: 0.18 });
+  },
+  jump: () => {
+    // Quick boing - rises in pitch
+    _tone({ freq: 300, duration: 0.18, type: "sine", peak: 0.22, slideTo: 600, slideTime: 0.12 });
+  },
+  land: () => {
+    _noise({ duration: 0.06, peak: 0.10, filterFreq: 800 });
+  },
+  reward: () => {
+    // Magical sparkle - 4 ascending notes
+    [523, 659, 784, 1047].forEach((f, i) => {
+      _tone({ freq: f, duration: 0.18, type: "triangle", peak: 0.16, when: i * 0.06 });
+    });
+  },
+  levelUp: () => {
+    // Triumphant fanfare
+    _tone({ freq: 392, duration: 0.14, type: "triangle", peak: 0.20, when: 0 });
+    _tone({ freq: 523, duration: 0.14, type: "triangle", peak: 0.20, when: 0.10 });
+    _tone({ freq: 659, duration: 0.14, type: "triangle", peak: 0.20, when: 0.20 });
+    _tone({ freq: 784, duration: 0.30, type: "triangle", peak: 0.22, when: 0.30 });
+  },
+  packOpen: () => {
+    // Mystical whoosh + chime
+    _tone({ freq: 200, duration: 0.4, type: "sine", peak: 0.14, when: 0, slideTo: 800, slideTime: 0.4 });
+    _noise({ duration: 0.3, peak: 0.08, when: 0.1, filterFreq: 3000 });
+    _tone({ freq: 1047, duration: 0.3, type: "triangle", peak: 0.16, when: 0.4 });
+  },
+  hop: () => {
+    // Subtle pop for monkey hops
+    _tone({ freq: 600, duration: 0.08, type: "sine", peak: 0.10, slideTo: 900, slideTime: 0.05 });
+  },
+  collect: () => {
+    // Coin pickup
+    _tone({ freq: 988, duration: 0.08, type: "square", peak: 0.10, when: 0 });
+    _tone({ freq: 1318, duration: 0.12, type: "square", peak: 0.10, when: 0.05 });
+  },
+  gameOver: () => {
+    // Sad descending fanfare
+    _tone({ freq: 392, duration: 0.18, type: "triangle", peak: 0.18, when: 0 });
+    _tone({ freq: 330, duration: 0.18, type: "triangle", peak: 0.18, when: 0.14 });
+    _tone({ freq: 262, duration: 0.36, type: "triangle", peak: 0.20, when: 0.28 });
+  },
+};
 
 /* ─── PET SVG ─── small companion that floats next to the monkey */
 function PetSVG({ petId, side = "right" }) {
@@ -834,6 +1112,222 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
             <circle cx="28" cy="-22" r="3" fill="#e06060" />
           </g>
         )}
+        {accessories.includes("earphones") && (
+          <g>
+            {/* Wired earphones - small earbuds with cable hanging down */}
+            <ellipse cx="-28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
+            <ellipse cx="28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
+            <ellipse cx="-28" cy="-15" rx="2" ry="2.5" fill="#444" />
+            <ellipse cx="28" cy="-15" rx="2" ry="2.5" fill="#444" />
+            {/* Wires hanging down */}
+            <path d="M -28 -10 Q -30 0 -22 12 Q -12 18 -2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+            <path d="M 28 -10 Q 30 0 22 12 Q 12 18 2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+            <path d="M -2 16 L 2 16 L 0 22" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+            <rect x="-2" y="20" width="4" height="6" rx="1" fill="#444" />
+          </g>
+        )}
+        {accessories.includes("vrheadset") && (
+          <g>
+            {/* Strap */}
+            <path d="M -28 -22 Q 0 -45 28 -22" fill="none" stroke="#2a2a2a" strokeWidth="4" strokeLinecap="round" />
+            {/* Main headset block */}
+            <rect x="-22" y="-22" width="44" height="16" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+            {/* Lens area */}
+            <rect x="-19" y="-19" width="38" height="10" rx="2" fill="#0a0a0a" />
+            {/* Glow eyes through lens */}
+            <ellipse cx="-10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
+            <ellipse cx="10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
+            <ellipse cx="-10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
+            <ellipse cx="10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
+            {/* Brand strip */}
+            <rect x="-8" y="-21" width="16" height="2" fill="#5a8fc7" />
+          </g>
+        )}
+        {accessories.includes("halo") && (
+          <g>
+            {/* Glowing halo */}
+            <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#fff8b0" strokeWidth="3" opacity="0.9" />
+            <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#edb830" strokeWidth="1.5" />
+            <ellipse cx="0" cy="-50" rx="20" ry="4" fill="none" stroke="white" strokeWidth="1" opacity="0.8" />
+            {/* Twinkles */}
+            <text x="-22" y="-46" fontSize="10" fill="#fff8b0">✦</text>
+            <text x="18" y="-46" fontSize="10" fill="#fff8b0">✦</text>
+            <text x="-2" y="-58" fontSize="8" fill="#fff8b0">✧</text>
+          </g>
+        )}
+
+        {/* HELD ITEMS - rendered after arms but visible from front */}
+        {accessories.includes("tennis") && (
+          <g transform="translate(28, 18) rotate(-20)">
+            {/* Handle */}
+            <rect x="-1.5" y="-5" width="3" height="14" rx="1" fill="#3a2810" />
+            <rect x="-1.5" y="-5" width="3" height="3" fill="#7a5818" />
+            {/* Head */}
+            <ellipse cx="0" cy="-15" rx="9" ry="11" fill="none" stroke="#1a1a1a" strokeWidth="1.8" />
+            <ellipse cx="0" cy="-15" rx="9" ry="11" fill="#fffabf" opacity="0.9" stroke="#1a1a1a" strokeWidth="0.5" />
+            {/* String pattern */}
+            {[-6, -3, 0, 3, 6].map((x, i) => <line key={`v${i}`} x1={x} y1="-25" x2={x} y2="-5" stroke="#bbb" strokeWidth="0.5" />)}
+            {[-22, -18, -14, -10].map((y, i) => <line key={`h${i}`} x1="-9" y1={y} x2="9" y2={y} stroke="#bbb" strokeWidth="0.5" />)}
+          </g>
+        )}
+        {accessories.includes("basketball") && (
+          <g transform="translate(30, 20)">
+            <circle cx="0" cy="0" r="9" fill="#e07020" stroke="#a04010" strokeWidth="1" />
+            <circle cx="-2" cy="-2" r="4" fill="#ff9050" opacity="0.6" />
+            {/* Ball lines */}
+            <path d="M -9 0 Q 0 3 9 0" stroke="#1a1a1a" strokeWidth="1" fill="none" />
+            <path d="M 0 -9 Q 3 0 0 9" stroke="#1a1a1a" strokeWidth="1" fill="none" />
+            <path d="M -7 -6 Q 0 0 7 -6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
+            <path d="M -7 6 Q 0 0 7 6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
+          </g>
+        )}
+        {accessories.includes("controller") && (
+          <g transform="translate(28, 22) rotate(-15)">
+            {/* Body */}
+            <rect x="-12" y="-5" width="24" height="11" rx="6" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+            {/* D-pad */}
+            <rect x="-9" y="-3" width="2" height="6" fill="#fafafa" />
+            <rect x="-11" y="-1" width="6" height="2" fill="#fafafa" />
+            {/* Buttons */}
+            <circle cx="6" cy="-2" r="1.5" fill="#e06060" />
+            <circle cx="9" cy="1" r="1.5" fill="#5a8fc7" />
+            <circle cx="3" cy="1" r="1.5" fill="#edb830" />
+            <circle cx="6" cy="4" r="1.5" fill="#5caa5e" />
+          </g>
+        )}
+        {accessories.includes("guitar") && (
+          <g transform="translate(26, 12) rotate(20)">
+            {/* Body - figure 8 */}
+            <ellipse cx="0" cy="6" rx="9" ry="11" fill="#a04010" stroke="#5a2008" strokeWidth="0.8" />
+            <ellipse cx="-2" cy="4" rx="6" ry="7" fill="#c05028" opacity="0.6" />
+            {/* Sound hole */}
+            <circle cx="0" cy="6" r="2.5" fill="#1a1a1a" />
+            <circle cx="0" cy="6" r="3.2" fill="none" stroke="#3a1810" strokeWidth="0.6" />
+            {/* Neck */}
+            <rect x="-1.5" y="-15" width="3" height="13" fill="#5a3818" />
+            {/* Frets */}
+            {[-13, -10, -7, -4].map((y, i) => <line key={i} x1="-1.5" y1={y} x2="1.5" y2={y} stroke="#fafafa" strokeWidth="0.4" />)}
+            {/* Headstock */}
+            <rect x="-2" y="-19" width="4" height="4" fill="#5a3818" />
+            {/* Strings */}
+            {[-1, 0, 1].map((x, i) => <line key={i} x1={x * 0.5} y1="-15" x2={x * 0.5} y2="15" stroke="#fff8b0" strokeWidth="0.3" />)}
+          </g>
+        )}
+        {accessories.includes("microphone") && (
+          <g transform="translate(28, 14) rotate(-15)">
+            {/* Head */}
+            <ellipse cx="0" cy="-10" rx="5" ry="6" fill="#5a5a5a" stroke="#2a2a2a" strokeWidth="0.8" />
+            {/* Grill texture */}
+            {[-8, -6, -4].map((y, i) => <line key={i} x1="-4" y1={y} x2="4" y2={y} stroke="#2a2a2a" strokeWidth="0.4" />)}
+            <ellipse cx="-1" cy="-13" rx="2" ry="2" fill="#9a9a9a" opacity="0.6" />
+            {/* Body/handle */}
+            <rect x="-1.5" y="-4" width="3" height="14" fill="#2a2a2a" />
+            <rect x="-1.5" y="-4" width="3" height="2" fill="#5a5a5a" />
+          </g>
+        )}
+        {accessories.includes("umbrella") && (
+          <g transform="translate(28, 16)">
+            {/* Canopy */}
+            <path d="M -14 -8 Q 0 -22 14 -8 Q 12 -10 8 -10 Q 4 -12 0 -10 Q -4 -12 -8 -10 Q -12 -10 -14 -8 Z"
+              fill="#e06060" stroke="#a02828" strokeWidth="0.8" />
+            <path d="M 0 -22 L 0 -8" stroke="#a02828" strokeWidth="0.5" />
+            <path d="M -7 -14 L -4 -10 M 7 -14 L 4 -10" stroke="#a02828" strokeWidth="0.5" />
+            {/* Handle */}
+            <path d="M 0 -8 L 0 12 Q 0 16 4 16 Q 8 16 8 12" stroke="#5a3818" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <circle cx="0" cy="-22" r="1.5" fill="#5a3818" />
+          </g>
+        )}
+        {accessories.includes("lightsaber") && (
+          <g transform="translate(28, 18) rotate(-25)">
+            {/* Hilt */}
+            <rect x="-2" y="0" width="4" height="14" rx="0.5" fill="#5a5a5a" stroke="#1a1a1a" strokeWidth="0.5" />
+            <rect x="-2" y="2" width="4" height="2" fill="#1a1a1a" />
+            <rect x="-2" y="6" width="4" height="2" fill="#1a1a1a" />
+            <circle cx="0" cy="13" r="1.5" fill="#e06060" />
+            {/* Glow blade */}
+            <rect x="-2" y="-26" width="4" height="26" fill="#a0d4ff" opacity="0.5" />
+            <rect x="-1" y="-26" width="2" height="26" fill="#ffffff" opacity="0.9" />
+            <rect x="-3" y="-26" width="6" height="3" fill="#5a8fc7" opacity="0.4" />
+            {/* Tip glow */}
+            <circle cx="0" cy="-26" r="3" fill="#a0d4ff" opacity="0.5" />
+          </g>
+        )}
+        {accessories.includes("magicwand") && (
+          <g transform="translate(28, 16) rotate(-20)">
+            {/* Wand */}
+            <rect x="-1" y="-2" width="2" height="18" rx="1" fill="#5a3818" />
+            <rect x="-1.5" y="14" width="3" height="3" fill="#3a2010" />
+            {/* Star tip */}
+            <path d="M 0 -10 L 2 -4 L 8 -4 L 3 0 L 5 6 L 0 2 L -5 6 L -3 0 L -8 -4 L -2 -4 Z"
+              fill="#fff8b0" stroke="#edb830" strokeWidth="0.6" />
+            <path d="M 0 -8 L 1 -4 L 5 -4 L 2 -1 L 3 3 L 0 1 L -3 3 L -2 -1 L -5 -4 L -1 -4 Z"
+              fill="#edb830" />
+            {/* Sparkles */}
+            <text x="-14" y="-8" fontSize="6" fill="#fff8b0">✦</text>
+            <text x="10" y="-12" fontSize="5" fill="#fff8b0">✧</text>
+            <text x="6" y="6" fontSize="4" fill="#fff8b0">✦</text>
+          </g>
+        )}
+        {accessories.includes("icecream") && (
+          <g transform="translate(28, 18)">
+            {/* Cone */}
+            <path d="M -4 -3 L 4 -3 L 0 12 Z" fill="#d4a060" stroke="#7a5818" strokeWidth="0.5" />
+            <path d="M -4 -3 L 4 -3 M -3 0 L 3 0 M -2 3 L 2 3" stroke="#7a5818" strokeWidth="0.4" />
+            {/* Scoops */}
+            <circle cx="0" cy="-5" r="5" fill="#ff9080" />
+            <circle cx="-1" cy="-7" r="2.5" fill="#ffb0a0" opacity="0.7" />
+            <circle cx="-2" cy="-12" r="4" fill="#fff5d0" />
+            <circle cx="-3" cy="-13" r="2" fill="#ffeebb" opacity="0.7" />
+            {/* Cherry on top */}
+            <circle cx="-2" cy="-16" r="1.5" fill="#e84050" />
+            <path d="M -2 -17 L -1 -19" stroke="#3a7a3c" strokeWidth="0.5" />
+          </g>
+        )}
+
+        {/* BACK ITEMS - rendered behind body, but we put them here for simplicity */}
+        {accessories.includes("backpack") && (
+          <g>
+            {/* Straps */}
+            <path d="M -18 -2 Q -22 8 -20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
+            <path d="M 18 -2 Q 22 8 20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
+            {/* Body of pack peeking from sides */}
+            <ellipse cx="-30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
+            <ellipse cx="30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
+            <rect x="-32" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
+            <rect x="29" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
+          </g>
+        )}
+        {accessories.includes("wings") && (
+          <g filter="url(#watercolorSoft)">
+            {/* Left wing */}
+            <path d="M -28 4 Q -52 -8 -56 14 Q -50 14 -42 14 Q -36 18 -28 12 Z"
+              fill="#a060c0" opacity="0.85" />
+            <path d="M -28 8 Q -50 4 -54 22 Q -46 22 -38 20 Q -32 22 -28 18 Z"
+              fill="#c080d8" opacity="0.7" />
+            <ellipse cx="-46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
+            <ellipse cx="-42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
+            {/* Right wing */}
+            <path d="M 28 4 Q 52 -8 56 14 Q 50 14 42 14 Q 36 18 28 12 Z"
+              fill="#a060c0" opacity="0.85" />
+            <path d="M 28 8 Q 50 4 54 22 Q 46 22 38 20 Q 32 22 28 18 Z"
+              fill="#c080d8" opacity="0.7" />
+            <ellipse cx="46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
+            <ellipse cx="42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
+          </g>
+        )}
+        {accessories.includes("cape") && (
+          <g filter="url(#watercolorSoft)">
+            {/* Left cape edge */}
+            <path d="M -18 0 Q -32 8 -34 28 Q -28 24 -22 20 Q -18 12 -18 0 Z"
+              fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
+            {/* Right cape edge */}
+            <path d="M 18 0 Q 32 8 34 28 Q 28 24 22 20 Q 18 12 18 0 Z"
+              fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
+            {/* Inside lining */}
+            <path d="M -16 2 Q -22 14 -22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
+            <path d="M 16 2 Q 22 14 22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
+          </g>
+        )}
 
         {/* Arms */}
         <ellipse cx="-28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
@@ -1281,7 +1775,7 @@ function PenguinFlock() {
 }
 
 /* ─── WORDLE GAME COMPONENT ─── */
-function WordleGame({ onWin, onClose }) {
+function WordleGame({ onWin, onLose, onClose }) {
   const answer = getTodaysWord();
   const [guesses, setGuesses] = useState([]);
   const [current, setCurrent] = useState("");
@@ -1322,24 +1816,30 @@ function WordleGame({ onWin, onClose }) {
   });
 
   const submit = () => {
-    if (current.length !== 5) { setShake(true); setTimeout(() => setShake(false), 500); return; }
+    if (current.length !== 5) { SFX.wrong(); setShake(true); setTimeout(() => setShake(false), 500); return; }
     const g = current.toUpperCase();
     const newGuesses = [...guesses, g];
     setGuesses(newGuesses);
     setCurrent("");
     if (g === answer) {
+      SFX.levelUp();
       setWon(true); setGameOver(true); setMessage("You got it! +1 point!");
       setTimeout(() => onWin(), 1500);
     } else if (newGuesses.length >= maxGuesses) {
+      SFX.gameOver();
       setGameOver(true); setMessage(`The word was ${answer}`);
+      // Lock out further attempts today
+      if (onLose) setTimeout(() => onLose(), 1800);
+    } else {
+      SFX.click();
     }
   };
 
   const handleKey = (key) => {
     if (gameOver) return;
     if (key === "ENTER") return submit();
-    if (key === "DEL") return setCurrent(c => c.slice(0, -1));
-    if (current.length < 5 && /^[A-Z]$/.test(key)) setCurrent(c => c + key);
+    if (key === "DEL") { SFX.click(); return setCurrent(c => c.slice(0, -1)); }
+    if (current.length < 5 && /^[A-Z]$/.test(key)) { SFX.click(); setCurrent(c => c + key); }
   };
 
   useEffect(() => {
@@ -1355,9 +1855,24 @@ function WordleGame({ onWin, onClose }) {
   const tileColor = { correct: C.green, present: C.gold, absent: "#8a8a8a" };
   const kbRows = [["Q","W","E","R","T","Y","U","I","O","P"],["A","S","D","F","G","H","J","K","L"],["ENTER","Z","X","C","V","B","N","M","DEL"]];
 
+  // If user closes early after starting, count it as a loss (one attempt only)
+  const handleEarlyClose = () => {
+    if (gameOver) { onClose(); return; }
+    if (guesses.length === 0) {
+      // No guesses yet - allow free close (they haven't used their attempt)
+      onClose();
+      return;
+    }
+    // They've guessed at least once - confirm they want to forfeit
+    if (typeof window !== "undefined" && window.confirm("Are you sure you want to leave? This will count as your daily attempt and you won't be able to retry today!")) {
+      if (onLose) onLose();
+      else onClose();
+    }
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
-      onClick={(e) => { if (e.target === e.currentTarget && !gameOver) onClose(); }}>
+      onClick={(e) => { if (e.target === e.currentTarget) handleEarlyClose(); }}>
       <div style={{
         background: C.card, borderRadius: 24, padding: "28px 32px", width: 420, maxWidth: "95vw",
         boxShadow: "0 24px 64px rgba(0,0,0,0.25)", border: `2px solid ${C.gold}30`,
@@ -1365,9 +1880,10 @@ function WordleGame({ onWin, onClose }) {
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🐵 Daily Challenge</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={handleEarlyClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
-        <p style={{ color: C.textLight, fontSize: 14, margin: "0 0 16px", textAlign: "center" }}>Guess the 5-letter word! Solve it for +1 point</p>
+        <p style={{ color: C.textLight, fontSize: 14, margin: "0 0 8px", textAlign: "center" }}>Guess the 5-letter word! Solve it for +1 point</p>
+        <p style={{ color: C.accent, fontSize: 12, margin: "0 0 16px", textAlign: "center", fontWeight: 700 }}>⚠️ One attempt per day — choose carefully!</p>
 
         {/* Grid */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center", marginBottom: 16 }}>
@@ -1843,11 +2359,13 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
     setSelected(idx);
     setShowResult(true);
     if (idx === currentQ.correct) {
+      SFX.correct();
       setScore(s => s + 1);
       setMonkeyHappy(true);
       setShowFood(true);
       setTimeout(() => setMonkeyHappy(false), 2200);
     } else {
+      SFX.wrong();
       setMonkeyShake(true);
       setShowHawk(true);
       setTimeout(() => setMonkeyShake(false), 4200);
@@ -1862,9 +2380,11 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
       setFinished(true);
       if (!rewarded && earned > 0) {
         setRewarded(true);
+        SFX.reward();
         onComplete(earned);
       }
     } else {
+      SFX.click();
       setCurrentIdx(i => i + 1);
       setSelected(null);
       setShowResult(false);
@@ -2034,6 +2554,804 @@ const primaryBtnStyle = {
   color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, fontWeight: 700,
 };
 
+/* ─── RUNNER MISSION ─── Chrome dino-style game with monkey jumping over fruits */
+const RUNNER_OBSTACLES = [
+  { type: "banana",     w: 28, h: 30, color: "#f5d040", emoji: "🍌" },
+  { type: "apple",      w: 32, h: 32, color: "#e84030", emoji: "🍎" },
+  { type: "pineapple",  w: 34, h: 44, color: "#edb830", emoji: "🍍" },
+  { type: "watermelon", w: 44, h: 36, color: "#5caa5e", emoji: "🍉" },
+  { type: "strawberry", w: 28, h: 32, color: "#ff5060", emoji: "🍓" },
+  { type: "coconut",    w: 32, h: 32, color: "#5a3818", emoji: "🥥" },
+];
+
+// Draw a simplified watercolor monkey on canvas
+function drawMonkeyOnCanvas(ctx, x, y, size, frame, ducking, hurt) {
+  const s = size / 100; // scale factor
+  ctx.save();
+  ctx.translate(x, y);
+
+  if (ducking) {
+    ctx.translate(0, size * 0.15);
+    ctx.scale(1, 0.7);
+  }
+
+  // Slight body bob
+  const bob = Math.sin(frame * 0.3) * 1.5;
+
+  // Tail (behind, wagging)
+  ctx.save();
+  ctx.translate(-30 * s, 5 * s);
+  const tailWag = Math.sin(frame * 0.5) * 8;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-15 * s, -10 * s + tailWag * s, -25 * s, -5 * s + tailWag * 1.5 * s);
+  ctx.lineWidth = 6 * s;
+  ctx.strokeStyle = "#8b6352";
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.restore();
+
+  // Body
+  ctx.fillStyle = hurt ? "#ff8080" : "#dbd2c4";
+  ctx.beginPath();
+  ctx.ellipse(0, 25 * s + bob, 30 * s, 26 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Belly highlight
+  ctx.fillStyle = "#ede6dc";
+  ctx.beginPath();
+  ctx.ellipse(0, 30 * s + bob, 22 * s, 18 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs - simple animation
+  const legPhase = Math.sin(frame * 0.8);
+  ctx.fillStyle = "#a3796a";
+  // Back leg
+  ctx.beginPath();
+  ctx.ellipse(-12 * s, 50 * s + legPhase * 2 * s, 7 * s, 11 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Front leg
+  ctx.beginPath();
+  ctx.ellipse(12 * s, 50 * s - legPhase * 2 * s, 7 * s, 11 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Arms (raised slightly during jump animation)
+  ctx.fillStyle = "#a3796a";
+  ctx.beginPath();
+  ctx.ellipse(-22 * s, 22 * s + bob, 6 * s, 12 * s, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(22 * s, 22 * s + bob, 6 * s, 12 * s, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = hurt ? "#ff9090" : "#dbd2c4";
+  ctx.beginPath();
+  ctx.ellipse(0, -8 * s + bob, 26 * s, 24 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face (lighter)
+  ctx.fillStyle = "#f5cdd0";
+  ctx.beginPath();
+  ctx.ellipse(0, -3 * s + bob, 18 * s, 16 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  ctx.fillStyle = "#a3796a";
+  ctx.beginPath(); ctx.arc(-22 * s, -10 * s + bob, 6 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(22 * s, -10 * s + bob, 6 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#f5cdd0";
+  ctx.beginPath(); ctx.arc(-22 * s, -10 * s + bob, 3 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(22 * s, -10 * s + bob, 3 * s, 0, Math.PI * 2); ctx.fill();
+
+  // Eyes (with blink based on frame)
+  const eyeBlink = (frame % 120 < 6) ? 0.1 : 1;
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.ellipse(-7 * s, -7 * s + bob, 4 * s, 4 * s * eyeBlink, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(7 * s, -7 * s + bob, 4 * s, 4 * s * eyeBlink, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (eyeBlink > 0.5) {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath(); ctx.arc(-6.5 * s, -6.5 * s + bob, 2.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(7.5 * s, -6.5 * s + bob, 2.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(-6 * s, -7.5 * s + bob, 0.8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(8 * s, -7.5 * s + bob, 0.8 * s, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = "#cc3333";
+  ctx.beginPath();
+  ctx.ellipse(0, 1 * s + bob, 2.5 * s, 1.8 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mouth - happy/hurt
+  ctx.strokeStyle = "#3e2a1a";
+  ctx.lineWidth = 1.5 * s;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (hurt) {
+    ctx.moveTo(-5 * s, 8 * s + bob);
+    ctx.quadraticCurveTo(0, 5 * s + bob, 5 * s, 8 * s + bob);
+  } else {
+    ctx.moveTo(-5 * s, 7 * s + bob);
+    ctx.quadraticCurveTo(0, 11 * s + bob, 5 * s, 7 * s + bob);
+  }
+  ctx.stroke();
+
+  // Cheek blush
+  ctx.fillStyle = "rgba(255,144,144,0.5)";
+  ctx.beginPath(); ctx.arc(-12 * s, 3 * s + bob, 3 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(12 * s, 3 * s + bob, 3 * s, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// Draw obstacle (fruit) on canvas
+function drawObstacle(ctx, x, y, obs, frame) {
+  const s = obs.h / 30;
+  ctx.save();
+  ctx.translate(x + obs.w / 2, y + obs.h / 2);
+  // Slight wobble
+  const wobble = Math.sin(frame * 0.1 + x * 0.01) * 1.5;
+  ctx.translate(0, wobble);
+
+  switch (obs.type) {
+    case "banana":
+      // Yellow curved banana
+      ctx.fillStyle = "#f5d040";
+      ctx.beginPath();
+      ctx.moveTo(-14, -2);
+      ctx.quadraticCurveTo(-8, -14, 4, -12);
+      ctx.quadraticCurveTo(14, -8, 16, 6);
+      ctx.quadraticCurveTo(8, 4, 0, 0);
+      ctx.quadraticCurveTo(-8, 0, -14, -2);
+      ctx.fill();
+      ctx.fillStyle = "#fff088";
+      ctx.beginPath();
+      ctx.moveTo(-12, -3);
+      ctx.quadraticCurveTo(-6, -12, 2, -10);
+      ctx.quadraticCurveTo(10, -6, 13, 3);
+      ctx.quadraticCurveTo(6, 1, -2, -2);
+      ctx.fill();
+      // Dark tip
+      ctx.fillStyle = "#7a5818";
+      ctx.beginPath(); ctx.arc(-14, -2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(16, 6, 2, 0, Math.PI * 2); ctx.fill();
+      break;
+
+    case "apple":
+      ctx.fillStyle = "#e84030";
+      ctx.beginPath(); ctx.ellipse(0, 2, 14, 13, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ff7060";
+      ctx.beginPath(); ctx.ellipse(-3, -1, 8, 7, 0, 0, Math.PI * 2); ctx.fill();
+      // Stem
+      ctx.strokeStyle = "#5a3818";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(0, -15); ctx.stroke();
+      // Leaf
+      ctx.fillStyle = "#5caa5e";
+      ctx.beginPath();
+      ctx.ellipse(5, -12, 4, 2.5, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.beginPath(); ctx.ellipse(-5, -2, 3, 5, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+
+    case "pineapple":
+      // Body
+      ctx.fillStyle = "#e0a020";
+      ctx.beginPath(); ctx.ellipse(0, 6, 13, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#f5c050";
+      ctx.beginPath(); ctx.ellipse(-2, 3, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
+      // Diamond pattern
+      ctx.strokeStyle = "#a06820";
+      ctx.lineWidth = 0.8;
+      for (let i = -10; i <= 10; i += 5) {
+        ctx.beginPath(); ctx.moveTo(i - 3, 0); ctx.lineTo(i + 3, 12); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(i - 3, 12); ctx.lineTo(i + 3, 0); ctx.stroke();
+      }
+      // Leaves
+      ctx.fillStyle = "#5caa5e";
+      [-6, -2, 2, 6].forEach((dx, i) => {
+        ctx.beginPath();
+        ctx.moveTo(dx, -8);
+        ctx.lineTo(dx - 2 + i, -22);
+        ctx.lineTo(dx + 2, -8);
+        ctx.closePath();
+        ctx.fill();
+      });
+      ctx.fillStyle = "#3a7a3c";
+      ctx.beginPath();
+      ctx.moveTo(0, -8); ctx.lineTo(-1, -25); ctx.lineTo(2, -8);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    case "watermelon":
+      // Half-watermelon shape
+      ctx.fillStyle = "#5caa5e";
+      ctx.beginPath();
+      ctx.arc(0, 4, 20, Math.PI, 0);
+      ctx.lineTo(-20, 4);
+      ctx.fill();
+      ctx.fillStyle = "#3a7a3c";
+      ctx.beginPath();
+      ctx.arc(0, 4, 20, Math.PI, 0);
+      ctx.closePath();
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Pink flesh
+      ctx.fillStyle = "#ff7080";
+      ctx.beginPath();
+      ctx.arc(0, 4, 16, Math.PI, 0);
+      ctx.fill();
+      // Seeds
+      ctx.fillStyle = "#1a1a1a";
+      [[-8, -2], [-2, -5], [4, -1], [-10, 2], [8, -3], [10, 1], [-4, -8]].forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.ellipse(x, y, 1.2, 2, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      break;
+
+    case "strawberry":
+      // Body
+      ctx.fillStyle = "#e84050";
+      ctx.beginPath();
+      ctx.moveTo(-12, -2);
+      ctx.quadraticCurveTo(-13, 14, 0, 16);
+      ctx.quadraticCurveTo(13, 14, 12, -2);
+      ctx.quadraticCurveTo(8, -8, 0, -8);
+      ctx.quadraticCurveTo(-8, -8, -12, -2);
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = "#ff7080";
+      ctx.beginPath();
+      ctx.ellipse(-3, 0, 5, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Seeds
+      ctx.fillStyle = "#fff5d0";
+      [[-5, 0], [3, 1], [-1, 5], [5, 6], [-6, 8], [0, -3], [6, -2]].forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.ellipse(x, y, 0.8, 1.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      // Leaves
+      ctx.fillStyle = "#5caa5e";
+      ctx.beginPath();
+      ctx.moveTo(-7, -8); ctx.lineTo(-9, -14); ctx.lineTo(-3, -10);
+      ctx.lineTo(0, -16); ctx.lineTo(3, -10); ctx.lineTo(9, -14); ctx.lineTo(7, -8);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    case "coconut":
+      // Brown coconut
+      ctx.fillStyle = "#5a3818";
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#7a4828";
+      ctx.beginPath();
+      ctx.ellipse(-3, -2, 10, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Texture lines
+      ctx.strokeStyle = "#3a2010";
+      ctx.lineWidth = 0.7;
+      for (let a = 0; a < Math.PI * 2; a += 0.4) {
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
+        ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 13);
+        ctx.stroke();
+      }
+      // Three holes
+      ctx.fillStyle = "#1a1a1a";
+      ctx.beginPath(); ctx.arc(-3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, -3, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 1, 1.5, 0, Math.PI * 2); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+function RunnerGame({ studentName, mission, onClose, onComplete }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const stateRef = useRef({
+    monkeyY: 0, // 0 = on ground, negative = up in air
+    velY: 0,
+    onGround: true,
+    obstacles: [], // {x, type, w, h, ...}
+    speed: 4,
+    distance: 0,
+    obstaclesPassed: 0,
+    cloudOffset: 0,
+    mountainOffset: 0,
+    groundOffset: 0,
+    nextSpawnIn: 80,
+    frame: 0,
+    paused: false,
+    hurt: 0,
+  });
+
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [questionsAnswered, setQuestionsAnswered] = useState(0);
+  const [selectedAns, setSelectedAns] = useState(null);
+  const [questionResult, setQuestionResult] = useState(null);
+  const [lives, setLives] = useState(3);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [won, setWon] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+  const [size, setSize] = useState({ w: 600, h: 240 });
+
+  const questions = mission?.questions || [];
+  const totalReward = mission?.points || 5;
+  const targetQuestions = questions.length;
+  // Spawn checkpoint every N obstacles (so questions are spread out)
+  const obstaclesPerCheckpoint = 5;
+
+  // Responsive canvas size
+  useEffect(() => {
+    const updateSize = () => {
+      const containerW = Math.min(window.innerWidth - 40, 720);
+      const w = Math.max(320, containerW);
+      const h = Math.round(w * 0.4);
+      setSize({ w, h });
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  // Game loop
+  useEffect(() => {
+    if (!started || gameOver || showQuestion) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf;
+    let lastTime = performance.now();
+
+    const groundY = size.h - 40;
+    const monkeySize = Math.min(70, size.h * 0.3);
+    const monkeyX = 60;
+    const gravity = 0.7;
+    const jumpV = -13;
+
+    const loop = (now) => {
+      const dt = Math.min(50, now - lastTime);
+      lastTime = now;
+      const s = stateRef.current;
+      s.frame++;
+
+      // Physics
+      if (!s.onGround) {
+        s.velY += gravity;
+        s.monkeyY += s.velY;
+        if (s.monkeyY >= 0) {
+          s.monkeyY = 0;
+          s.velY = 0;
+          s.onGround = true;
+          SFX.land();
+        }
+      }
+
+      // Move world
+      s.distance += s.speed;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.1) % size.w;
+      s.mountainOffset = (s.mountainOffset + s.speed * 0.3) % size.w;
+      s.groundOffset = (s.groundOffset + s.speed) % 30;
+
+      // Move obstacles
+      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed }));
+
+      // Check passed obstacles
+      s.obstacles.forEach(o => {
+        if (!o.passed && o.x + o.w < monkeyX - monkeySize / 2) {
+          o.passed = true;
+          s.obstaclesPassed++;
+          SFX.collect();
+          setScore(sc => sc + 1);
+          // Checkpoint?
+          if (s.obstaclesPassed % obstaclesPerCheckpoint === 0) {
+            // Trigger question (handled below via state)
+            s.paused = true;
+          }
+        }
+      });
+
+      // Remove off-screen
+      s.obstacles = s.obstacles.filter(o => o.x + o.w > -10);
+
+      // Spawn obstacles
+      s.nextSpawnIn--;
+      if (s.nextSpawnIn <= 0) {
+        const obs = RUNNER_OBSTACLES[Math.floor(Math.random() * RUNNER_OBSTACLES.length)];
+        s.obstacles.push({
+          x: size.w + 20,
+          ...obs,
+          passed: false,
+          id: Math.random(),
+        });
+        // Spawn distance scales with speed
+        s.nextSpawnIn = 60 + Math.floor(Math.random() * 60) - Math.min(20, s.speed * 2);
+      }
+
+      // Speed up gradually
+      s.speed = Math.min(11, 4 + s.distance * 0.0006);
+
+      // Decrease hurt
+      if (s.hurt > 0) s.hurt--;
+
+      // Collisions
+      const monkeyBox = {
+        x: monkeyX - monkeySize * 0.35,
+        y: groundY - monkeySize + s.monkeyY,
+        w: monkeySize * 0.7,
+        h: monkeySize * 0.85,
+      };
+      s.obstacles.forEach(o => {
+        if (o.hit) return;
+        const ox = o.x;
+        const oy = groundY - o.h;
+        if (
+          monkeyBox.x < ox + o.w - 4 &&
+          monkeyBox.x + monkeyBox.w > ox + 4 &&
+          monkeyBox.y < oy + o.h - 4 &&
+          monkeyBox.y + monkeyBox.h > oy + 4
+        ) {
+          o.hit = true;
+          s.hurt = 30;
+          SFX.wrong();
+          setLives(l => {
+            const next = l - 1;
+            if (next <= 0) {
+              setGameOver(true);
+              SFX.gameOver();
+            }
+            return next;
+          });
+        }
+      });
+
+      // === RENDER ===
+      // Sky gradient
+      const grd = ctx.createLinearGradient(0, 0, 0, size.h);
+      grd.addColorStop(0, "#bce0ee");
+      grd.addColorStop(0.7, "#e8f4f8");
+      grd.addColorStop(1, "#fffaf0");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, size.w, size.h);
+
+      // Distant mountains (parallax)
+      ctx.fillStyle = "#a3b5c0";
+      for (let i = 0; i < 2; i++) {
+        const off = -s.mountainOffset + i * size.w;
+        ctx.beginPath();
+        ctx.moveTo(off, groundY);
+        for (let x = 0; x < size.w; x += 40) {
+          const yJitter = Math.sin(x * 0.05) * 30 + Math.sin(x * 0.02) * 15;
+          ctx.lineTo(off + x, groundY - 50 + yJitter);
+        }
+        ctx.lineTo(off + size.w, groundY);
+        ctx.fill();
+      }
+      // Snow caps on mountains
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < 2; i++) {
+        const off = -s.mountainOffset + i * size.w;
+        for (let x = 60; x < size.w; x += 80) {
+          const yPeak = groundY - 50 + Math.sin(x * 0.05) * 30 + Math.sin(x * 0.02) * 15;
+          if (yPeak < groundY - 60) {
+            ctx.beginPath();
+            ctx.ellipse(off + x, yPeak + 6, 16, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // Clouds
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      for (let i = 0; i < 3; i++) {
+        const cx = (i * 220 - s.cloudOffset) % (size.w + 200) - 80;
+        const cy = 30 + i * 18;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+        ctx.arc(cx + 14, cy - 4, 16, 0, Math.PI * 2);
+        ctx.arc(cx + 28, cy, 13, 0, Math.PI * 2);
+        ctx.arc(cx + 14, cy + 4, 12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Ground
+      ctx.fillStyle = "#f5f0ea";
+      ctx.fillRect(0, groundY, size.w, size.h - groundY);
+      // Snow line
+      ctx.strokeStyle = "#d8d0c0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(size.w, groundY);
+      ctx.stroke();
+
+      // Ground texture (snow tufts moving)
+      ctx.fillStyle = "rgba(220,212,200,0.6)";
+      for (let x = -s.groundOffset; x < size.w; x += 30) {
+        ctx.beginPath();
+        ctx.arc(x, groundY + 3, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Obstacles
+      s.obstacles.forEach(o => {
+        drawObstacle(ctx, o.x, groundY - o.h, o, s.frame);
+      });
+
+      // Monkey
+      drawMonkeyOnCanvas(ctx, monkeyX, groundY - monkeySize + s.monkeyY, monkeySize, s.frame, false, s.hurt > 0);
+
+      // Trigger question if paused
+      if (s.paused && !showQuestion) {
+        s.paused = false;
+        const qIdx = (questionsAnswered) % questions.length;
+        setQuestionIdx(qIdx);
+        setSelectedAns(null);
+        setQuestionResult(null);
+        setShowQuestion(true);
+      }
+
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [started, gameOver, showQuestion, size, questionsAnswered, questions.length]);
+
+  // Jump handler
+  const jump = useCallback(() => {
+    const s = stateRef.current;
+    if (s.onGround && started && !gameOver && !showQuestion) {
+      s.velY = -13;
+      s.onGround = false;
+      SFX.jump();
+    }
+  }, [started, gameOver, showQuestion]);
+
+  // Input handlers
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+        e.preventDefault();
+        if (!started) setStarted(true);
+        else jump();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [jump, started]);
+
+  const answerQuestion = (idx) => {
+    if (selectedAns !== null) return;
+    setSelectedAns(idx);
+    const isCorrect = idx === questions[questionIdx].correct;
+    if (isCorrect) SFX.correct();
+    else SFX.wrong();
+    setQuestionResult(isCorrect ? "correct" : "wrong");
+    setTimeout(() => {
+      if (isCorrect) {
+        setQuestionsAnswered(q => {
+          const newCount = q + 1;
+          if (newCount >= targetQuestions && !rewarded) {
+            setWon(true);
+            setGameOver(true);
+            setRewarded(true);
+            SFX.levelUp();
+            onComplete(totalReward);
+          }
+          return newCount;
+        });
+      } else {
+        // Wrong answer = lose a life
+        setLives(l => {
+          const next = l - 1;
+          if (next <= 0) {
+            setGameOver(true);
+            SFX.gameOver();
+          }
+          return next;
+        });
+      }
+      setShowQuestion(false);
+      setSelectedAns(null);
+      setQuestionResult(null);
+    }, isCorrect ? 800 : 1500);
+  };
+
+  const restart = () => {
+    stateRef.current = {
+      monkeyY: 0, velY: 0, onGround: true,
+      obstacles: [], speed: 4, distance: 0, obstaclesPassed: 0,
+      cloudOffset: 0, mountainOffset: 0, groundOffset: 0,
+      nextSpawnIn: 80, frame: 0, paused: false, hurt: 0,
+    };
+    setLives(3);
+    setScore(0);
+    setQuestionsAnswered(0);
+    setGameOver(false);
+    setWon(false);
+    setRewarded(false);
+    setStarted(true);
+  };
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🏃 No Mission Yet</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>Your teacher hasn't assigned a mission yet!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentQ = questions[questionIdx];
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={{
+        ...modalCardStyle, width: Math.min(size.w + 80, window.innerWidth - 20),
+        maxWidth: "98vw", padding: "20px 24px", position: "relative",
+      }} ref={containerRef}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🏃 {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+              Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Game canvas */}
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#bce0ee", boxShadow: "inset 0 0 0 2px " + C.fur2 + "30", touchAction: "none" }}
+          onMouseDown={(e) => { e.preventDefault(); if (!started) setStarted(true); else jump(); }}
+          onTouchStart={(e) => { e.preventDefault(); if (!started) setStarted(true); else jump(); }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={size.w}
+            height={size.h}
+            style={{ display: "block", width: "100%", height: "auto", cursor: "pointer" }}
+          />
+
+          {/* Start overlay */}
+          {!started && !gameOver && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(2px)",
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 8 }}>🏃</div>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, marginBottom: 6 }}>Tap or Press Space to Start!</div>
+              <div style={{ fontSize: 14, color: C.textLight, marginBottom: 12, textAlign: "center", maxWidth: 360, padding: "0 16px" }}>
+                Help the monkey jump over fruits! Every {obstaclesPerCheckpoint} fruits passed = a question. Answer all {targetQuestions} questions correctly to win!
+              </div>
+              <div style={{ fontSize: 13, color: C.textLight }}>
+                Tap, click, or press <strong>Space</strong> to jump
+              </div>
+            </div>
+          )}
+
+          {/* Game over overlay */}
+          {gameOver && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              background: won ? "rgba(255,250,200,0.92)" : "rgba(255,200,200,0.85)",
+              backdropFilter: "blur(2px)",
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 8 }}>{won ? "🎉" : "💔"}</div>
+              <div style={{ fontSize: 24, color: C.text, fontWeight: 700, marginBottom: 6 }}>
+                {won ? "Mission Complete!" : "Game Over"}
+              </div>
+              {won ? (
+                <div style={{ background: `${C.gold}30`, padding: "8px 16px", borderRadius: 12, marginBottom: 12 }}>
+                  <span style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{totalReward} ★</strong></span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 14, color: C.textLight, marginBottom: 12 }}>
+                  You answered {questionsAnswered} of {targetQuestions} checkpoints!
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                {!won && <button onClick={restart} style={primaryBtnStyle}>🔄 Try Again</button>}
+                <button onClick={onClose} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)` }}>
+                  Back to Hot Spring
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: C.textLight }}>
+          🦘 Tap the game / click / press Space to jump. Don't hit the fruits!
+        </div>
+
+        {/* Question modal */}
+        {showQuestion && currentQ && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 24, padding: 16, zIndex: 50,
+          }}>
+            <div style={{
+              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 14, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
+                <div style={{ fontSize: 13, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
+              </div>
+              <div style={{
+                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
+                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {currentQ.q}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct;
+                  const isSelected = idx === selectedAns;
+                  const colors = [C.accent, C.gold, "#5a8fc7", C.green];
+                  let bg = colors[idx], textColor = "white";
+                  if (selectedAns !== null) {
+                    if (isCorrect) bg = C.green;
+                    else if (isSelected) bg = "#a85050";
+                    else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
+                  }
+                  return (
+                    <button key={idx} onClick={() => answerQuestion(idx)} disabled={selectedAns !== null}
+                      style={{
+                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        background: bg, color: textColor,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        cursor: selectedAns !== null ? "default" : "pointer", textAlign: "left",
+                        minHeight: 50,
+                      }}>
+                      <strong>{["A","B","C","D"][idx]}.</strong> {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              {questionResult === "wrong" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                  ❌ Wrong! You lost a life. Keep going!
+                </div>
+              )}
+              {questionResult === "correct" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                  ✅ Correct! Keep running!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── BLOCK BLAST MISSION ─── 8x8 grid where each block placement requires a quiz answer */
 const BB_SIZE = 8;
 const BB_SHAPES = [
@@ -2155,6 +3473,8 @@ function MissionGame({ studentName, mission, onClose, onComplete }) {
     if (selected !== null) return;
     setSelected(idx);
     const isCorrect = idx === questions[questionIdx].correct;
+    if (isCorrect) SFX.correct();
+    else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     setTimeout(() => {
       setShowQuestion(false);
@@ -2166,6 +3486,7 @@ function MissionGame({ studentName, mission, onClose, onComplete }) {
           if (newCount >= targetQuestions && !rewarded) {
             setRewarded(true);
             setGameOver(true);
+            SFX.levelUp();
             onComplete(totalReward);
           }
           return newCount;
@@ -2382,6 +3703,10 @@ function SnowMonkeyTrackerInner() {
   const [activeQuizId, setActiveQuizId] = useState(null);
   const [activeMissionId, setActiveMissionId] = useState(null);
   const [showPetMart, setShowPetMart] = useState(false);
+  const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
+  const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [customizeTab, setCustomizeTab] = useState("all"); // "all" | "owned" | "shop"
   const [quizzes, setQuizzes] = useState({}); // { studentId: [{id, subject, name, points, questions[]}] }
   const [missions, setMissions] = useState({}); // { studentId: [{id, name, points, questions[]}] }
   const [showQuizUpload, setShowQuizUpload] = useState(false);
@@ -2394,8 +3719,16 @@ function SnowMonkeyTrackerInner() {
   const [csvSubject, setCsvSubject] = useState("");
   const [csvName, setCsvName] = useState("");
   const [csvPoints, setCsvPoints] = useState(1);
+  const [csvMissionType, setCsvMissionType] = useState("blockblast");
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [streakOpen, setStreakOpen] = useState(false);
+  const [soundOn, setSoundOn] = useState(getSoundsEnabled());
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundsEnabled(next);
+    setSoundOn(next);
+    if (next) setTimeout(() => SFX.click(), 50); // Confirm sound is back
+  };
 
   useEffect(() => {
     (async () => {
@@ -2504,7 +3837,7 @@ function SnowMonkeyTrackerInner() {
     persist(null, null, newQuizzes);
   };
 
-  const addMissionForStudent = (studentId, csvData, name, points) => {
+  const addMissionForStudent = (studentId, csvData, name, points, type = "blockblast") => {
     const parsed = parseCSV(csvData);
     if (!parsed) return { error: "Couldn't parse CSV. Make sure your file has columns: question, A, B, C, D, correct" };
     if (parsed.length === 0) return { error: "No questions found in CSV" };
@@ -2512,6 +3845,7 @@ function SnowMonkeyTrackerInner() {
       id: "m" + Date.now(),
       name: name?.trim() || "Mission",
       points: Math.max(1, parseInt(points) || 5),
+      type, // "blockblast" or "runner"
       questions: parsed,
     };
     const existing = missions[studentId] || [];
@@ -2538,6 +3872,7 @@ function SnowMonkeyTrackerInner() {
     if (!user) return;
     const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + pointsEarned } : s);
     persist(null, newS);
+    SFX.reward();
     notify(`🎉 Quiz complete! +${pointsEarned} ★`);
   };
 
@@ -2545,6 +3880,7 @@ function SnowMonkeyTrackerInner() {
     if (!user) return;
     const newS = students.map(s => s.id === user.id ? { ...s, points: s.points + pointsEarned } : s);
     persist(null, newS);
+    SFX.levelUp();
     notify(`🚀 Mission complete! +${pointsEarned} ★`);
   };
 
@@ -2609,67 +3945,149 @@ function SnowMonkeyTrackerInner() {
     notify(`${amount > 0 ? "+" : ""}${amount} point${Math.abs(amount) !== 1 ? "s" : ""} for ${st?.name}!`);
   };
 
-  const toggleAccessory = (studentId, accessory) => {
-    const newS = students.map(s => {
-      if (s.id !== studentId) return s;
-      const current = s.accessories || [];
-      const has = current.includes(accessory);
-      // Only one headwear at a time (hat, beanie, crown, flower, headphones)
-      const headwear = ["hat", "beanie", "crown", "flower", "headphones"];
-      let next;
-      if (has) {
-        next = current.filter(a => a !== accessory);
-      } else if (headwear.includes(accessory)) {
-        next = [...current.filter(a => !headwear.includes(a)), accessory];
-      } else {
-        next = [...current, accessory];
-      }
-      return { ...s, accessories: next };
-    });
+  const toggleAccessory = (studentId, accessoryId) => {
+    const acc = getAccessory(accessoryId);
+    if (!acc) return;
+    const st = students.find(s => s.id === studentId);
+    if (!st) return;
+    const ownedAccessories = st.ownedAccessories || [];
+    // Free items are always available; paid items must be owned
+    if (acc.price > 0 && !ownedAccessories.includes(accessoryId)) {
+      SFX.wrong();
+      notify(`You haven't unlocked the ${acc.name} yet!`, "error");
+      return;
+    }
+    const current = st.accessories || [];
+    const has = current.includes(accessoryId);
+    let next;
+    if (has) {
+      next = current.filter(a => a !== accessoryId);
+      SFX.click();
+    } else {
+      // Remove anything else in the same slot
+      const filtered = current.filter(id => {
+        const other = getAccessory(id);
+        return !other || other.slot !== acc.slot;
+      });
+      next = [...filtered, accessoryId];
+      SFX.collect();
+    }
+    const newS = students.map(s => s.id === studentId ? { ...s, accessories: next } : s);
     persist(null, newS);
+  };
+
+  const buyAccessory = (studentId, accessoryId) => {
+    const acc = getAccessory(accessoryId);
+    const st = students.find(s => s.id === studentId);
+    if (!acc || !st) return;
+    if (acc.price === 0) return; // shouldn't happen
+    const ownedAccessories = st.ownedAccessories || [];
+    if (ownedAccessories.includes(accessoryId)) return; // already owned
+    if (st.points < acc.price) {
+      SFX.wrong();
+      notify(`Not enough stars! Need ${acc.price - st.points} more ★`, "error");
+      return;
+    }
+    // Equip immediately, replacing any existing item in same slot
+    const current = st.accessories || [];
+    const equipped = [...current.filter(id => {
+      const o = getAccessory(id);
+      return !o || o.slot !== acc.slot;
+    }), accessoryId];
+
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points - acc.price,
+      accessories: equipped,
+      ownedAccessories: [...ownedAccessories, accessoryId],
+    } : s);
+    persist(null, newS);
+    SFX.packOpen();
+    notify(`🎉 You unlocked ${acc.emoji} ${acc.name}!`);
   };
 
   const clearAccessories = (studentId) => {
     const newS = students.map(s => s.id === studentId ? { ...s, accessories: [] } : s);
     persist(null, newS);
+    SFX.click();
     notify("Accessories cleared!");
   };
 
-  const buyPet = (studentId, petId) => {
-    const pet = PET_CATALOG.find(p => p.id === petId);
+  // Equip / unequip an already-owned pet
+  const equipPet = (studentId, petId) => {
+    const pet = getPet(petId);
     const st = students.find(s => s.id === studentId);
     if (!pet || !st) return;
+    const ownedPets = st.ownedPets || [];
+    if (!ownedPets.includes(petId)) return; // can't equip something you don't own
     if (st.pet === petId) {
-      // Already equipped - unequip
+      // Unequip - keep timer paused
       const newS = students.map(s => s.id === studentId ? { ...s, pet: null } : s);
       persist(null, newS);
+      SFX.click();
       notify(`${pet.name} sent home for now`);
       return;
     }
-    const ownedPets = st.ownedPets || [];
-    if (ownedPets.includes(petId)) {
-      // Already owned - just equip
-      const newS = students.map(s => s.id === studentId ? { ...s, pet: petId } : s);
-      persist(null, newS);
-      notify(`${pet.emoji} ${pet.name} is by your side!`);
-      return;
-    }
-    // Need to purchase
-    if (st.points < pet.price) {
-      notify(`Not enough stars! Need ${pet.price - st.points} more ★`, "error");
-      return;
-    }
+    // Equip - reset the income timer so they wait a fresh week
     const newS = students.map(s => s.id === studentId ? {
       ...s,
-      points: s.points - pet.price,
       pet: petId,
-      ownedPets: [...ownedPets, petId],
+      petAcquiredAt: Date.now(),
+      lastIncomeCollected: Date.now(),
     } : s);
     persist(null, newS);
-    notify(`🎉 You adopted a ${pet.name}! ${pet.emoji}`);
+    SFX.collect();
+    notify(`${pet.emoji} ${pet.name} is by your side!`);
   };
 
-  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); };
+  // Open a mystery pack
+  const openPack = (studentId, packId) => {
+    const pack = MYSTERY_PACKS.find(p => p.id === packId);
+    const st = students.find(s => s.id === studentId);
+    if (!pack || !st) return null;
+    if (st.points < pack.price) {
+      SFX.wrong();
+      notify(`Not enough stars! Need ${pack.price - st.points} more ★`, "error");
+      return null;
+    }
+    const ownedPets = st.ownedPets || [];
+    const rolled = rollPack(packId, ownedPets);
+    if (!rolled) return null;
+    const isDuplicate = ownedPets.includes(rolled.id);
+    // Duplicates → consolation stars (refund roughly 30% of pack price)
+    const consolationStars = isDuplicate ? Math.round(pack.price * 0.3) : 0;
+    const newOwned = isDuplicate ? ownedPets : [...ownedPets, rolled.id];
+    // If this is their FIRST pet, auto-equip it
+    const shouldAutoEquip = !st.pet && !isDuplicate;
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points - pack.price + consolationStars,
+      ownedPets: newOwned,
+      ...(shouldAutoEquip ? { pet: rolled.id, petAcquiredAt: Date.now(), lastIncomeCollected: Date.now() } : {}),
+    } : s);
+    persist(null, newS);
+    SFX.packOpen();
+    return { pet: rolled, isDuplicate, consolationStars };
+  };
+
+  // Collect weekly income from currently-equipped pet
+  const collectIncome = (studentId) => {
+    const st = students.find(s => s.id === studentId);
+    if (!st) return 0;
+    const pending = calculatePendingIncome(st);
+    if (pending <= 0) return 0;
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points + pending,
+      lastIncomeCollected: Date.now(),
+    } : s);
+    persist(null, newS);
+    SFX.reward();
+    notify(`🎁 Your ${getPet(st.pet)?.name || "pet"} brought you +${pending} ★!`);
+    return pending;
+  };
+
+  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); };
 
   const todayKey = getTodayKey();
   const hasCompletedChallenge = (studentId) => {
@@ -2722,10 +4140,25 @@ function SnowMonkeyTrackerInner() {
     setShowWordle(false);
     if (leveledUp) {
       const lvl = getStreakLevel(newStreak);
+      SFX.levelUp();
       notify(`🎉 ${lvl.icon} Streak ${newStreak}! You leveled up to ${lvl.name}!`);
     } else {
+      SFX.reward();
       notify(`🎉 +1 point! Streak: ${newStreak} 🔥`);
     }
+  };
+
+  const handleWordleLose = () => {
+    if (!user || hasCompletedChallenge(user.id)) return;
+    // Mark day as attempted (no points), and reset streak since they didn't win
+    const newS = students.map(s => s.id === user.id ? {
+      ...s,
+      lastChallengeDate: todayKey,
+      streak: 0, // Streak broken — they didn't get it right
+    } : s);
+    persist(null, newS);
+    setShowWordle(false);
+    notify("😔 Better luck tomorrow! Streak reset.", "error");
   };
 
   const monkeyPositions = [
@@ -2812,10 +4245,19 @@ function SnowMonkeyTrackerInner() {
             <h1 style={{ fontSize: 26, color: C.text, margin: 0 }}>♨️ Monkey Hot Spring</h1>
             <p style={{ color: C.textLight, margin: 0, fontSize: 14 }}>Welcome, {user?.name}! · {students.length} student{students.length !== 1 ? "s" : ""}</p>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={toggleSound}
+              title={soundOn ? "Mute sounds" : "Unmute sounds"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {soundOn ? "🔊" : "🔇"}
+            </button>
             {[
-              { label: "📋 Manage", active: showManage, fn: () => { setShowManage(!showManage); setShowAddStudent(false); }, c: C.accent },
-              { label: "➕ Add", active: showAddStudent, fn: () => { setShowAddStudent(!showAddStudent); setShowManage(false); }, c: C.green },
+              { label: "📋 Manage", active: showManage, fn: () => { SFX.click(); setShowManage(!showManage); setShowAddStudent(false); }, c: C.accent },
+              { label: "➕ Add", active: showAddStudent, fn: () => { SFX.click(); setShowAddStudent(!showAddStudent); setShowManage(false); }, c: C.green },
               { label: "🚪 Logout", active: false, fn: logout, c: C.textLight },
             ].map((b, i) => (
               <button key={i} onClick={b.fn} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${b.c}30`, background: b.active ? b.c : `${C.card}dd`, color: b.active ? "white" : C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer", transition: "all 0.3s", fontWeight: 600 }}>
@@ -2902,7 +4344,7 @@ function SnowMonkeyTrackerInner() {
                     {studentMissions.map(m => (
                       <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.green}15`, borderRadius: 6, marginBottom: 2 }}>
                         <div style={{ flex: 1, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {m.name} · {m.questions.length}Q · {m.points}★
+                          {m.type === "runner" ? "🏃" : "🧩"} {m.name} · {m.questions.length}Q · {m.points}★
                         </div>
                         <button onClick={() => { if (confirm(`Remove "${m.name}"?`)) removeMissionFromStudent(s.id, m.id); }}
                           style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
@@ -2995,11 +4437,11 @@ function SnowMonkeyTrackerInner() {
           };
           const submitMission = () => {
             if (!csvText.trim()) { setCsvError("Please paste CSV or upload a file"); return; }
-            const result = addMissionForStudent(missionUploadStudentId, csvText, csvName, csvPoints);
+            const result = addMissionForStudent(missionUploadStudentId, csvText, csvName, csvPoints, csvMissionType);
             if (result.error) { setCsvError(result.error); return; }
             notify(`Mission "${csvName || "Mission"}" added for ${targetStudent?.name}: ${result.success} questions!`);
             setShowMissionUpload(false);
-            setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvError("");
+            setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvMissionType("blockblast"); setCsvError("");
           };
           return (
             <div style={modalBackdropStyle} onClick={() => setShowMissionUpload(false)}>
@@ -3008,14 +4450,45 @@ function SnowMonkeyTrackerInner() {
                   <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 Add Mission for {targetStudent?.name}</h2>
                   <button onClick={() => setShowMissionUpload(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
                 </div>
+
+                {/* Mission type selector */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 6, fontWeight: 700 }}>Mission Type</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {[
+                      { id: "blockblast", emoji: "🧩", title: "Block Blast", desc: "Tetris-style puzzle. Place each block by answering a question." },
+                      { id: "runner", emoji: "🏃", title: "Fruit Runner", desc: "Dino-style runner! Jump fruits, answer questions at checkpoints." },
+                    ].map(m => {
+                      const active = csvMissionType === m.id;
+                      return (
+                        <button key={m.id} onClick={() => setCsvMissionType(m.id)}
+                          style={{
+                            padding: "10px 12px", borderRadius: 12, cursor: "pointer",
+                            border: active ? `2px solid ${C.green}` : `2px solid ${C.fur2}40`,
+                            background: active ? `${C.green}15` : `${C.snow1}80`,
+                            fontFamily: "'Patrick Hand', cursive", textAlign: "left",
+                            transition: "all 0.2s",
+                          }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{m.emoji} {m.title}</div>
+                          <div style={{ fontSize: 11, color: C.textLight, lineHeight: 1.3 }}>{m.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div style={{ background: `${C.green}15`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13, color: C.text, border: `1px solid ${C.green}30` }}>
-                  <strong>🚀 Block Blast Mission:</strong> The student plays a Tetris-like puzzle. Every time they place a block, they must answer one of these questions correctly. Mission completes when they answer all questions correctly.
+                  {csvMissionType === "runner" ? (
+                    <><strong>🏃 Fruit Runner:</strong> The monkey runs and jumps over fruits like 🍌🍎🍍🍉. Every 5 fruits passed, a question pops up. Wrong answer = lose a life (3 lives). Mission complete when all questions are answered correctly!</>
+                  ) : (
+                    <><strong>🧩 Block Blast:</strong> The student plays a Tetris-like puzzle. Every time they place a block, they must answer one of these questions correctly. Mission completes when they answer all questions correctly.</>
+                  )}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 10 }}>
                   <div>
                     <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>Mission name</label>
                     <input type="text" value={csvName} onChange={e => setCsvName(e.target.value)}
-                      placeholder="e.g. Math Mission Week 1"
+                      placeholder={csvMissionType === "runner" ? "e.g. Math Sprint" : "e.g. Math Mission Week 1"}
                       style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
                   </div>
                   <div>
@@ -3173,22 +4646,41 @@ function SnowMonkeyTrackerInner() {
           </div>
         )}
 
-        {/* Accessories Picker Modal */}
+        {/* Accessories Picker Modal - Teacher view (can gift any accessory) */}
         {showAccessories && sel && (() => {
-          const accessoryOptions = [
-            { id: "hat", emoji: "🎩", label: "Top Hat", category: "head" },
-            { id: "beanie", emoji: "🧢", label: "Beanie", category: "head" },
-            { id: "crown", emoji: "👑", label: "Crown", category: "head" },
-            { id: "flower", emoji: "🌸", label: "Flower", category: "head" },
-            { id: "headphones", emoji: "🎧", label: "Headphones", category: "head" },
-            { id: "sunglasses", emoji: "🕶️", label: "Sunglasses", category: "face" },
-            { id: "scarf", emoji: "🧣", label: "Scarf", category: "neck" },
-            { id: "bowtie", emoji: "🎀", label: "Bow Tie", category: "neck" },
-          ];
           const current = sel.accessories || [];
+          const owned = sel.ownedAccessories || [];
+          // Group catalog by slot
+          const bySlot = {};
+          ACCESSORY_CATALOG.forEach(a => {
+            if (!bySlot[a.slot]) bySlot[a.slot] = [];
+            bySlot[a.slot].push(a);
+          });
+          const slotLabels = { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
+          // Teacher can grant any accessory (bypass ownership check)
+          const teacherToggle = (id) => {
+            const acc = getAccessory(id);
+            if (!acc) return;
+            // Auto-grant ownership for paid items when teacher equips
+            const newOwned = (acc.price > 0 && !owned.includes(id)) ? [...owned, id] : owned;
+            const has = current.includes(id);
+            let next;
+            if (has) {
+              next = current.filter(a => a !== id);
+              SFX.click();
+            } else {
+              next = [...current.filter(otherId => {
+                const o = getAccessory(otherId);
+                return !o || o.slot !== acc.slot;
+              }), id];
+              SFX.collect();
+            }
+            const newS = students.map(s => s.id === sel.id ? { ...s, accessories: next, ownedAccessories: newOwned } : s);
+            persist(null, newS);
+          };
           return (
             <div style={modalBackdropStyle} onClick={() => setShowAccessories(false)}>
-              <div style={{ ...modalCardStyle, width: 540 }} onClick={e => e.stopPropagation()}>
+              <div style={{ ...modalCardStyle, width: 720, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>✨ Dress up {sel.name}</h2>
                   <button onClick={() => setShowAccessories(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
@@ -3197,43 +4689,60 @@ function SnowMonkeyTrackerInner() {
                 {/* Preview of monkey with current accessories */}
                 <div style={{
                   display: "flex", justifyContent: "center", alignItems: "center",
-                  background: `${C.snow1}80`, borderRadius: 18, padding: 16, marginBottom: 18,
-                  height: 160,
+                  background: `${C.snow1}80`, borderRadius: 18, padding: 16, marginBottom: 14,
+                  height: 180,
                 }}>
-                  <MonkeySVG size={140} mood="happy" delay={0}
+                  <MonkeySVG size={150} mood="happy" delay={0}
                     variant={students.findIndex(st => st.id === sel.id)}
-                    accessories={current} />
+                    accessories={current} pet={sel.pet} />
                 </div>
 
-                <p style={{ color: C.textLight, fontSize: 13, margin: "0 0 10px", textAlign: "center" }}>
-                  Tap to toggle on/off. Only one head accessory at a time.
+                <p style={{ color: C.textLight, fontSize: 13, margin: "0 0 14px", textAlign: "center" }}>
+                  As teacher, you can gift any accessory for free! 🎁
                 </p>
 
-                {/* Accessory grid */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
-                  {accessoryOptions.map(opt => {
-                    const active = current.includes(opt.id);
-                    return (
-                      <button key={opt.id} onClick={() => toggleAccessory(sel.id, opt.id)}
-                        style={{
-                          padding: "12px 8px", borderRadius: 14,
-                          border: active ? `2.5px solid ${C.gold}` : `2px solid ${C.fur2}40`,
-                          background: active ? `${C.gold}20` : `${C.snow1}80`,
-                          cursor: "pointer", transition: "all 0.2s",
-                          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                          fontFamily: "'Patrick Hand', cursive",
-                        }}
-                        onMouseEnter={e => !active && (e.currentTarget.style.transform = "translateY(-2px)")}
-                        onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}>
-                        <span style={{ fontSize: 32 }}>{opt.emoji}</span>
-                        <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{opt.label}</span>
-                        {active && <span style={{ fontSize: 10, color: C.gold, fontWeight: 700 }}>EQUIPPED</span>}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Accessories grouped by slot */}
+                {ACCESSORY_SLOTS.map(slot => {
+                  const items = bySlot[slot];
+                  if (!items || items.length === 0) return null;
+                  return (
+                    <div key={slot} style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.textLight, marginBottom: 6, letterSpacing: 0.5 }}>
+                        {slotLabels[slot] || slot.toUpperCase()}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 6 }}>
+                        {items.map(acc => {
+                          const active = current.includes(acc.id);
+                          const rarityColor = RARITY_COLORS[acc.rarity] || C.fur2;
+                          return (
+                            <button key={acc.id} onClick={() => teacherToggle(acc.id)}
+                              style={{
+                                padding: "10px 6px", borderRadius: 12,
+                                border: active ? `2.5px solid ${C.gold}` : `2px solid ${rarityColor}40`,
+                                background: active ? `${C.gold}20` : `${C.snow1}80`,
+                                cursor: "pointer", transition: "all 0.2s",
+                                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                                fontFamily: "'Patrick Hand', cursive", position: "relative",
+                              }}>
+                              {acc.price > 0 && (
+                                <div style={{
+                                  position: "absolute", top: 3, right: 3,
+                                  fontSize: 8, padding: "1px 5px", borderRadius: 6,
+                                  background: rarityColor, color: "white", fontWeight: 700, textTransform: "uppercase",
+                                }}>{acc.rarity}</div>
+                              )}
+                              <span style={{ fontSize: 28, marginTop: acc.price > 0 ? 6 : 0 }}>{acc.emoji}</span>
+                              <span style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</span>
+                              {active && <span style={{ fontSize: 9, color: C.gold, fontWeight: 700 }}>EQUIPPED</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
 
-                <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
                   <button onClick={() => clearAccessories(sel.id)}
                     style={{ padding: "9px 16px", borderRadius: 10, border: `2px solid ${C.accent}40`, background: "transparent", color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 600 }}>
                     Remove All
@@ -3272,11 +4781,22 @@ function SnowMonkeyTrackerInner() {
               <span style={{ fontSize: 14, color: C.accent, fontWeight: 600 }}>#{rank}</span>
             </div>
           </div>
-          <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={toggleSound}
+              title={soundOn ? "Mute sounds" : "Unmute sounds"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {soundOn ? "🔊" : "🔇"}
+            </button>
+            <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
+          </div>
         </div>
 
         {/* Wordle modal */}
-        {showWordle && <WordleGame onWin={handleWordleWin} onClose={() => setShowWordle(false)} />}
+        {showWordle && <WordleGame onWin={handleWordleWin} onLose={handleWordleLose} onClose={() => setShowWordle(false)} />}
 
         {/* Quiz Picker modal - choose which quiz to play */}
         {showQuizPicker && me && (() => {
@@ -3359,8 +4879,8 @@ function SnowMonkeyTrackerInner() {
                       onMouseLeave={e => e.currentTarget.style.background = `${C.green}15`}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 17 }}>🚀 {m.name}</div>
-                        <div style={{ fontSize: 12, color: C.textLight }}>Block Blast · {m.questions.length} questions</div>
+                        <div style={{ fontWeight: 700, fontSize: 17 }}>{m.type === "runner" ? "🏃" : "🧩"} {m.name}</div>
+                        <div style={{ fontSize: 12, color: C.textLight }}>{m.type === "runner" ? "Fruit Runner" : "Block Blast"} · {m.questions.length} questions</div>
                       </div>
                       <div style={{ background: C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700 }}>
                         ★ {m.points}
@@ -3388,15 +4908,26 @@ function SnowMonkeyTrackerInner() {
           );
         })()}
 
-        {/* Mission modal */}
+        {/* Mission modal - dispatches to the right game type */}
         {showMission && me && (() => {
           const activeMission = (missions[me.id] || []).find(m => m.id === activeMissionId);
           if (!activeMission) { setShowMission(false); return null; }
+          const closeFn = () => { setShowMission(false); setActiveMissionId(null); };
+          if (activeMission.type === "runner") {
+            return (
+              <RunnerGame
+                studentName={me.name}
+                mission={activeMission}
+                onClose={closeFn}
+                onComplete={handleMissionComplete}
+              />
+            );
+          }
           return (
             <MissionGame
               studentName={me.name}
               mission={activeMission}
-              onClose={() => { setShowMission(false); setActiveMissionId(null); }}
+              onClose={closeFn}
               onComplete={handleMissionComplete}
             />
           );
@@ -3452,7 +4983,7 @@ function SnowMonkeyTrackerInner() {
                 }}>
                 {hasMission ? `🚀 Missions (${myMissions.length})` : "🚀 No Missions"}
               </button>
-              <button onClick={() => setShowPetMart(true)}
+              <button onClick={() => { setPetMartTab("packs"); setShowPetMart(true); }}
                 style={{
                   padding: "10px 22px", borderRadius: 16,
                   border: `2px solid ${C.green}60`,
@@ -3463,26 +4994,185 @@ function SnowMonkeyTrackerInner() {
                   boxShadow: `0 4px 14px ${C.green}30`,
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
+                  position: "relative",
                 }}>
-                🏪 Pet Mart
+                🎁 Pet Packs
+                {calculatePendingIncome(me) > 0 && (
+                  <span style={{
+                    position: "absolute", top: -6, right: -6,
+                    background: `linear-gradient(135deg, ${C.gold}, #ff8030)`,
+                    color: "white", fontSize: 11, fontWeight: 700,
+                    padding: "2px 7px", borderRadius: 999,
+                    boxShadow: `0 2px 8px ${C.gold}80`,
+                    animation: "incomeBadgePulse 1.4s ease-in-out infinite",
+                  }}>
+                    <style>{`@keyframes incomeBadgePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }`}</style>
+                    +{calculatePendingIncome(me)} ★
+                  </span>
+                )}
               </button>
             </div>
           );
         })()}
 
-        {/* Pet Mart modal */}
+        {/* Customize Monkey modal - student dresses up own monkey */}
+        {showCustomize && me && (() => {
+          const owned = me.ownedAccessories || [];
+          const equipped = me.accessories || [];
+          // Filter accessories: free OR owned
+          const visibleAccessories = ACCESSORY_CATALOG.filter(a => {
+            if (customizeTab === "owned") return a.price === 0 || owned.includes(a.id);
+            if (customizeTab === "shop") return a.price > 0;
+            return true;
+          });
+          // Group by slot
+          const bySlot = {};
+          visibleAccessories.forEach(a => {
+            if (!bySlot[a.slot]) bySlot[a.slot] = [];
+            bySlot[a.slot].push(a);
+          });
+          const slotLabels = { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
+
+          return (
+            <div style={modalBackdropStyle} onClick={() => setShowCustomize(false)}>
+              <div style={{ ...modalCardStyle, width: 720, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🎨 Customize {me.name}</h2>
+                  <button onClick={() => setShowCustomize(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                </div>
+
+                {/* Live preview */}
+                <div style={{
+                  display: "flex", justifyContent: "center", alignItems: "center", gap: 16, flexWrap: "wrap",
+                  background: `linear-gradient(135deg, ${C.snow1}, ${C.water1}30)`, borderRadius: 18, padding: "16px 12px", marginBottom: 14,
+                }}>
+                  <MonkeySVG size={160} mood="excited" delay={0}
+                    variant={students.findIndex(st => st.id === me.id)}
+                    accessories={equipped} pet={me.pet}
+                    streakLevel={getStreakLevel(getEffectiveStreak(me)).id} />
+                  <div style={{ minWidth: 140 }}>
+                    <div style={{ fontSize: 14, color: C.textLight, marginBottom: 2 }}>Stars</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: C.gold, marginBottom: 8 }}>★ {me.points}</div>
+                    <div style={{ fontSize: 13, color: C.textLight }}>
+                      {equipped.length} equipped · {owned.length} owned
+                    </div>
+                    <button onClick={() => clearAccessories(me.id)}
+                      style={{ marginTop: 10, padding: "6px 12px", borderRadius: 10, border: `2px solid ${C.accent}40`, background: "transparent", color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 600 }}>
+                      Remove All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 14, justifyContent: "center" }}>
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "owned", label: `My Items (${owned.length + ACCESSORY_CATALOG.filter(a => a.price === 0).length})` },
+                    { id: "shop", label: "🛍️ Shop" },
+                  ].map(tab => (
+                    <button key={tab.id} onClick={() => setCustomizeTab(tab.id)}
+                      style={{
+                        padding: "7px 16px", borderRadius: 999,
+                        border: customizeTab === tab.id ? `2px solid ${C.accent}` : `2px solid ${C.fur2}30`,
+                        background: customizeTab === tab.id ? `${C.accent}20` : "transparent",
+                        color: customizeTab === tab.id ? C.accentDark : C.textLight,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                      }}>
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Accessories grouped by slot */}
+                {ACCESSORY_SLOTS.map(slot => {
+                  const items = bySlot[slot];
+                  if (!items || items.length === 0) return null;
+                  return (
+                    <div key={slot} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.textLight, marginBottom: 8, letterSpacing: 0.5 }}>
+                        {slotLabels[slot] || slot.toUpperCase()}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
+                        {items.map(acc => {
+                          const isOwned = acc.price === 0 || owned.includes(acc.id);
+                          const isEquipped = equipped.includes(acc.id);
+                          const canAfford = me.points >= acc.price;
+                          const rarityColor = RARITY_COLORS[acc.rarity] || C.fur2;
+                          return (
+                            <div key={acc.id} style={{
+                              background: isEquipped ? `${C.gold}20` : `${C.snow1}80`,
+                              border: isEquipped ? `2.5px solid ${C.gold}` : `2px solid ${rarityColor}40`,
+                              borderRadius: 12, padding: "10px 8px",
+                              cursor: "pointer", transition: "all 0.2s",
+                              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                              fontFamily: "'Patrick Hand', cursive",
+                              position: "relative", overflow: "hidden",
+                            }}
+                              onClick={() => {
+                                if (isOwned) toggleAccessory(me.id, acc.id);
+                                else if (canAfford && window.confirm(`Buy ${acc.name} for ${acc.price} ★?`)) buyAccessory(me.id, acc.id);
+                                else if (!canAfford) {
+                                  SFX.wrong();
+                                  notify(`Need ${acc.price - me.points} more ★`, "error");
+                                }
+                              }}>
+                              {/* Rarity badge */}
+                              {acc.price > 0 && (
+                                <div style={{
+                                  position: "absolute", top: 4, right: 4,
+                                  fontSize: 9, padding: "1px 6px", borderRadius: 8,
+                                  background: rarityColor, color: "white", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
+                                }}>{acc.rarity}</div>
+                              )}
+                              <div style={{ fontSize: 32, marginTop: acc.price > 0 ? 8 : 0 }}>{acc.emoji}</div>
+                              <div style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</div>
+                              {isEquipped ? (
+                                <div style={{ fontSize: 9, color: C.gold, fontWeight: 700, letterSpacing: 0.5 }}>EQUIPPED</div>
+                              ) : isOwned ? (
+                                <div style={{ fontSize: 9, color: C.green, fontWeight: 700, letterSpacing: 0.5 }}>{acc.price === 0 ? "FREE" : "OWNED"}</div>
+                              ) : (
+                                <div style={{
+                                  fontSize: 11, fontWeight: 700,
+                                  color: canAfford ? C.gold : C.textLight,
+                                  background: canAfford ? `${C.gold}15` : "transparent",
+                                  padding: "1px 8px", borderRadius: 8,
+                                }}>★ {acc.price}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Pet Mart modal - Mystery Packs + Pet Collection */}
         {showPetMart && me && (() => {
           const owned = me.ownedPets || [];
           const equipped = me.pet;
+          const pendingIncome = calculatePendingIncome(me);
+          const nextIncome = getNextIncomeDate(me);
+          const equippedPet = equipped ? getPet(equipped) : null;
+          // Compute days until next payout
+          let nextDays = null;
+          if (nextIncome && pendingIncome === 0) {
+            nextDays = Math.max(0, Math.ceil((nextIncome - Date.now()) / (1000 * 60 * 60 * 24)));
+          }
+
           return (
-            <div style={modalBackdropStyle} onClick={() => setShowPetMart(false)}>
-              <div style={{ ...modalCardStyle, width: 720, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={modalBackdropStyle} onClick={() => { if (!packResult) setShowPetMart(false); }}>
+              <div style={{ ...modalCardStyle, width: 800, maxWidth: "96vw", maxHeight: "92vh", overflowY: "auto", position: "relative" }} onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
                   <div>
-                    <h2 style={{ margin: 0, color: C.text, fontSize: 26 }}>🏪 Pet Mart</h2>
-                    <p style={{ margin: "2px 0 0", color: C.textLight, fontSize: 14 }}>Adopt a companion for your monkey!</p>
+                    <h2 style={{ margin: 0, color: C.text, fontSize: 26 }}>🎁 Mystery Pet Packs</h2>
+                    <p style={{ margin: "2px 0 0", color: C.textLight, fontSize: 14 }}>Open packs to discover rare companions!</p>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{ background: `${C.gold}20`, borderRadius: 12, padding: "8px 16px", border: `2px solid ${C.gold}50` }}>
                       <span style={{ fontSize: 22, color: C.gold, fontWeight: 700 }}>★ {me.points}</span>
                     </div>
@@ -3490,70 +5180,282 @@ function SnowMonkeyTrackerInner() {
                   </div>
                 </div>
 
-                <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 13, color: C.textLight, textAlign: "center" }}>
-                  💡 Tap a pet you own to make them follow your monkey. Tap again to send them home.
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                  {PET_CATALOG.map(pet => {
-                    const isOwned = owned.includes(pet.id);
-                    const isEquipped = equipped === pet.id;
-                    const canAfford = me.points >= pet.price;
-                    const rarityColor = RARITY_COLORS[pet.rarity];
-                    return (
-                      <div key={pet.id} style={{
-                        background: isEquipped ? `${C.gold}15` : `${C.snow1}90`,
-                        borderRadius: 16,
-                        padding: 14,
-                        border: isEquipped ? `2.5px solid ${C.gold}` : `2px solid ${rarityColor}40`,
-                        position: "relative",
-                        opacity: !isOwned && !canAfford ? 0.6 : 1,
-                      }}>
-                        {/* Rarity badge */}
-                        <div style={{
-                          position: "absolute", top: 8, right: 8,
-                          background: rarityColor, color: "white",
-                          fontSize: 10, fontWeight: 700, padding: "2px 8px",
-                          borderRadius: 8, letterSpacing: 0.5, textTransform: "uppercase",
-                        }}>{pet.rarity}</div>
-
-                        {isEquipped && (
-                          <div style={{
-                            position: "absolute", top: 8, left: 8,
-                            background: C.gold, color: "white",
-                            fontSize: 10, fontWeight: 700, padding: "2px 8px",
-                            borderRadius: 8,
-                          }}>EQUIPPED</div>
-                        )}
-
-                        <div style={{ fontSize: 56, textAlign: "center", marginTop: 16, marginBottom: 6 }}>
-                          {pet.emoji}
-                        </div>
-                        <div style={{ fontSize: 17, color: C.text, fontWeight: 700, textAlign: "center" }}>
-                          {pet.name}
-                        </div>
-                        <div style={{ fontSize: 14, color: C.gold, fontWeight: 700, textAlign: "center", marginBottom: 10 }}>
-                          ★ {pet.price.toLocaleString()}
-                        </div>
-
-                        <button onClick={() => buyPet(me.id, pet.id)}
-                          disabled={!isOwned && !canAfford}
-                          style={{
-                            width: "100%", padding: "8px 12px", borderRadius: 10, border: "none",
-                            background: isEquipped ? C.accent : isOwned ? C.green : canAfford ? rarityColor : `${C.fur2}80`,
-                            color: "white",
-                            fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 700,
-                            cursor: (!isOwned && !canAfford) ? "not-allowed" : "pointer",
-                            transition: "transform 0.15s",
-                          }}
-                          onMouseEnter={e => (isOwned || canAfford) && (e.currentTarget.style.transform = "translateY(-2px)")}
-                          onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}>
-                          {isEquipped ? "Send Home" : isOwned ? "Adopt!" : canAfford ? "Buy" : `Need ${pet.price - me.points} more ★`}
-                        </button>
+                {/* Equipped Pet + Income Section */}
+                {equippedPet && (
+                  <div style={{
+                    background: `linear-gradient(135deg, ${RARITY_COLORS[equippedPet.rarity]}20, ${RARITY_COLORS[equippedPet.rarity]}10)`,
+                    border: `2px solid ${RARITY_COLORS[equippedPet.rarity]}50`,
+                    borderRadius: 14, padding: "12px 14px", marginBottom: 14,
+                    display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+                  }}>
+                    <div style={{ fontSize: 44 }}>{equippedPet.emoji}</div>
+                    <div style={{ flex: 1, minWidth: 140 }}>
+                      <div style={{ fontSize: 16, color: C.text, fontWeight: 700 }}>{equippedPet.name}</div>
+                      <div style={{ fontSize: 12, color: C.textLight }}>
+                        {equippedPet.rarity.toUpperCase()} · {equippedPet.weeklyIncome} ★/week
                       </div>
-                    );
-                  })}
+                    </div>
+                    {pendingIncome > 0 ? (
+                      <button onClick={() => collectIncome(me.id)}
+                        style={{
+                          padding: "10px 20px", borderRadius: 12, border: "none",
+                          background: `linear-gradient(135deg, ${C.gold}, #ff8030)`,
+                          color: "white", fontFamily: "'Patrick Hand', cursive",
+                          fontSize: 16, fontWeight: 700, cursor: "pointer",
+                          boxShadow: `0 4px 14px ${C.gold}60`,
+                          animation: "incomePulse 1.4s ease-in-out infinite",
+                        }}>
+                        <style>{`@keyframes incomePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }`}</style>
+                        🎁 Collect +{pendingIncome} ★
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.textLight, textAlign: "right" }}>
+                        Next payout in <strong>{nextDays} day{nextDays !== 1 ? "s" : ""}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tabs */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 14, justifyContent: "center" }}>
+                  {[
+                    { id: "packs", label: "🎁 Packs" },
+                    { id: "collection", label: `📚 My Pets (${owned.length}/${PET_CATALOG.length})` },
+                  ].map(tab => (
+                    <button key={tab.id} onClick={() => setPetMartTab(tab.id)}
+                      style={{
+                        padding: "8px 18px", borderRadius: 999,
+                        border: petMartTab === tab.id ? `2px solid ${C.accent}` : `2px solid ${C.fur2}30`,
+                        background: petMartTab === tab.id ? `${C.accent}20` : "transparent",
+                        color: petMartTab === tab.id ? C.accentDark : C.textLight,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                      }}>
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
+
+                {/* PACKS TAB */}
+                {petMartTab === "packs" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                    {MYSTERY_PACKS.map(pack => {
+                      const canAfford = me.points >= pack.price;
+                      // Find the highest non-zero rarity in odds for badge
+                      const rarityOrder = ["mythic", "legendary", "epic", "rare", "uncommon", "common"];
+                      const bestRarity = rarityOrder.find(r => pack.odds[r] > 0);
+                      return (
+                        <div key={pack.id} style={{
+                          background: `linear-gradient(135deg, ${pack.color}20, ${pack.color}05)`,
+                          border: `2px solid ${pack.color}60`,
+                          borderRadius: 16, padding: 14,
+                          opacity: canAfford ? 1 : 0.7,
+                          position: "relative",
+                          transition: "transform 0.2s",
+                        }}
+                          onMouseEnter={e => canAfford && (e.currentTarget.style.transform = "translateY(-3px)")}
+                          onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}
+                        >
+                          <div style={{ fontSize: 56, textAlign: "center", marginBottom: 4 }}>
+                            <span style={{ filter: `drop-shadow(0 4px 12px ${pack.color}90)` }}>{pack.flavor}</span>
+                          </div>
+                          <div style={{ fontSize: 16, color: C.text, fontWeight: 700, textAlign: "center" }}>{pack.name}</div>
+                          <div style={{ fontSize: 11, color: C.textLight, textAlign: "center", margin: "4px 0 8px", minHeight: 30, lineHeight: 1.3 }}>
+                            {pack.description}
+                          </div>
+
+                          {/* Odds breakdown */}
+                          <div style={{
+                            background: `${C.snow1}80`, borderRadius: 8, padding: "6px 8px", marginBottom: 10,
+                            fontSize: 10, color: C.textLight,
+                          }}>
+                            {Object.entries(pack.odds).filter(([_, w]) => w > 0).map(([rarity, weight]) => (
+                              <div key={rarity} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>
+                                <span style={{ color: RARITY_COLORS[rarity], fontWeight: 700 }}>{rarity}</span>
+                                <span>{weight}%</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <button onClick={() => {
+                            if (!canAfford) {
+                              SFX.wrong();
+                              notify(`Need ${pack.price - me.points} more ★`, "error");
+                              return;
+                            }
+                            const result = openPack(me.id, pack.id);
+                            if (result) setPackResult(result);
+                          }}
+                            disabled={!canAfford}
+                            style={{
+                              width: "100%", padding: "10px 14px", borderRadius: 10, border: "none",
+                              background: canAfford ? `linear-gradient(135deg, ${pack.color}, ${pack.color}cc)` : `${C.fur2}80`,
+                              color: "white",
+                              fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                              cursor: canAfford ? "pointer" : "not-allowed",
+                              boxShadow: canAfford ? `0 4px 14px ${pack.color}40` : "none",
+                            }}>
+                            {canAfford ? `Open · ★ ${pack.price.toLocaleString()}` : `Need ${pack.price - me.points} more ★`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* COLLECTION TAB */}
+                {petMartTab === "collection" && (
+                  <>
+                    <p style={{ fontSize: 12, color: C.textLight, textAlign: "center", margin: "0 0 12px" }}>
+                      💡 Tap a pet you own to make them follow your monkey. They earn weekly stars while equipped!
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+                      {PET_CATALOG.map(pet => {
+                        const isOwned = owned.includes(pet.id);
+                        const isEquipped = equipped === pet.id;
+                        const rarityColor = RARITY_COLORS[pet.rarity];
+                        return (
+                          <div key={pet.id} style={{
+                            background: isEquipped ? `${C.gold}15` : isOwned ? `${C.snow1}90` : `${C.snow1}40`,
+                            borderRadius: 14, padding: "12px 8px",
+                            border: isEquipped ? `2.5px solid ${C.gold}` : `2px solid ${rarityColor}40`,
+                            cursor: isOwned ? "pointer" : "default",
+                            opacity: isOwned ? 1 : 0.55,
+                            position: "relative", textAlign: "center",
+                            transition: "all 0.2s",
+                          }}
+                            onClick={() => isOwned && equipPet(me.id, pet.id)}>
+                            <div style={{
+                              position: "absolute", top: 5, right: 5,
+                              background: rarityColor, color: "white",
+                              fontSize: 9, fontWeight: 700, padding: "1px 6px",
+                              borderRadius: 6, letterSpacing: 0.5, textTransform: "uppercase",
+                            }}>{pet.rarity}</div>
+                            <div style={{ fontSize: 44, marginTop: 14, marginBottom: 4, filter: isOwned ? "none" : "grayscale(100%)" }}>
+                              {isOwned ? pet.emoji : "❓"}
+                            </div>
+                            <div style={{ fontSize: 13, color: C.text, fontWeight: 700, lineHeight: 1.1 }}>
+                              {isOwned ? pet.name : "Unknown"}
+                            </div>
+                            <div style={{ fontSize: 10, color: C.textLight, marginTop: 2 }}>
+                              {pet.weeklyIncome} ★/week
+                            </div>
+                            {isEquipped && (
+                              <div style={{ fontSize: 9, color: C.gold, fontWeight: 700, marginTop: 4, letterSpacing: 0.5 }}>
+                                ✓ EQUIPPED
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* PACK REVEAL OVERLAY - shown when student opens a pack */}
+        {packResult && me && (() => {
+          const pet = packResult.pet;
+          const rarityColor = RARITY_COLORS[pet.rarity];
+          return (
+            <div style={{
+              position: "fixed", inset: 0, zIndex: 3000, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)",
+            }}
+              onClick={() => setPackResult(null)}>
+              <div style={{
+                position: "relative",
+                background: `radial-gradient(circle at center, ${rarityColor}40, ${C.card})`,
+                border: `3px solid ${rarityColor}`,
+                borderRadius: 24, padding: "30px 36px",
+                width: 380, maxWidth: "90vw", textAlign: "center",
+                boxShadow: `0 0 60px ${rarityColor}80, 0 24px 64px rgba(0,0,0,0.6)`,
+                animation: "packBurst 0.6s ease-out",
+                fontFamily: "'Patrick Hand', cursive",
+              }}
+                onClick={e => e.stopPropagation()}>
+                <style>{`
+                  @keyframes packBurst {
+                    0% { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+                    60% { transform: scale(1.08) rotate(2deg); opacity: 1; }
+                    100% { transform: scale(1) rotate(0); opacity: 1; }
+                  }
+                  @keyframes packPetBob {
+                    0%, 100% { transform: translateY(0) scale(1); }
+                    50% { transform: translateY(-8px) scale(1.03); }
+                  }
+                  @keyframes packTwinkle {
+                    0%, 100% { opacity: 0.4; transform: scale(0.9); }
+                    50% { opacity: 1; transform: scale(1.2); }
+                  }
+                `}</style>
+                {/* Background sparkles */}
+                {[...Array(8)].map((_, i) => {
+                  const angle = (i / 8) * Math.PI * 2;
+                  const radius = 130;
+                  return (
+                    <div key={i} style={{
+                      position: "absolute",
+                      left: `calc(50% + ${Math.cos(angle) * radius}px)`,
+                      top: `calc(50% + ${Math.sin(angle) * radius}px)`,
+                      fontSize: 22,
+                      animation: `packTwinkle 1.4s ease-in-out ${i * 0.15}s infinite`,
+                      pointerEvents: "none",
+                      color: rarityColor,
+                    }}>✦</div>
+                  );
+                })}
+
+                <div style={{
+                  fontSize: 13, color: rarityColor, fontWeight: 700, letterSpacing: 2,
+                  textTransform: "uppercase", marginBottom: 6,
+                }}>
+                  {pet.rarity}
+                </div>
+                <div style={{
+                  fontSize: 96, marginBottom: 8,
+                  animation: "packPetBob 1.6s ease-in-out infinite",
+                  filter: `drop-shadow(0 6px 20px ${rarityColor}80)`,
+                }}>
+                  {pet.emoji}
+                </div>
+                <div style={{ fontSize: 24, color: C.text, fontWeight: 700, marginBottom: 4 }}>
+                  {pet.name}
+                </div>
+                <div style={{ fontSize: 13, color: C.textLight, marginBottom: 14 }}>
+                  Earns {pet.weeklyIncome} ★ per week!
+                </div>
+
+                {packResult.isDuplicate ? (
+                  <div style={{
+                    background: `${C.gold}20`, borderRadius: 12, padding: "10px 14px",
+                    marginBottom: 14, fontSize: 14, color: C.text,
+                  }}>
+                    You already have this one! 💰<br/>
+                    <strong style={{ color: C.gold, fontSize: 18 }}>+{packResult.consolationStars} ★</strong> consolation stars!
+                  </div>
+                ) : (
+                  <div style={{
+                    background: `${C.green}20`, borderRadius: 12, padding: "10px 14px",
+                    marginBottom: 14, fontSize: 14, color: C.green, fontWeight: 700,
+                  }}>
+                    🎉 New companion unlocked!
+                  </div>
+                )}
+
+                <button onClick={() => setPackResult(null)}
+                  style={{
+                    padding: "12px 28px", borderRadius: 14, border: "none",
+                    background: `linear-gradient(135deg, ${rarityColor}, ${rarityColor}cc)`,
+                    color: "white", fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 17, fontWeight: 700, cursor: "pointer",
+                    boxShadow: `0 4px 14px ${rarityColor}60`,
+                  }}>
+                  Awesome!
+                </button>
               </div>
             </div>
           );
@@ -3575,6 +5477,34 @@ function SnowMonkeyTrackerInner() {
               const isMe = s.id === me?.id;
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: isMe ? 18 : 15 }}>
+                  {isMe && (
+                    <div style={{
+                      position: "absolute",
+                      top: -28,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      background: `${C.card}f0`,
+                      borderRadius: 999,
+                      padding: "4px 10px",
+                      fontSize: 11,
+                      fontFamily: "'Patrick Hand', cursive",
+                      color: C.text,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                      border: `2px solid ${C.gold}50`,
+                      pointerEvents: "none",
+                      animation: "tapHintPulse 2.5s ease-in-out infinite",
+                    }}>
+                      <style>{`
+                        @keyframes tapHintPulse {
+                          0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.8; }
+                          50% { transform: translateX(-50%) translateY(-3px); opacity: 1; }
+                        }
+                      `}</style>
+                      ✨ tap to customize
+                    </div>
+                  )}
                   <MonkeySVG
                     size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110}
                     mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
@@ -3584,6 +5514,7 @@ function SnowMonkeyTrackerInner() {
                     pet={s.pet}
                     streakLevel={getStreakLevel(getEffectiveStreak(s)).id}
                     selected={isMe}
+                    onClick={isMe ? () => setShowCustomize(true) : undefined}
                   />
                 </div>
               );
