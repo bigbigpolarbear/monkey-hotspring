@@ -272,7 +272,7 @@ const MYSTERY_PACKS = [
     name: "Starter Bubble Pack",
     flavor: "🫧",
     description: "A simple pack with friendly common pets. Everyone gets something!",
-    price: 150,
+    price: 50,
     color: "#8eb6cf",
     odds: { common: 80, uncommon: 20, rare: 0, epic: 0, legendary: 0, mythic: 0 },
   },
@@ -281,7 +281,7 @@ const MYSTERY_PACKS = [
     name: "Jelly Drop Pack",
     flavor: "🍮",
     description: "Squishy and sweet — chance for an uncommon or rare pet!",
-    price: 400,
+    price: 125,
     color: "#c980c0",
     odds: { common: 50, uncommon: 35, rare: 14, epic: 1, legendary: 0, mythic: 0 },
   },
@@ -290,7 +290,7 @@ const MYSTERY_PACKS = [
     name: "Frost Glimmer Pack",
     flavor: "❄️",
     description: "Icy mystery — solid chance for a rare companion. Could be epic!",
-    price: 900,
+    price: 300,
     color: "#7adcdc",
     odds: { common: 25, uncommon: 35, rare: 30, epic: 8, legendary: 2, mythic: 0 },
   },
@@ -299,7 +299,7 @@ const MYSTERY_PACKS = [
     name: "Sparkle Surge Pack",
     flavor: "✨",
     description: "Glittering with magic. Big shot at epic and even legendary pets!",
-    price: 1800,
+    price: 600,
     color: "#edb830",
     odds: { common: 10, uncommon: 25, rare: 30, epic: 25, legendary: 9, mythic: 1 },
   },
@@ -308,7 +308,7 @@ const MYSTERY_PACKS = [
     name: "Cosmic Mythstone Pack",
     flavor: "🌌",
     description: "Forged from stars themselves. Best odds for legendary AND mythic!",
-    price: 4000,
+    price: 1200,
     color: "#a060c0",
     odds: { common: 0, uncommon: 10, rare: 25, epic: 35, legendary: 23, mythic: 7 },
   },
@@ -467,6 +467,52 @@ function getAccessory(id) { return ACCESSORY_CATALOG.find(a => a.id === id); }
 function isFreeAccessory(id) { const a = getAccessory(id); return a && a.price === 0; }
 function getAccessoryBySlot(equippedIds, slot) {
   return equippedIds.map(getAccessory).find(a => a && a.slot === slot);
+}
+
+/* ─── PET ACCESSORY CATALOG ─── small cute items that fit any pet
+   Slots:
+   - "head"  → on top of pet's head
+   - "neck"  → around neck/throat
+   - "back"  → trailing/floating behind
+*/
+const PET_ACCESSORY_CATALOG = [
+  // ─── FREE BASICS ───
+  { id: "petbow",        name: "Pink Bow",         emoji: "🎀", slot: "head", price: 0,    rarity: "common"    },
+  { id: "petflower",     name: "Tiny Flower",      emoji: "🌸", slot: "head", price: 0,    rarity: "common"    },
+  { id: "petcollar",     name: "Soft Collar",      emoji: "📿", slot: "neck", price: 0,    rarity: "common"    },
+  { id: "petbandana",    name: "Bandana",          emoji: "🧣", slot: "neck", price: 0,    rarity: "common"    },
+
+  // ─── HEAD ITEMS ───
+  { id: "petbeanie",     name: "Mini Beanie",      emoji: "🧢", slot: "head", price: 80,   rarity: "common"    },
+  { id: "petparty",      name: "Party Hat",        emoji: "🎉", slot: "head", price: 120,  rarity: "uncommon"  },
+  { id: "petsanta",      name: "Santa Hat",        emoji: "🎅", slot: "head", price: 200,  rarity: "uncommon"  },
+  { id: "petwizardhat",  name: "Wizard Hat",       emoji: "🧙", slot: "head", price: 350,  rarity: "rare"      },
+  { id: "petcrown",      name: "Tiny Crown",       emoji: "👑", slot: "head", price: 500,  rarity: "rare"      },
+  { id: "petantenna",    name: "Bug Antennae",     emoji: "🐛", slot: "head", price: 150,  rarity: "uncommon"  },
+  { id: "pethalo",       name: "Glowing Halo",     emoji: "😇", slot: "head", price: 800,  rarity: "epic"      },
+  { id: "petleaf",       name: "Leaf Crown",       emoji: "🍃", slot: "head", price: 100,  rarity: "common"    },
+  { id: "petheart",      name: "Heart Sticker",    emoji: "💗", slot: "head", price: 90,   rarity: "common"    },
+
+  // ─── NECK ITEMS ───
+  { id: "petbowtie",     name: "Polka Bowtie",     emoji: "🎀", slot: "neck", price: 100,  rarity: "common"    },
+  { id: "petbell",       name: "Jingle Bell",      emoji: "🔔", slot: "neck", price: 130,  rarity: "uncommon"  },
+  { id: "petpearls",     name: "Pearl Necklace",   emoji: "🦪", slot: "neck", price: 280,  rarity: "rare"      },
+  { id: "petmedal",      name: "Gold Medal",       emoji: "🥇", slot: "neck", price: 220,  rarity: "uncommon"  },
+  { id: "petgem",        name: "Star Pendant",     emoji: "⭐", slot: "neck", price: 400,  rarity: "rare"      },
+
+  // ─── BACK ITEMS ───
+  { id: "petwings",      name: "Fairy Wings",      emoji: "🧚", slot: "back", price: 600,  rarity: "epic"      },
+  { id: "petbutterfly",  name: "Butterfly Wings",  emoji: "🦋", slot: "back", price: 450,  rarity: "rare"      },
+  { id: "petcape",       name: "Hero Cape",        emoji: "🦸", slot: "back", price: 350,  rarity: "rare"      },
+  { id: "petsparkle",    name: "Sparkle Trail",    emoji: "✨", slot: "back", price: 250,  rarity: "uncommon"  },
+  { id: "petrainbow",    name: "Rainbow Aura",     emoji: "🌈", slot: "back", price: 1000, rarity: "legendary" },
+];
+
+const PET_ACCESSORY_SLOTS = ["head", "neck", "back"];
+function getPetAccessory(id) { return PET_ACCESSORY_CATALOG.find(a => a.id === id); }
+function isFreePetAccessory(id) { const a = getPetAccessory(id); return a && a.price === 0; }
+function getPetAccessoryBySlot(equippedIds, slot) {
+  return equippedIds.map(getPetAccessory).find(a => a && a.slot === slot);
 }
 
 /* ─── STREAK LEVELS ─── each level gives the monkey visual upgrades */
@@ -755,7 +801,7 @@ const SFX = {
 };
 
 /* ─── PET SVG ─── small companion that floats next to the monkey */
-function PetSVG({ petId, side = "right", centered = false, mood = "neutral" }) {
+function PetSVG({ petId, side = "right", centered = false, mood = "neutral", petAccessories = [] }) {
   const [bob, setBob] = useState(0);
   const [blink, setBlink] = useState(false);
   const frameRef = useRef(0);
@@ -1076,7 +1122,292 @@ function PetSVG({ petId, side = "right", centered = false, mood = "neutral" }) {
   };
 
   if (!petId) return null;
-  return <>{renderPet()}</>;
+  return <>{renderPet()}{petAccessories.length > 0 && (
+    <g transform={groupTransform}>
+      <PetAccessoryLayer petId={petId} accessories={petAccessories} />
+    </g>
+  )}</>;
+}
+
+/* ─── PET ACCESSORY ANCHOR POINTS ─── per-pet positions for each slot
+   These are coordinates inside the pet's local <g transform={groupTransform}> space.
+   Each pet's body is roughly centered at (0, 0) with bobbing motion handled by the parent transform. */
+const PET_ANCHORS = {
+  // [slot]: { x, y, scale } — scale lets us shrink accessories on smaller pets
+  fish:   { head: { x: -4, y: -11, scale: 0.85 }, neck: { x: -2, y: 4,  scale: 0.85 }, back: { x: 8,  y: 0,  scale: 0.9 } },
+  duck:   { head: { x: -3, y: -14, scale: 1.0  }, neck: { x: -3, y: 1,  scale: 0.9  }, back: { x: 8,  y: 0,  scale: 1.0 } },
+  turtle: { head: { x: -13,y: -7,  scale: 0.7  }, neck: { x: -10,y: 2,  scale: 0.75 }, back: { x: 4,  y: -4, scale: 1.1 } },
+  bunny:  { head: { x: 0,  y: -16, scale: 0.95 }, neck: { x: 0,  y: 0,  scale: 0.95 }, back: { x: 10, y: 2,  scale: 1.0 } },
+  fox:    { head: { x: 0,  y: -16, scale: 1.0  }, neck: { x: 0,  y: 0,  scale: 0.95 }, back: { x: -2, y: 4,  scale: 1.0 } },
+  otter:  { head: { x: 0,  y: -15, scale: 1.0  }, neck: { x: 0,  y: 0,  scale: 0.95 }, back: { x: 2,  y: 4,  scale: 1.0 } },
+  owl:    { head: { x: 0,  y: -19, scale: 1.05 }, neck: { x: 0,  y: 0,  scale: 1.0  }, back: { x: 4,  y: 2,  scale: 1.0 } },
+  panda:  { head: { x: 0,  y: -16, scale: 1.05 }, neck: { x: 0,  y: 0,  scale: 1.0  }, back: { x: 6,  y: 4,  scale: 1.05 } },
+  dragon: { head: { x: 14, y: -10, scale: 0.8  }, neck: { x: 8,  y: 2,  scale: 0.85 }, back: { x: -8, y: -2, scale: 1.0 } },
+};
+
+/* ─── PET ACCESSORY LAYER ─── renders watercolor SVG accessories on the pet
+   Each accessory has its own render function at given (x, y, scale). */
+function PetAccessoryLayer({ petId, accessories }) {
+  const anchors = PET_ANCHORS[petId];
+  if (!anchors) return null;
+  // Group by slot — only render the LAST equipped item per slot
+  const equipped = { head: null, neck: null, back: null };
+  for (const id of accessories) {
+    const a = getPetAccessory(id);
+    if (a && equipped[a.slot] !== undefined) equipped[a.slot] = a.id;
+  }
+  return (
+    <>
+      {/* Render in z-order: back (behind), then neck, then head */}
+      {equipped.back && renderPetAccessory(equipped.back, anchors.back)}
+      {equipped.neck && renderPetAccessory(equipped.neck, anchors.neck)}
+      {equipped.head && renderPetAccessory(equipped.head, anchors.head)}
+    </>
+  );
+}
+
+function renderPetAccessory(id, anchor) {
+  const { x, y, scale } = anchor;
+  const t = `translate(${x}, ${y}) scale(${scale})`;
+  switch (id) {
+    // ─── HEAD ITEMS ───
+    case "petbow":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -5 -1 Q -7 -4 -3 -3 Q -1 -2 0 0 Q -1 2 -3 3 Q -7 4 -5 1 Z" fill="#ff7090" />
+          <path d="M 5 -1 Q 7 -4 3 -3 Q 1 -2 0 0 Q 1 2 3 3 Q 7 4 5 1 Z" fill="#ff7090" />
+          <ellipse cx="0" cy="0" rx="1.6" ry="2.2" fill="#d04060" />
+          <path d="M -4 -2 Q -3 -1 -2 -1 M 3 -2 Q 2 -1 1 -1" stroke="#ff90b0" strokeWidth="0.3" fill="none" />
+        </g>
+      );
+    case "petflower":
+      return (
+        <g key={id} transform={t}>
+          {[0, 72, 144, 216, 288].map((deg, i) => (
+            <ellipse key={i} cx="0" cy="-3" rx="2" ry="3" fill="#ffb0d0" transform={`rotate(${deg})`} />
+          ))}
+          <circle cx="0" cy="0" r="1.6" fill="#fff080" />
+          <circle cx="-0.5" cy="-0.5" r="0.6" fill="#ffd060" />
+        </g>
+      );
+    case "petbeanie":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -7 1 Q -7 -7 0 -7 Q 7 -7 7 1 Z" fill="#5a8fc7" filter="url(#furTexture)" />
+          <path d="M -7 1 L 7 1 L 7 3 L -7 3 Z" fill="#3a6fa7" />
+          <circle cx="0" cy="-7" r="1.8" fill="#ff8030" />
+        </g>
+      );
+    case "petparty":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -4 1 L 0 -10 L 4 1 Z" fill="#ff5080" />
+          <path d="M -4 1 L 0 -10 L 4 1 Z" fill="url(#partyStripes)" opacity="0.4" />
+          <circle cx="0" cy="-10" r="1.5" fill="#fff080" />
+          <defs>
+            <pattern id="partyStripes" width="3" height="3" patternUnits="userSpaceOnUse">
+              <path d="M 0 0 L 3 3" stroke="#fff" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+        </g>
+      );
+    case "petsanta":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -6 1 Q -5 -8 4 -8 Q 6 -3 7 1 Z" fill="#cc3030" filter="url(#watercolorSoft)" />
+          <ellipse cx="-6" cy="1" rx="7" ry="1.5" fill="white" />
+          <circle cx="5" cy="-8" r="1.8" fill="white" />
+        </g>
+      );
+    case "petwizardhat":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -5 1 L 1 -12 L 6 1 Z" fill="#5a3aa0" filter="url(#watercolorSoft)" />
+          <path d="M -6 1 L 7 1 L 7 2 L -6 2 Z" fill="#3a2a70" />
+          <text x="0" y="-3" fontSize="3" fill="#fff080" textAnchor="middle">★</text>
+        </g>
+      );
+    case "petcrown":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -6 1 L -6 -3 L -3 -6 L 0 -2 L 3 -6 L 6 -3 L 6 1 Z" fill="#edb830" stroke="#a07810" strokeWidth="0.3" />
+          <circle cx="-3" cy="-5" r="0.8" fill="#ff5080" />
+          <circle cx="0" cy="-3" r="0.8" fill="#5a8fc7" />
+          <circle cx="3" cy="-5" r="0.8" fill="#5caa5e" />
+        </g>
+      );
+    case "petantenna":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -3 1 Q -4 -5 -2 -8" stroke="#3a2a40" strokeWidth="0.6" fill="none" />
+          <path d="M 3 1 Q 4 -5 2 -8" stroke="#3a2a40" strokeWidth="0.6" fill="none" />
+          <circle cx="-2" cy="-8" r="1.4" fill="#a060c0" />
+          <circle cx="2" cy="-8" r="1.4" fill="#a060c0" />
+          <circle cx="-2.4" cy="-8.4" r="0.5" fill="#fff" opacity="0.8" />
+          <circle cx="1.6" cy="-8.4" r="0.5" fill="#fff" opacity="0.8" />
+        </g>
+      );
+    case "pethalo":
+      return (
+        <g key={id} transform={t}>
+          <ellipse cx="0" cy="-4" rx="6" ry="1.6" fill="none" stroke="#fff080" strokeWidth="1.2" />
+          <ellipse cx="0" cy="-4" rx="6" ry="1.6" fill="none" stroke="#ffe040" strokeWidth="0.5" opacity="0.7" />
+          <circle cx="0" cy="-4" r="0.7" fill="#fff080" opacity="0.6">
+            <animate attributeName="opacity" values="0.4;0.9;0.4" dur="2s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      );
+    case "petleaf":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -5 0 Q -4 -5 0 -4 Q -3 -2 -5 0 Z" fill="#5caa5e" />
+          <path d="M 5 0 Q 4 -5 0 -4 Q 3 -2 5 0 Z" fill="#5caa5e" />
+          <path d="M 0 -5 Q 1 -8 -1 -8 Q -1 -6 0 -5 Z" fill="#7cc080" />
+          <path d="M 0 -4 L 0 -1" stroke="#3a7a3c" strokeWidth="0.3" />
+        </g>
+      );
+    case "petheart":
+      return (
+        <g key={id} transform={t}>
+          <path d="M 0 1 Q -3 -2 -3 -4 Q -3 -6 -1 -6 Q 0 -5 0 -4 Q 0 -5 1 -6 Q 3 -6 3 -4 Q 3 -2 0 1 Z" fill="#ff5080" />
+          <path d="M -2 -5 Q -1 -5 -1 -4" stroke="#fff" strokeWidth="0.4" fill="none" opacity="0.7" />
+        </g>
+      );
+
+    // ─── NECK ITEMS ───
+    case "petcollar":
+      return (
+        <g key={id} transform={t}>
+          <ellipse cx="0" cy="0" rx="6" ry="2" fill="#a060c0" />
+          <ellipse cx="0" cy="0" rx="6" ry="0.8" fill="#7a40a0" />
+          <circle cx="0" cy="1.5" r="1.2" fill="#edb830" />
+          <circle cx="-0.3" cy="1.2" r="0.4" fill="#fff080" />
+        </g>
+      );
+    case "petbandana":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -7 -1 L 7 -1 L 5 4 L -5 4 Z" fill="#cc3030" />
+          <path d="M -7 -1 L 7 -1 L 7 0.5 L -7 0.5 Z" fill="#fff" opacity="0.5" />
+          <circle cx="-4" cy="2" r="0.5" fill="#fff" />
+          <circle cx="0" cy="3" r="0.5" fill="#fff" />
+          <circle cx="4" cy="2" r="0.5" fill="#fff" />
+        </g>
+      );
+    case "petbowtie":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -5 -1 Q -7 -3 -7 0 Q -7 3 -5 1 Q -3 0 -1 0 Z" fill="#5a8fc7" />
+          <path d="M 5 -1 Q 7 -3 7 0 Q 7 3 5 1 Q 3 0 1 0 Z" fill="#5a8fc7" />
+          <rect x="-1.5" y="-1.5" width="3" height="3" fill="#3a6fa7" rx="0.4" />
+          <circle cx="-3" cy="0" r="0.4" fill="#fff" opacity="0.8" />
+          <circle cx="3" cy="0" r="0.4" fill="#fff" opacity="0.8" />
+        </g>
+      );
+    case "petbell":
+      return (
+        <g key={id} transform={t}>
+          <ellipse cx="0" cy="0" rx="6" ry="1.5" fill="#5a4a2a" />
+          <path d="M -2 1 Q -2 4 -1 5 L 1 5 Q 2 4 2 1 Z" fill="#edb830" />
+          <ellipse cx="0" cy="1" rx="2" ry="0.5" fill="#a07810" />
+          <circle cx="0" cy="5.3" r="0.6" fill="#a07810" />
+        </g>
+      );
+    case "petpearls":
+      return (
+        <g key={id} transform={t}>
+          {[-5, -3, -1, 1, 3, 5].map((x, i) => (
+            <circle key={i} cx={x} cy={i % 2 ? 0.5 : -0.5} r="1" fill="#fff5e8" stroke="#d8c8a8" strokeWidth="0.2" />
+          ))}
+          {[-5, -3, -1, 1, 3, 5].map((x, i) => (
+            <circle key={`g${i}`} cx={x - 0.3} cy={(i % 2 ? 0.5 : -0.5) - 0.3} r="0.3" fill="#fff" opacity="0.8" />
+          ))}
+        </g>
+      );
+    case "petmedal":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -2 -1 L -1 4 M 2 -1 L 1 4" stroke="#cc3030" strokeWidth="1.2" />
+          <circle cx="0" cy="5" r="3" fill="#edb830" />
+          <circle cx="0" cy="5" r="2" fill="#fff080" />
+          <text x="0" y="6.5" fontSize="3" fill="#a07810" textAnchor="middle" fontWeight="bold">1</text>
+        </g>
+      );
+    case "petgem":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -4 0 L 4 0" stroke="#a060c0" strokeWidth="0.5" />
+          <path d="M 0 0 L 0 3 L -2 5 L 0 7 L 2 5 L 0 3 Z" fill="#a060c0" />
+          <path d="M 0 3 L -2 5 L 0 5 Z" fill="#c080e0" />
+          <circle cx="-0.5" cy="4.5" r="0.4" fill="#fff" opacity="0.8" />
+        </g>
+      );
+
+    // ─── BACK ITEMS ───
+    case "petwings":
+      return (
+        <g key={id} transform={t}>
+          <path d="M 0 0 Q -8 -8 -12 -2 Q -10 4 -2 2 Z" fill="#ffe0f0" stroke="#ff90c0" strokeWidth="0.4" filter="url(#watercolorSoft)" />
+          <path d="M 0 0 Q 8 -8 12 -2 Q 10 4 2 2 Z" fill="#ffe0f0" stroke="#ff90c0" strokeWidth="0.4" filter="url(#watercolorSoft)" />
+          <path d="M -2 0 Q -8 -4 -10 0" stroke="#ffb0d0" strokeWidth="0.3" fill="none" />
+          <path d="M 2 0 Q 8 -4 10 0" stroke="#ffb0d0" strokeWidth="0.3" fill="none" />
+          <circle cx="-9" cy="-2" r="0.5" fill="#fff" opacity="0.9" />
+          <circle cx="9" cy="-2" r="0.5" fill="#fff" opacity="0.9" />
+        </g>
+      );
+    case "petbutterfly":
+      return (
+        <g key={id} transform={t}>
+          <path d="M 0 0 Q -7 -5 -10 0 Q -7 4 0 2 Z" fill="#a060c0" />
+          <path d="M 0 0 Q 7 -5 10 0 Q 7 4 0 2 Z" fill="#a060c0" />
+          <circle cx="-7" cy="-1" r="1.2" fill="#fff080" />
+          <circle cx="7" cy="-1" r="1.2" fill="#fff080" />
+          <path d="M 0 -1 L 0 3" stroke="#3a2040" strokeWidth="0.8" />
+        </g>
+      );
+    case "petcape":
+      return (
+        <g key={id} transform={t}>
+          <path d="M -8 -2 L 8 -2 L 10 8 L 0 12 L -10 8 Z" fill="#cc3030" filter="url(#watercolorSoft)" />
+          <path d="M -8 -2 L 8 -2" stroke="#edb830" strokeWidth="0.6" />
+          <path d="M -6 0 L -8 8 M 0 1 L 0 11 M 6 0 L 8 8" stroke="#a02020" strokeWidth="0.4" fill="none" />
+        </g>
+      );
+    case "petsparkle":
+      return (
+        <g key={id} transform={t}>
+          {[
+            { x: -8, y: -3, s: 1.4 },
+            { x: -10, y: 2, s: 1.0 },
+            { x: -6, y: 5, s: 0.8 },
+            { x: -12, y: -1, s: 0.6 },
+            { x: -4, y: -2, s: 0.7 },
+          ].map((p, i) => (
+            <text key={i} x={p.x} y={p.y} fontSize={6 * p.s} fill="#fff080" opacity="0.9">
+              ✦
+              <animate attributeName="opacity" values="0.4;1;0.4" dur={`${1.5 + i * 0.3}s`} repeatCount="indefinite" />
+            </text>
+          ))}
+        </g>
+      );
+    case "petrainbow":
+      return (
+        <g key={id} transform={t}>
+          {[
+            { c: "#ff6080", r: 14 },
+            { c: "#ffa030", r: 12 },
+            { c: "#fff080", r: 10 },
+            { c: "#5caa5e", r: 8 },
+            { c: "#5a8fc7", r: 6 },
+            { c: "#a060c0", r: 4 },
+          ].map((arc, i) => (
+            <path key={i} d={`M -${arc.r} 4 Q 0 -${arc.r * 0.8} ${arc.r} 4`} fill="none" stroke={arc.c} strokeWidth="1.2" opacity="0.85" filter="url(#watercolorSoft)" />
+          ))}
+        </g>
+      );
+
+    default: return null;
+  }
 }
 
 /* ─── QUOTE INPUT ─── tiny inline input + add button used in manage panel */
@@ -1426,7 +1757,7 @@ function NearestExamCard({ exam, canEdit, onDelete }) {
    - 0.3–0.9s: pet wiggles + a "mouth open" dark patch pulses to show eating
    - 0.9s+:    hearts float upward, fading
 */
-function PetEatingAnimation({ petId, feedingFood, showHearts, size = 180 }) {
+function PetEatingAnimation({ petId, feedingFood, showHearts, size = 180, petAccessories = [] }) {
   // Render the pet plus any active feeding/heart layers, sized to fit `size`
   // We draw inside a centered SVG with viewBox -32..32. Pet renders at scale 1.4 (matches pool default).
   const eating = !!feedingFood;
@@ -1477,7 +1808,7 @@ function PetEatingAnimation({ petId, feedingFood, showHearts, size = 180 }) {
         {/* Soft reflection underneath */}
         <ellipse cx="0" cy="22" rx="20" ry="4" fill={C.water1} opacity="0.35" filter="url(#watercolorSoft)" />
         <g transform="scale(1.4)">
-          <PetSVG petId={petId} centered={true} mood={eating ? "happy" : "neutral"} />
+          <PetSVG petId={petId} centered={true} mood={eating ? "happy" : "neutral"} petAccessories={petAccessories} />
         </g>
 
         {/* Mouth-open dark patch — pulses during eating to show chomping.
@@ -1618,7 +1949,7 @@ function FoodShop({ student, onClose, onBuy }) {
           border: `1px solid ${C.water1}40`,
         }}>
           <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
-            <PetEatingAnimation petId={pet.id} feedingFood={feedingFood} showHearts={showHearts} size={88} />
+            <PetEatingAnimation petId={pet.id} feedingFood={feedingFood} showHearts={showHearts} size={88} petAccessories={student.petAccessories || []} />
           </div>
         </div>
 
@@ -1699,7 +2030,7 @@ function FoodShop({ student, onClose, onBuy }) {
 
 /* ─── MY POOL ─── personal Tamagotchi-style scene where the student cares for their pet */
 function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
-  // Live tick for stat updates (decay shows in real-time as user watches)
+  // Live tick for stat updates
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 5000);
@@ -1710,168 +2041,173 @@ function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
   const pet = student?.pet ? getPet(student.pet) : null;
   const careLabel = care ? getCareLabel(care.avgCare) : null;
   const incomeMul = care ? getCareIncomeMultiplier(care.avgCare) : 1.0;
+  const ownedPets = student?.ownedPets || [];
 
   return (
-    <div style={modalBackdropStyle} onClick={onClose}>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1500,
+      background: C.bg,
+      overflow: "auto",
+    }}>
+      {/* Close button - top right */}
+      <button onClick={onClose}
+        style={{
+          position: "fixed", top: 16, right: 20, zIndex: 30,
+          background: `${C.card}ee`, border: `2px solid ${C.fur2}40`,
+          padding: "8px 18px", borderRadius: 999,
+          fontSize: 16, fontWeight: 700, color: C.text,
+          fontFamily: "'Patrick Hand', cursive",
+          cursor: "pointer", backdropFilter: "blur(8px)",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
+        }}>
+        ← Back
+      </button>
+
+      {/* Header banner */}
       <div style={{
-        ...modalCardStyle, width: 540, maxWidth: "95vw", padding: "20px 24px",
-        background: `linear-gradient(180deg, ${C.snow1} 0%, ${C.water2}30 60%, ${C.water1}50 100%)`,
-        position: "relative", overflow: "hidden",
-      }} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "relative", zIndex: 2 }}>
-          <div>
-            <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🛁 {student.name}'s Pool</h2>
-            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
-              {pet ? `Caring for ${pet.name} ${pet.emoji}` : "No pet yet"}
-            </p>
-          </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        position: "fixed", top: 16, left: 20, zIndex: 30,
+        background: `${C.card}ee`, padding: "10px 20px", borderRadius: 16,
+        backdropFilter: "blur(8px)", boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+        border: `2px solid ${C.gold}40`,
+      }}>
+        <h2 style={{ margin: 0, color: C.text, fontSize: 22, fontFamily: "'Patrick Hand', cursive" }}>
+          🌸 {student.name}'s Hot Spring
+        </h2>
+        <p style={{ margin: "2px 0 0", color: C.textLight, fontSize: 13, fontFamily: "'Patrick Hand', cursive" }}>
+          {pet ? `Caring for ${pet.name} ${pet.emoji}` : "No pet yet — visit the Pet Mart!"}
+          {ownedPets.length > 1 && ` · ${ownedPets.length} pets total`}
+        </p>
+      </div>
+
+      {/* Main scene — same components as homepage */}
+      <div style={{
+        position: "relative", margin: "8px auto 0",
+        width: "96%", maxWidth: 1300, height: "calc(100vh - 240px)",
+        minHeight: 400,
+        borderRadius: 20, overflow: "hidden",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+        marginTop: 80,
+      }}>
+        <BackgroundScene w={1300} h={800} />
+        <div style={{ position: "absolute", top: "30%", left: "6%", right: "6%", bottom: "6%", borderRadius: 20, overflow: "hidden" }}>
+          <WaterCanvas width={1150} height={550} />
         </div>
+        <SteamParticles count={18} />
 
-        {/* No pet state */}
-        {!pet ? (
-          <div style={{ textAlign: "center", padding: "30px 12px" }}>
-            <div style={{ fontSize: 64, marginBottom: 12, opacity: 0.6 }}>🐣</div>
-            <h3 style={{ color: C.text, margin: "0 0 8px" }}>You don't have a pet yet</h3>
-            <p style={{ color: C.textLight, fontSize: 14, marginBottom: 14 }}>
-              Open a mystery pack from the Pet Mart to adopt your first pet!
-            </p>
-            <button onClick={() => { onClose(); onPetMart && onPetMart(); }} style={primaryBtnStyle}>
-              🎁 Open Pet Mart
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Pool scene with pet */}
-            <div style={{
-              position: "relative",
-              height: 200,
-              background: `linear-gradient(180deg, ${C.snow1}80 0%, ${C.water1}90 100%)`,
-              borderRadius: 16,
-              marginBottom: 14,
-              overflow: "hidden",
-              border: `2px solid ${C.water1}80`,
-            }}>
-              {/* Bubbles */}
-              <div style={{ position: "absolute", left: "20%", top: "70%", fontSize: 12, opacity: 0.4 }}>·</div>
-              <div style={{ position: "absolute", left: "60%", top: "75%", fontSize: 10, opacity: 0.3 }}>·</div>
-              <div style={{ position: "absolute", left: "40%", top: "80%", fontSize: 14, opacity: 0.5 }}>·</div>
-              {/* Pet display - watercolor SVG with mood animation, matches monkey style */}
-              <div style={{
-                position: "absolute", left: "50%", top: "50%",
-                transform: "translate(-50%, -50%)",
-                animation: care && care.happiness > 60 ? "petBounce 1.6s ease-in-out infinite" : care && care.happiness < 30 ? "petSad 3s ease-in-out infinite" : "petIdle 3s ease-in-out infinite",
-                filter: care && care.happiness < 25 ? "saturate(0.55) brightness(0.95)" : "none",
-                transformOrigin: "center",
-              }}>
-                <PetEatingAnimation petId={pet.id} feedingFood={null} showHearts={false} size={200} />
-              </div>
-              <style>{`
-                @keyframes petBounce { 0%,100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-12px); } }
-                @keyframes petIdle { 0%,100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-4px); } }
-                @keyframes petSad { 0%,100% { transform: translate(-50%, -50%) translateY(2px) rotate(-2deg); } 50% { transform: translate(-50%, -50%) translateY(0) rotate(2deg); } }
-              `}</style>
-              {/* Mood label */}
-              {careLabel && (
+        {/* The student's monkey, big and centered, surrounded by all their pets */}
+        <div style={{
+          position: "absolute", left: "50%", top: "55%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 5,
+        }}>
+          <MonkeySVG
+            size={220}
+            mood={(care && care.happiness > 60) ? "excited" : (care && care.happiness < 30) ? "neutral" : "happy"}
+            label={student.name}
+            points={student.points}
+            variant={0}
+            accessories={student.accessories || []}
+            pet={student.pet}
+            petAccessories={student.petAccessories || []}
+            ownedPets={ownedPets}
+            streakLevel="sprout"
+          />
+        </div>
+      </div>
+
+      {/* Bottom dock — pet care stats + actions (only if a pet is equipped) */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        background: `linear-gradient(180deg, transparent 0%, ${C.bg}f0 30%, ${C.bg} 100%)`,
+        padding: "30px 24px 18px",
+        zIndex: 20,
+      }}>
+        <div style={{
+          maxWidth: 720, margin: "0 auto",
+          background: `${C.card}f8`, borderRadius: 18,
+          padding: "14px 20px",
+          boxShadow: "0 6px 24px rgba(0,0,0,0.15)",
+          border: `2px solid ${C.gold}30`,
+        }}>
+          {!pet ? (
+            <div style={{ textAlign: "center", padding: "10px 0" }}>
+              <div style={{ fontSize: 36, marginBottom: 6 }}>🐣</div>
+              <p style={{ color: C.text, fontSize: 16, marginBottom: 10, fontFamily: "'Patrick Hand', cursive" }}>
+                You don't have a pet yet — open a mystery pack!
+              </p>
+              <button onClick={() => { onClose(); onPetMart && onPetMart(); }} style={primaryBtnStyle}>
+                🎁 Open Pet Mart
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Stats + badges row */}
+              <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                {careLabel && (
+                  <div style={{
+                    background: `${careLabel.color}e0`, color: "white",
+                    padding: "5px 12px", borderRadius: 999,
+                    fontSize: 13, fontWeight: 700, fontFamily: "'Patrick Hand', cursive",
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}>
+                    <span>{careLabel.emoji}</span><span>{careLabel.label}</span>
+                  </div>
+                )}
                 <div style={{
-                  position: "absolute", top: 12, right: 12,
-                  background: `${careLabel.color}e0`,
-                  color: "white",
-                  padding: "4px 10px",
-                  borderRadius: 999,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  fontFamily: "'Patrick Hand', cursive",
-                  display: "flex", alignItems: "center", gap: 4,
+                  background: `${C.snow1}`, color: incomeMul >= 1.3 ? C.green : incomeMul >= 1.0 ? C.text : C.accent,
+                  padding: "5px 12px", borderRadius: 999,
+                  fontSize: 12, fontWeight: 700, fontFamily: "'Patrick Hand', cursive",
                 }}>
-                  <span>{careLabel.emoji}</span>
-                  <span>{careLabel.label}</span>
+                  💰 {Math.round(incomeMul * 100)}% income
                 </div>
-              )}
-              {/* Income multiplier badge */}
-              <div style={{
-                position: "absolute", top: 12, left: 12,
-                background: `${C.card}e0`,
-                color: incomeMul >= 1.3 ? C.green : incomeMul >= 1.0 ? C.text : C.accent,
-                padding: "4px 10px",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 700,
-                fontFamily: "'Patrick Hand', cursive",
-              }}>
-                💰 {Math.round(incomeMul * 100)}% income
-              </div>
-            </div>
-
-            {/* Stats bars */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>🍽️ Hunger</span>
-                  <span style={{ fontSize: 12, color: C.textLight }}>{care?.hunger ?? 0}/100</span>
-                </div>
-                <div style={{ height: 12, background: `${C.fur2}30`, borderRadius: 6, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%",
-                    width: `${care?.hunger ?? 0}%`,
-                    background: care && care.hunger > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.hunger > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
-                    transition: "width 0.6s",
-                  }} />
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2, fontSize: 12, color: C.text, fontFamily: "'Patrick Hand', cursive" }}>
+                    <span style={{ fontWeight: 700 }}>🍽️ Hunger {care?.hunger ?? 0}</span>
+                    <span style={{ fontWeight: 700 }}>💖 Happy {care?.happiness ?? 0}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ flex: 1, height: 10, background: `${C.fur2}30`, borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", width: `${care?.hunger ?? 0}%`,
+                        background: care && care.hunger > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.hunger > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
+                        transition: "width 0.6s",
+                      }} />
+                    </div>
+                    <div style={{ flex: 1, height: 10, background: `${C.fur2}30`, borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", width: `${care?.happiness ?? 0}%`,
+                        background: care && care.happiness > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.happiness > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
+                        transition: "width 0.6s",
+                      }} />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>💖 Happiness</span>
-                  <span style={{ fontSize: 12, color: C.textLight }}>{care?.happiness ?? 0}/100</span>
-                </div>
-                <div style={{ height: 12, background: `${C.fur2}30`, borderRadius: 6, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%",
-                    width: `${care?.happiness ?? 0}%`,
-                    background: care && care.happiness > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.happiness > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
-                    transition: "width 0.6s",
-                  }} />
-                </div>
+
+              {/* Action buttons */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <button onClick={onShop}
+                  style={{
+                    padding: "12px", borderRadius: 14, border: "none",
+                    background: `linear-gradient(135deg, ${C.gold}, #b88810)`,
+                    color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.gold}40`,
+                  }}>
+                  🍱 Feed
+                </button>
+                <button onClick={onWalk}
+                  style={{
+                    padding: "12px", borderRadius: 14, border: "none",
+                    background: `linear-gradient(135deg, ${C.green}, #4a8a4c)`,
+                    color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.green}40`,
+                  }}>
+                  🚶 Walk
+                </button>
               </div>
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button onClick={onShop}
-                style={{
-                  padding: "14px", borderRadius: 14, border: "none",
-                  background: `linear-gradient(135deg, ${C.gold}, #b88810)`,
-                  color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
-                  fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.gold}40`,
-                }}>
-                🍱 Feed
-                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 400 }}>Buy food</div>
-              </button>
-              <button onClick={onWalk}
-                style={{
-                  padding: "14px", borderRadius: 14, border: "none",
-                  background: `linear-gradient(135deg, ${C.green}, #4a8a4c)`,
-                  color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
-                  fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.green}40`,
-                }}>
-                🚶 Walk
-                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 400 }}>+happiness</div>
-              </button>
-            </div>
-
-            {/* Care tip */}
-            <div style={{
-              marginTop: 12, padding: "8px 12px",
-              background: `${C.snow1}80`, borderRadius: 10,
-              fontSize: 12, color: C.textLight, textAlign: "center",
-              fontStyle: "italic",
-            }}>
-              💡 Pet stats decay over time. Better care = more weekly stars!
-              {care && care.avgCare < 30 && <div style={{ color: C.accent, marginTop: 4, fontWeight: 700 }}>Your pet needs attention!</div>}
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2153,7 +2489,7 @@ function WalkGame({ student, onClose, onComplete }) {
               }}>
               <svg width="80" height="80" viewBox="-32 -32 64 64" style={{ overflow: "visible" }}>
                 <g transform="scale(1.15)">
-                  <PetSVG petId={pet.id} centered={true} mood="happy" />
+                  <PetSVG petId={pet.id} centered={true} mood="happy" petAccessories={student.petAccessories || []} />
                 </g>
               </svg>
             </div>
@@ -2192,7 +2528,7 @@ function WalkGame({ student, onClose, onComplete }) {
                   </div>
                 )}
               </div>
-              <button onClick={finishHandler} style={primaryBtnStyle}>Back to Pool</button>
+              <button onClick={finishHandler} style={primaryBtnStyle}>Back to Hot Spring</button>
             </div>
           )}
         </div>
@@ -2206,7 +2542,7 @@ function WalkGame({ student, onClose, onComplete }) {
 }
 
 /* ─── IMPROVED MONKEY SVG ─── */
-function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null, streakLevel = "sprout" }) {
+function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null, petAccessories = [], ownedPets = [], streakLevel = "sprout" }) {
   const { setAnyHovering } = useContext(HoverContext);
   const [bob, setBob] = useState(0);
   const [sway, setSway] = useState(0);
@@ -3604,8 +3940,39 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         <ellipse cx="-20" cy="26" rx="8" ry="2" fill="white" opacity="0.15" />
         <ellipse cx="18" cy="27" rx="6" ry="1.5" fill="white" opacity="0.12" />
 
-        {/* Pet companion - rendered ON TOP of water */}
-        {pet && <PetSVG petId={pet} side="right" />}
+        {/* Pet companions - rendered ON TOP of water. Multi-pet: equipped pet on right, others orbit at varied positions. */}
+        {(() => {
+          // Build the pet list. Equipped pet always shown first/right. Other owned pets fan out.
+          const allPets = [];
+          if (pet) allPets.push(pet);
+          if (ownedPets && ownedPets.length > 1) {
+            for (const id of ownedPets) {
+              if (id !== pet && !allPets.includes(id)) allPets.push(id);
+            }
+          }
+          // Position table: index → { side, scale, dx, dy }
+          // index 0 = main pet at right; 1 = left; 2 = back-right (smaller); 3 = back-left; 4+ = behind
+          const positions = [
+            { side: "right", scale: 1.0, dx: 0,   dy: 0 },
+            { side: "left",  scale: 1.0, dx: 0,   dy: 2 },
+            { side: "right", scale: 0.75, dx: 18, dy: -20 },
+            { side: "left",  scale: 0.75, dx: -18,dy: -20 },
+            { side: "right", scale: 0.65, dx: -8, dy: 18 },
+            { side: "left",  scale: 0.65, dx: 8,  dy: 18 },
+            { side: "right", scale: 0.6,  dx: 32, dy: 4  },
+            { side: "left",  scale: 0.6,  dx: -32,dy: 4  },
+            { side: "right", scale: 0.5,  dx: 26, dy: -32 },
+          ];
+          return allPets.map((petId, i) => {
+            const p = positions[Math.min(i, positions.length - 1)];
+            const accs = (petId === pet) ? petAccessories : []; // only main pet shows accessories for now
+            return (
+              <g key={petId} transform={`translate(${p.dx}, ${p.dy}) scale(${p.scale})`}>
+                <PetSVG petId={petId} side={p.side} petAccessories={accs} />
+              </g>
+            );
+          });
+        })()}
 
         {/* Hover splash ring - expanding ripple */}
         {hovering && (
@@ -5025,21 +5392,32 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
 
   return (
     <div style={modalBackdropStyle}>
-      <div style={{ ...modalCardStyle, width: 580, maxWidth: "95vw", position: "relative", overflow: "hidden" }}>
+      <div style={{
+        ...modalCardStyle,
+        width: "min(960px, 96vw)",
+        maxWidth: "96vw",
+        height: "min(720px, 94vh)",
+        maxHeight: "94vh",
+        position: "relative",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        padding: "28px 36px",
+      }}>
         {/* Hawk overlay */}
         {showHawk && <HawkAttack onComplete={() => setShowHawk(false)} />}
         {/* Food overlay */}
         {showFood && <FoodReward onComplete={() => setShowFood(false)} />}
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <div>
-            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>📚 Quiz Time!</h2>
-            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 28 }}>📚 Quiz Time!</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 16 }}>
               Question {currentIdx + 1} of {questions.length} · Score: {score}
             </p>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
 
         {/* Progress bar */}
@@ -5052,7 +5430,7 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
         </div>
 
         {/* Mini monkey reacting */}
-        <div style={{ textAlign: "center", marginBottom: 16, height: 100 }}>
+        <div style={{ textAlign: "center", marginBottom: 18, height: 120, flexShrink: 0 }}>
           <div style={{
             display: "inline-block",
             animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : showFood ? "monkeyLeapEat 2.2s ease-in-out forwards" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none",
@@ -5070,79 +5448,88 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
               }
             `}</style>
             <MonkeySVG
-              size={90}
+              size={110}
               mood={showFood ? "eating" : monkeyHappy ? "excited" : monkeyShake ? "neutral" : "happy"}
               variant={5}
             />
           </div>
         </div>
 
-        {/* Question */}
+        {/* Quiz body — centered question + options + result message */}
         <div style={{
-          background: `${C.snow1}80`, borderRadius: 16, padding: "18px 22px", marginBottom: 16,
-          fontSize: 20, color: C.text, fontWeight: 600, textAlign: "center",
-          minHeight: 60, display: "flex", alignItems: "center", justifyContent: "center",
+          flex: 1, display: "flex", flexDirection: "column", justifyContent: "center",
+          gap: 18, minHeight: 0,
         }}>
-          {currentQ.q}
-        </div>
-
-        {/* Options */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          {currentQ.options.map((opt, idx) => {
-            const isCorrect = idx === currentQ.correct;
-            const isSelected = idx === selected;
-            const colors = [C.accent, C.gold, "#5a8fc7", C.green];
-            let bg = colors[idx];
-            let textColor = "white";
-            if (showResult) {
-              if (isCorrect) bg = C.green;
-              else if (isSelected) bg = "#a85050";
-              else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
-            }
-            return (
-              <button key={idx} onClick={() => pickAnswer(idx)} disabled={showResult}
-                style={{
-                  padding: "16px 14px", borderRadius: 14, border: "none",
-                  background: bg, color: textColor,
-                  fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: showResult ? "default" : "pointer",
-                  transition: "all 0.3s, transform 0.15s",
-                  boxShadow: isSelected ? `0 0 0 3px ${C.text}` : "0 3px 8px rgba(0,0,0,0.1)",
-                  textAlign: "left", display: "flex", alignItems: "center", gap: 10,
-                  minHeight: 60,
-                }}
-                onMouseEnter={e => !showResult && (e.currentTarget.style.transform = "translateY(-2px)")}
-                onMouseLeave={e => !showResult && (e.currentTarget.style.transform = "translateY(0)")}>
-                <span style={{
-                  width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.3)",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  fontSize: 16, fontWeight: 700,
-                }}>{"ABCD"[idx]}</span>
-                <span style={{ flex: 1 }}>{opt}</span>
-                {showResult && isCorrect && <span style={{ fontSize: 22 }}>✓</span>}
-                {showResult && isSelected && !isCorrect && <span style={{ fontSize: 22 }}>✗</span>}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Next/result message */}
-        {showResult && (
-          <div style={{ textAlign: "center" }}>
-            <p style={{
-              color: selected === currentQ.correct ? C.green : C.accent,
-              fontSize: 18, fontWeight: 700, margin: "0 0 12px",
-            }}>
-              {selected === currentQ.correct
-                ? "🎉 Correct! Your monkey gets a treat!"
-                : "🦅 Yikes! A hawk attacked your monkey!"}
-            </p>
-            <button onClick={nextQuestion} disabled={showHawk || showFood}
-              style={{ ...primaryBtnStyle, opacity: (showHawk || showFood) ? 0.5 : 1 }}>
-              {isLast ? "Finish Quiz" : "Next Question →"}
-            </button>
+          {/* Question */}
+          <div style={{
+            background: `${C.snow1}80`, borderRadius: 18, padding: "26px 30px",
+            fontSize: 28, color: C.text, fontWeight: 600, textAlign: "center",
+            minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center",
+            lineHeight: 1.4, wordBreak: "break-word",
+          }}>
+            {currentQ.q}
           </div>
-        )}
+
+          {/* Options */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {currentQ.options.map((opt, idx) => {
+              const isCorrect = idx === currentQ.correct;
+              const isSelected = idx === selected;
+              const colors = [C.accent, C.gold, "#5a8fc7", C.green];
+              let bg = colors[idx];
+              let textColor = "white";
+              if (showResult) {
+                if (isCorrect) bg = C.green;
+                else if (isSelected) bg = "#a85050";
+                else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
+              }
+              return (
+                <button key={idx} onClick={() => pickAnswer(idx)} disabled={showResult}
+                  style={{
+                    padding: "20px 22px", borderRadius: 16, border: "none",
+                    background: bg, color: textColor,
+                    fontFamily: "'Patrick Hand', cursive", fontSize: 22, fontWeight: 700,
+                    cursor: showResult ? "default" : "pointer",
+                    transition: "all 0.3s, transform 0.15s",
+                    boxShadow: isSelected ? `0 0 0 3px ${C.text}` : "0 3px 8px rgba(0,0,0,0.1)",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 12,
+                    minHeight: 72,
+                    lineHeight: 1.3,
+                    wordBreak: "break-word",
+                  }}
+                  onMouseEnter={e => !showResult && (e.currentTarget.style.transform = "translateY(-2px)")}
+                  onMouseLeave={e => !showResult && (e.currentTarget.style.transform = "translateY(0)")}>
+                  <span style={{
+                    width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.3)",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    fontSize: 20, fontWeight: 700,
+                  }}>{"ABCD"[idx]}</span>
+                  <span style={{ flex: 1 }}>{opt}</span>
+                  {showResult && isCorrect && <span style={{ fontSize: 28, flexShrink: 0 }}>✓</span>}
+                  {showResult && isSelected && !isCorrect && <span style={{ fontSize: 28, flexShrink: 0 }}>✗</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Next/result message */}
+          {showResult && (
+            <div style={{ textAlign: "center" }}>
+              <p style={{
+                color: selected === currentQ.correct ? C.green : C.accent,
+                fontSize: 22, fontWeight: 700, margin: "0 0 14px",
+              }}>
+                {selected === currentQ.correct
+                  ? "🎉 Correct! Your monkey gets a treat!"
+                  : "🦅 Yikes! A hawk attacked your monkey!"}
+              </p>
+              <button onClick={nextQuestion} disabled={showHawk || showFood}
+                style={{ ...primaryBtnStyle, opacity: (showHawk || showFood) ? 0.5 : 1, fontSize: 18, padding: "12px 28px" }}>
+                {isLast ? "Finish Quiz" : "Next Question →"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -5538,9 +5925,9 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
   // Responsive canvas size
   useEffect(() => {
     const updateSize = () => {
-      const containerW = Math.min(window.innerWidth - 40, 720);
+      const containerW = Math.min(window.innerWidth - 40, 1100);
       const w = Math.max(320, containerW);
-      const h = Math.round(w * 0.4);
+      const h = Math.round(w * 0.42);
       setSize({ w, h });
     };
     updateSize();
@@ -5881,17 +6268,17 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     <div style={modalBackdropStyle}>
       <div style={{
         ...modalCardStyle, width: Math.min(size.w + 80, window.innerWidth - 20),
-        maxWidth: "98vw", padding: "20px 24px", position: "relative",
+        maxWidth: "98vw", padding: "24px 30px", position: "relative",
       }} ref={containerRef}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
           <div>
-            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🏃 {mission.name}</h2>
-            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 28 }}>🏃 {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
             </p>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
 
         {/* Game canvas */}
@@ -6031,24 +6418,24 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 24, padding: 16, zIndex: 50,
+            borderRadius: 24, padding: 24, zIndex: 50,
           }}>
             <div style={{
-              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              background: C.card, borderRadius: 22, padding: "28px 32px", width: "100%", maxWidth: 700,
               boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
             }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 14, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
-                <div style={{ fontSize: 13, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 17, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
+                <div style={{ fontSize: 16, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
               </div>
               <div style={{
-                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
-                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
-                display: "flex", alignItems: "center", justifyContent: "center",
+                background: `${C.snow1}`, borderRadius: 14, padding: "20px 22px", marginBottom: 18,
+                fontSize: 26, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 70,
+                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4,
               }}>
                 {currentQ.q}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {currentQ.options.map((opt, idx) => {
                   const isCorrect = idx === currentQ.correct;
                   const isSelected = idx === selectedAns;
@@ -6062,11 +6449,11 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
                   return (
                     <button key={idx} onClick={() => answerQuestion(idx)} disabled={selectedAns !== null}
                       style={{
-                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        padding: "16px 16px", borderRadius: 12, border: "none",
                         background: bg, color: textColor,
-                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
                         cursor: selectedAns !== null ? "default" : "pointer", textAlign: "left",
-                        minHeight: 50,
+                        minHeight: 64, lineHeight: 1.3,
                       }}>
                       <strong>{["A","B","C","D"][idx]}.</strong> {opt}
                     </button>
@@ -6074,12 +6461,12 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
                 })}
               </div>
               {questionResult === "wrong" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.accent}20`, borderRadius: 10, color: C.accentDark, fontSize: 16, textAlign: "center" }}>
                   ❌ Wrong! You lost a life. Keep going!
                 </div>
               )}
               {questionResult === "correct" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.green}20`, borderRadius: 10, color: C.green, fontSize: 16, textAlign: "center" }}>
                   ✅ Correct! Keep running!
                 </div>
               )}
@@ -6091,8 +6478,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
   );
 }
 
-/* ─── FLAPPY MISSION ─── Flappy-bird style, monkey navigates through icicles. Every few
-   icicles passed = checkpoint question. Answer wrong = lose a life. */
+
 function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -6566,17 +6952,17 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     <div style={modalBackdropStyle}>
       <div style={{
         ...modalCardStyle, width: Math.min(size.w + 80, window.innerWidth - 20),
-        maxWidth: "98vw", padding: "20px 24px", position: "relative",
+        maxWidth: "98vw", padding: "24px 30px", position: "relative",
       }} ref={containerRef}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
           <div>
-            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>❄️ {mission.name}</h2>
-            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 28 }}>❄️ {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
             </p>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
 
         {/* Game canvas */}
@@ -6714,24 +7100,24 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 24, padding: 16, zIndex: 50,
+            borderRadius: 24, padding: 24, zIndex: 50,
           }}>
             <div style={{
-              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              background: C.card, borderRadius: 22, padding: "28px 32px", width: "100%", maxWidth: 700,
               boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
             }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 14, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
-                <div style={{ fontSize: 13, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 17, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
+                <div style={{ fontSize: 16, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
               </div>
               <div style={{
-                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
-                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
-                display: "flex", alignItems: "center", justifyContent: "center",
+                background: `${C.snow1}`, borderRadius: 14, padding: "20px 22px", marginBottom: 18,
+                fontSize: 26, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 70,
+                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4,
               }}>
                 {currentQ.q}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {currentQ.options.map((opt, idx) => {
                   const isCorrect = idx === currentQ.correct;
                   const isSelected = idx === selectedAns;
@@ -6745,11 +7131,11 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
                   return (
                     <button key={idx} onClick={() => answerQuestion(idx)} disabled={selectedAns !== null}
                       style={{
-                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        padding: "16px 16px", borderRadius: 12, border: "none",
                         background: bg, color: textColor,
-                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
                         cursor: selectedAns !== null ? "default" : "pointer", textAlign: "left",
-                        minHeight: 50,
+                        minHeight: 64, lineHeight: 1.3,
                       }}>
                       <strong>{["A","B","C","D"][idx]}.</strong> {opt}
                     </button>
@@ -6757,12 +7143,12 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
                 })}
               </div>
               {questionResult === "wrong" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.accent}20`, borderRadius: 10, color: C.accentDark, fontSize: 16, textAlign: "center" }}>
                   ❌ Wrong! You lost a life.
                 </div>
               )}
               {questionResult === "correct" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.green}20`, borderRadius: 10, color: C.green, fontSize: 16, textAlign: "center" }}>
                   ✅ Correct! Keep flying!
                 </div>
               )}
@@ -6933,22 +7319,22 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
     }, isCorrect ? 800 : 1500);
   };
 
-  const cellSize = 36;
+  const cellSize = 48;
   const currentQ = questions[questionIdx];
   const progress = (questionsCompleted / targetQuestions) * 100;
 
   return (
     <div style={modalBackdropStyle}>
-      <div style={{ ...modalCardStyle, width: 560, maxWidth: "95vw", maxHeight: "94vh", overflowY: "auto", position: "relative" }}>
+      <div style={{ ...modalCardStyle, width: "min(960px, 96vw)", maxWidth: "96vw", height: "min(820px, 95vh)", maxHeight: "95vh", overflowY: "auto", position: "relative", padding: "24px 30px" }}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div>
-            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 {mission.name}</h2>
-            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 28 }}>🚀 {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               {questionsCompleted} / {targetQuestions} answered · {totalReward} ★ reward
             </p>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
         </div>
 
         {/* Progress bar */}
@@ -7042,17 +7428,17 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
             </div>
 
             {/* Score */}
-            <div style={{ textAlign: "center", fontSize: 16, color: C.textLight, marginBottom: 10 }}>
-              Block score: <strong style={{ color: C.gold, fontSize: 20 }}>{score}</strong>
+            <div style={{ textAlign: "center", fontSize: 18, color: C.textLight, marginBottom: 12 }}>
+              Block score: <strong style={{ color: C.gold, fontSize: 24 }}>{score}</strong>
             </div>
 
             {/* Tray */}
-            <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: 18, marginBottom: 10 }}>
               {tray.map((shape, idx) => {
-                if (!shape) return <div key={idx} style={{ width: 80, height: 80, opacity: 0.3, display: "flex", alignItems: "center", justifyContent: "center", color: C.textLight, fontSize: 12 }}>—</div>;
+                if (!shape) return <div key={idx} style={{ width: 100, height: 100, opacity: 0.3, display: "flex", alignItems: "center", justifyContent: "center", color: C.textLight, fontSize: 13 }}>—</div>;
                 const maxR = Math.max(...shape.cells.map(c => c[0]));
                 const maxC = Math.max(...shape.cells.map(c => c[1]));
-                const traySize = 18;
+                const traySize = 22;
                 const isSelected = selectedShapeIdx === idx;
                 return (
                   <div key={idx} onClick={() => setSelectedShapeIdx(idx)}
@@ -7072,7 +7458,7 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
                 );
               })}
             </div>
-            <div style={{ textAlign: "center", fontSize: 12, color: C.textLight }}>
+            <div style={{ textAlign: "center", fontSize: 14, color: C.textLight }}>
               {selectedShapeIdx === null ? "👆 Pick a shape, then click on the grid" : "Click a cell to place — you'll need to answer a question!"}
             </div>
           </>
@@ -7083,21 +7469,21 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 24, padding: 16, zIndex: 50,
+            borderRadius: 24, padding: 24, zIndex: 50,
           }}>
             <div style={{
-              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              background: C.card, borderRadius: 22, padding: "28px 32px", width: "100%", maxWidth: 700,
               boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
             }}>
-              <div style={{ fontSize: 14, color: C.textLight, marginBottom: 6 }}>Answer to place block</div>
+              <div style={{ fontSize: 17, color: C.textLight, marginBottom: 8 }}>Answer to place block</div>
               <div style={{
-                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
-                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
-                display: "flex", alignItems: "center", justifyContent: "center",
+                background: `${C.snow1}`, borderRadius: 14, padding: "20px 22px", marginBottom: 18,
+                fontSize: 26, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 70,
+                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4,
               }}>
                 {currentQ.q}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {currentQ.options.map((opt, idx) => {
                   const isCorrect = idx === currentQ.correct;
                   const isSelected = idx === selected;
@@ -7111,11 +7497,11 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
                   return (
                     <button key={idx} onClick={() => answerQuestion(idx)} disabled={selected !== null}
                       style={{
-                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        padding: "16px 16px", borderRadius: 12, border: "none",
                         background: bg, color: textColor,
-                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
                         cursor: selected !== null ? "default" : "pointer", textAlign: "left",
-                        minHeight: 50,
+                        minHeight: 64, lineHeight: 1.3,
                       }}>
                       <strong>{["A","B","C","D"][idx]}.</strong> {opt}
                     </button>
@@ -7123,12 +7509,12 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
                 })}
               </div>
               {questionResult === "wrong" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.accent}20`, borderRadius: 10, color: C.accentDark, fontSize: 16, textAlign: "center" }}>
                   ❌ Wrong! You can't place that block. Try another shape.
                 </div>
               )}
               {questionResult === "correct" && (
-                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                <div style={{ marginTop: 14, padding: "10px 16px", background: `${C.green}20`, borderRadius: 10, color: C.green, fontSize: 16, textAlign: "center" }}>
                   ✅ Correct! Placing block...
                 </div>
               )}
@@ -7153,7 +7539,8 @@ export default function SnowMonkeyTracker() {
 function SnowMonkeyTrackerInner() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("login");
-  const [loginTab, setLoginTab] = useState("teacher");
+  const [loginTab, setLoginTab] = useState("student");
+  const [showPassword, setShowPassword] = useState(false);
   const [user, setUser] = useState(null);
   const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
   const [students, setStudents] = useState([]);
@@ -7187,6 +7574,7 @@ function SnowMonkeyTrackerInner() {
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
   const [showCustomize, setShowCustomize] = useState(false);
   const [customizeTab, setCustomizeTab] = useState("all"); // "all" | "owned" | "shop"
+  const [customizeTarget, setCustomizeTarget] = useState("monkey"); // "monkey" | "pet"
   const [quizzes, setQuizzes] = useState({}); // { studentId: [{id, subject, name, points, questions[]}] }
   const [missions, setMissions] = useState({}); // { studentId: [{id, name, points, questions[]}] }
   const [showQuizUpload, setShowQuizUpload] = useState(false);
@@ -7650,6 +8038,80 @@ function SnowMonkeyTrackerInner() {
     notify("Accessories cleared!");
   };
 
+  // ─── PET ACCESSORY HELPERS ───
+  const togglePetAccessory = (studentId, accessoryId) => {
+    const acc = getPetAccessory(accessoryId);
+    if (!acc) return;
+    const st = students.find(s => s.id === studentId);
+    if (!st) return;
+    if (!st.pet) {
+      notify("You need a pet first!", "error");
+      return;
+    }
+    const ownedPetAccessories = st.ownedPetAccessories || [];
+    if (acc.price > 0 && !ownedPetAccessories.includes(accessoryId)) {
+      SFX.wrong();
+      notify(`You haven't unlocked the ${acc.name} yet!`, "error");
+      return;
+    }
+    const current = st.petAccessories || [];
+    const has = current.includes(accessoryId);
+    let next;
+    if (has) {
+      next = current.filter(a => a !== accessoryId);
+      SFX.click();
+    } else {
+      // Remove anything else in the same slot
+      const filtered = current.filter(id => {
+        const other = getPetAccessory(id);
+        return !other || other.slot !== acc.slot;
+      });
+      next = [...filtered, accessoryId];
+      SFX.collect();
+    }
+    const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: next } : s);
+    persist(null, newS);
+  };
+
+  const buyPetAccessory = (studentId, accessoryId) => {
+    const acc = getPetAccessory(accessoryId);
+    const st = students.find(s => s.id === studentId);
+    if (!acc || !st) return;
+    if (!st.pet) {
+      notify("You need a pet first!", "error");
+      return;
+    }
+    if (acc.price === 0) return;
+    const ownedPetAccessories = st.ownedPetAccessories || [];
+    if (ownedPetAccessories.includes(accessoryId)) return;
+    if (st.points < acc.price) {
+      SFX.wrong();
+      notify(`Not enough stars! Need ${acc.price - st.points} more ★`, "error");
+      return;
+    }
+    const current = st.petAccessories || [];
+    const equipped = [...current.filter(id => {
+      const o = getPetAccessory(id);
+      return !o || o.slot !== acc.slot;
+    }), accessoryId];
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points - acc.price,
+      petAccessories: equipped,
+      ownedPetAccessories: [...ownedPetAccessories, accessoryId],
+    } : s);
+    persist(null, newS);
+    SFX.packOpen();
+    notify(`🎉 Your pet got ${acc.emoji} ${acc.name}!`);
+  };
+
+  const clearPetAccessories = (studentId) => {
+    const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: [] } : s);
+    persist(null, newS);
+    SFX.click();
+    notify("Pet accessories cleared!");
+  };
+
   // Equip / unequip an already-owned pet
   const equipPet = (studentId, petId) => {
     const pet = getPet(petId);
@@ -7776,7 +8238,7 @@ function SnowMonkeyTrackerInner() {
     return pending;
   };
 
-  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); setShowAddExam(false); setExamTargetStudentId(null); setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝"); setShowFoodShop(false); setShowMyPool(false); setShowWalk(false); setActiveGameType(null); setGameTypeChoiceMission(null); };
+  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); setShowAddExam(false); setExamTargetStudentId(null); setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝"); setShowFoodShop(false); setShowMyPool(false); setShowWalk(false); setActiveGameType(null); setGameTypeChoiceMission(null); setCustomizeTarget("monkey"); };
 
   const todayKey = getTodayKey();
   const hasCompletedChallenge = (studentId) => {
@@ -7977,7 +8439,24 @@ function SnowMonkeyTrackerInner() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" onKeyDown={e => e.key === "Enter" && handleLogin()} style={inputStyle} />
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Password" onKeyDown={e => e.key === "Enter" && handleLogin()} style={inputStyle} />
+            <div style={{ position: "relative" }}>
+              <input value={password} onChange={e => setPassword(e.target.value)}
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                style={{ ...inputStyle, paddingRight: 48, width: "100%", boxSizing: "border-box" }} />
+              <button type="button"
+                onClick={() => setShowPassword(v => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{
+                  position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  fontSize: 20, color: C.textLight, padding: "6px 10px",
+                  lineHeight: 1,
+                }}>
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
             {loginError && <p style={{ color: C.accentDark, fontSize: 15, margin: 0, textAlign: "center" }}>{loginError}</p>}
             <button onClick={handleLogin}
               style={{ padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 21, fontWeight: 700, boxShadow: `0 6px 16px ${C.accent}50`, transition: "transform 0.2s", marginTop: 4 }}
@@ -8342,7 +8821,7 @@ function SnowMonkeyTrackerInner() {
               const pos = monkeyPositions[i % monkeyPositions.length];
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: 15 }}>
-                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
+                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} petAccessories={s.petAccessories || []} ownedPets={s.ownedPets || []} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
                 </div>
               );
             })}
@@ -9067,7 +9546,7 @@ function SnowMonkeyTrackerInner() {
                   </span>
                 )}
               </button>
-              {/* My Pool button - opens Tamagotchi-style personal pool */}
+              {/* My Hot Spring button - opens personal scene with monkey & all pets */}
               {(() => {
                 const myCare = getPetCare(me);
                 const careLbl = myCare ? getCareLabel(myCare.avgCare) : null;
@@ -9087,7 +9566,7 @@ function SnowMonkeyTrackerInner() {
                       backdropFilter: "blur(8px)",
                       position: "relative",
                     }}>
-                    🛁 My Pool
+                    🌸 My Hot Spring
                     {careLbl && me.pet && <span style={{ fontSize: 14 }}>{careLbl.emoji}</span>}
                     {needsAttention && (
                       <span style={{
@@ -9107,21 +9586,41 @@ function SnowMonkeyTrackerInner() {
 
         {/* Customize Monkey modal - student dresses up own monkey */}
         {showCustomize && me && (() => {
-          const owned = me.ownedAccessories || [];
-          const equipped = me.accessories || [];
-          // Filter accessories: free OR owned
-          const visibleAccessories = ACCESSORY_CATALOG.filter(a => {
+          const isPetMode = customizeTarget === "pet" && me.pet;
+          // Choose the catalog and equipped lists based on target
+          const owned = isPetMode ? (me.ownedPetAccessories || []) : (me.ownedAccessories || []);
+          const equipped = isPetMode ? (me.petAccessories || []) : (me.accessories || []);
+          const catalog = isPetMode ? PET_ACCESSORY_CATALOG : ACCESSORY_CATALOG;
+          const slots = isPetMode ? PET_ACCESSORY_SLOTS : ACCESSORY_SLOTS;
+          const visibleAccessories = catalog.filter(a => {
             if (customizeTab === "owned") return a.price === 0 || owned.includes(a.id);
             if (customizeTab === "shop") return a.price > 0;
             return true;
           });
-          // Group by slot
           const bySlot = {};
           visibleAccessories.forEach(a => {
             if (!bySlot[a.slot]) bySlot[a.slot] = [];
             bySlot[a.slot].push(a);
           });
-          const slotLabels = { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
+          const slotLabels = isPetMode
+            ? { head: "🎀 Head", neck: "📿 Neck", back: "🦋 Back" }
+            : { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
+          const onItemClick = (acc, isOwned, canAfford) => {
+            if (isOwned) {
+              if (isPetMode) togglePetAccessory(me.id, acc.id);
+              else toggleAccessory(me.id, acc.id);
+            } else if (canAfford && window.confirm(`Buy ${acc.name} for ${acc.price} ★?`)) {
+              if (isPetMode) buyPetAccessory(me.id, acc.id);
+              else buyAccessory(me.id, acc.id);
+            } else if (!canAfford) {
+              SFX.wrong();
+              notify(`Need ${acc.price - me.points} more ★`, "error");
+            }
+          };
+          const onClearAll = () => {
+            if (isPetMode) clearPetAccessories(me.id);
+            else clearAccessories(me.id);
+          };
 
           return (
             <div style={modalBackdropStyle} onClick={() => setShowCustomize(false)}>
@@ -9138,7 +9637,9 @@ function SnowMonkeyTrackerInner() {
                 }}>
                   <MonkeySVG size={160} mood="excited" delay={0}
                     variant={students.findIndex(st => st.id === me.id)}
-                    accessories={equipped} pet={me.pet}
+                    accessories={me.accessories || []} pet={me.pet}
+                    petAccessories={me.petAccessories || []}
+                    ownedPets={me.ownedPets || []}
                     streakLevel={getStreakLevel(getEffectiveStreak(me)).id} />
                   <div style={{ minWidth: 140 }}>
                     <div style={{ fontSize: 14, color: C.textLight, marginBottom: 2 }}>Stars</div>
@@ -9146,18 +9647,40 @@ function SnowMonkeyTrackerInner() {
                     <div style={{ fontSize: 13, color: C.textLight }}>
                       {equipped.length} equipped · {owned.length} owned
                     </div>
-                    <button onClick={() => clearAccessories(me.id)}
+                    <button onClick={onClearAll}
                       style={{ marginTop: 10, padding: "6px 12px", borderRadius: 10, border: `2px solid ${C.accent}40`, background: "transparent", color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 600 }}>
                       Remove All
                     </button>
                   </div>
                 </div>
 
+                {/* Target toggle: Monkey / Pet (only show Pet if student has a pet) */}
+                {me.pet && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, justifyContent: "center" }}>
+                    {[
+                      { id: "monkey", label: "🐵 Monkey" },
+                      { id: "pet", label: `🐾 Pet (${getPet(me.pet)?.emoji || ""})` },
+                    ].map(t => (
+                      <button key={t.id} onClick={() => setCustomizeTarget(t.id)}
+                        style={{
+                          padding: "9px 22px", borderRadius: 14,
+                          border: customizeTarget === t.id ? `2.5px solid ${C.gold}` : `2px solid ${C.fur2}30`,
+                          background: customizeTarget === t.id ? `${C.gold}25` : `${C.snow1}80`,
+                          color: customizeTarget === t.id ? C.text : C.textLight,
+                          fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, cursor: "pointer",
+                          transition: "all 0.2s",
+                        }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Tabs */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 14, justifyContent: "center" }}>
                   {[
                     { id: "all", label: "All" },
-                    { id: "owned", label: `My Items (${owned.length + ACCESSORY_CATALOG.filter(a => a.price === 0).length})` },
+                    { id: "owned", label: `My Items (${owned.length + catalog.filter(a => a.price === 0).length})` },
                     { id: "shop", label: "🛍️ Shop" },
                   ].map(tab => (
                     <button key={tab.id} onClick={() => setCustomizeTab(tab.id)}
@@ -9174,7 +9697,7 @@ function SnowMonkeyTrackerInner() {
                 </div>
 
                 {/* Accessories grouped by slot */}
-                {ACCESSORY_SLOTS.map(slot => {
+                {slots.map(slot => {
                   const items = bySlot[slot];
                   if (!items || items.length === 0) return null;
                   return (
@@ -9198,14 +9721,7 @@ function SnowMonkeyTrackerInner() {
                               fontFamily: "'Patrick Hand', cursive",
                               position: "relative", overflow: "hidden",
                             }}
-                              onClick={() => {
-                                if (isOwned) toggleAccessory(me.id, acc.id);
-                                else if (canAfford && window.confirm(`Buy ${acc.name} for ${acc.price} ★?`)) buyAccessory(me.id, acc.id);
-                                else if (!canAfford) {
-                                  SFX.wrong();
-                                  notify(`Need ${acc.price - me.points} more ★`, "error");
-                                }
-                              }}>
+                              onClick={() => onItemClick(acc, isOwned, canAfford)}>
                               {/* Rarity badge */}
                               {acc.price > 0 && (
                                 <div style={{
@@ -9249,7 +9765,7 @@ function SnowMonkeyTrackerInner() {
           />
         )}
 
-        {/* My Pool modal - personal pet care scene */}
+        {/* My Hot Spring modal - personal scene with monkey & pets */}
         {showMyPool && me && (
           <MyPool
             student={me}
@@ -9649,6 +10165,8 @@ function SnowMonkeyTrackerInner() {
                     delay={i * 0.4} variant={i}
                     accessories={s.accessories || []}
                     pet={s.pet}
+                    petAccessories={s.petAccessories || []}
+                    ownedPets={s.ownedPets || []}
                     streakLevel={getStreakLevel(getEffectiveStreak(s)).id}
                     selected={isMe}
                     onClick={isMe ? () => setShowCustomize(true) : undefined}
