@@ -817,6 +817,1850 @@ const SFX = {
   },
 };
 
+/* ─── WATERCOLOR ICON ─── hand-drawn SVG icons matching the monkey aesthetic.
+   Used for foods, mystery packs, streak ranks, and mission game types — anywhere
+   an emoji previously appeared as a prominent visual element. */
+function WatercolorIcon({ name, size = 32, style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="-32 -32 64 64"
+      style={{ overflow: "visible", display: "inline-block", verticalAlign: "middle", ...style }}>
+      {renderWatercolorIcon(name)}
+    </svg>
+  );
+}
+
+function renderWatercolorIcon(name) {
+  switch (name) {
+    // ─── FOODS ─── Snacks tier
+    case "yakult": // probiotic drink — small white-pink bottle
+      return (
+        <g filter="url(#watercolorSoft)">
+          <rect x="-7" y="-12" width="14" height="22" rx="3" fill="#fff5e8" />
+          <rect x="-6" y="-13" width="12" height="3" rx="1" fill="#cc6080" />
+          <rect x="-6" y="-4" width="12" height="6" fill="#ff9090" opacity="0.55" />
+          <text x="0" y="3" fontSize="6" textAnchor="middle" fill="#a04060" fontWeight="bold">Y</text>
+          <ellipse cx="-3" cy="-7" rx="1.5" ry="3" fill="white" opacity="0.7" />
+        </g>
+      );
+    case "gummybears": // cluster of three bear shapes
+      return (
+        <g filter="url(#watercolorSoft)">
+          {[{x:-9,y:2,c:"#ff5080"},{x:0,y:-4,c:"#5caa5e"},{x:9,y:3,c:"#edb830"}].map((b,i) => (
+            <g key={i} transform={`translate(${b.x} ${b.y})`}>
+              <ellipse cx="0" cy="2" rx="6" ry="5" fill={b.c} />
+              <ellipse cx="0" cy="-3" rx="4" ry="3.5" fill={b.c} />
+              <circle cx="-3" cy="-7" r="1.8" fill={b.c} />
+              <circle cx="3" cy="-7" r="1.8" fill={b.c} />
+              <circle cx="-1.5" cy="-3" r="0.6" fill="#1a1a1a" />
+              <circle cx="1.5" cy="-3" r="0.6" fill="#1a1a1a" />
+            </g>
+          ))}
+        </g>
+      );
+    case "crackers": // round rice cracker with seaweed band
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="14" fill="#f5e8c8" />
+          <circle cx="0" cy="0" r="11" fill="#fff5e0" opacity="0.6" />
+          <rect x="-13" y="-3" width="26" height="6" fill="#3a4a3a" />
+          <rect x="-13" y="-3" width="26" height="2" fill="#5a6a4a" opacity="0.6" />
+          {[-7,0,7].map((x,i) => <circle key={i} cx={x} cy="-8" r="0.6" fill="#a07810" opacity="0.6" />)}
+        </g>
+      );
+    case "milk": // pink milk carton
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -8 -14 L 8 -14 L 10 -10 L 10 12 L -10 12 L -10 -10 Z" fill="#ffd8e0" />
+          <path d="M -8 -14 L 0 -10 L 8 -14" fill="#ff9fbb" />
+          <rect x="-6" y="-2" width="12" height="6" fill="white" opacity="0.7" />
+          <ellipse cx="-2" cy="0" rx="2" ry="1.5" fill="#ff7090" />
+          <text x="0" y="9" fontSize="4" textAnchor="middle" fill="#a04060" fontWeight="bold">MILK</text>
+        </g>
+      );
+    case "onigiri": // triangular rice ball
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M 0 -14 L 14 12 L -14 12 Z" fill="#fff5e8" />
+          <path d="M 0 -10 L 11 9 L -11 9 Z" fill="white" opacity="0.6" />
+          <rect x="-9" y="2" width="18" height="9" fill="#3a4a3a" />
+          <rect x="-9" y="2" width="18" height="2" fill="#5a6a4a" opacity="0.6" />
+          {[-3,3].map((x,i) => <circle key={i} cx={x} cy="-2" r="0.4" fill="#a07810" />)}
+        </g>
+      );
+    case "pocky": // chocolate-coated stick(s)
+      return (
+        <g filter="url(#watercolorSoft)" transform="rotate(-20)">
+          {[-5,2].map((y,i) => (
+            <g key={i} transform={`translate(0 ${y})`}>
+              <rect x="-14" y="-1.5" width="22" height="3" rx="1" fill="#f5e8c8" />
+              <rect x="-3" y="-1.6" width="11" height="3.2" rx="0.8" fill="#7a4820" />
+              {[2,5,8].map((d,j) => <circle key={j} cx={d} cy={(j%2 ? 1 : -1) * 0.8} r="0.4" fill="#fff" opacity="0.6" />)}
+            </g>
+          ))}
+        </g>
+      );
+    case "boba": // bubble tea cup with pearls
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -8 -10 L 8 -10 L 6 14 L -6 14 Z" fill="#d4a878" opacity="0.55" />
+          <path d="M -8 -10 L 8 -10 L 7 0 L -7 0 Z" fill="#a87858" opacity="0.55" />
+          <ellipse cx="0" cy="-10" rx="9" ry="2.5" fill="#7a4820" />
+          <rect x="-1" y="-13" width="2" height="14" fill="#fff" opacity="0.6" />
+          {[{x:-3,y:8},{x:2,y:10},{x:-1,y:5},{x:3,y:6},{x:-4,y:11}].map((p,i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="1.5" fill="#1a1a1a" />
+          ))}
+        </g>
+      );
+
+    // ─── FOODS ─── Meals tier
+    case "mamacup": // instant noodle cup
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -10 -8 L 10 -8 L 8 14 L -8 14 Z" fill="#cc3030" />
+          <path d="M -10 -8 L 10 -8 L 9 -3 L -9 -3 Z" fill="#fff" opacity="0.6" />
+          <ellipse cx="0" cy="-8" rx="11" ry="2.5" fill="#f5d040" />
+          <ellipse cx="0" cy="-8" rx="9" ry="1.5" fill="#edb830" />
+          <text x="0" y="6" fontSize="5" textAnchor="middle" fill="white" fontWeight="bold">麺</text>
+          <path d="M -6 -8 Q -4 -12 0 -10 Q 4 -12 6 -8" stroke="#fff" strokeWidth="0.6" fill="none" opacity="0.6" />
+        </g>
+      );
+    case "takoyaki": // 3 octopus balls on a tray
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="6" rx="16" ry="3" fill="#5a3818" />
+          {[{x:-9,y:0},{x:0,y:-3},{x:9,y:0}].map((b,i) => (
+            <g key={i} transform={`translate(${b.x} ${b.y})`}>
+              <circle cx="0" cy="0" r="6" fill="#c8985a" />
+              <circle cx="-1" cy="-1.5" r="3.5" fill="#e8b878" opacity="0.7" />
+              <path d="M -3 1 Q 0 3 3 1" stroke="#7a4820" strokeWidth="0.6" fill="none" opacity="0.6" />
+              <path d="M -2 -2 L -1 -1 M 2 -2 L 1 -1" stroke="#3a2010" strokeWidth="0.5" />
+            </g>
+          ))}
+          {/* mayo + sauce drizzle */}
+          <path d="M -10 -4 L 10 -4" stroke="#8b4520" strokeWidth="0.6" opacity="0.7" />
+          <path d="M -9 -6 L 9 -6" stroke="#fff" strokeWidth="0.6" opacity="0.7" />
+        </g>
+      );
+    case "donburi": // rice bowl
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -14 -2 Q -14 12 0 13 Q 14 12 14 -2 Z" fill="#3a4a3a" />
+          <path d="M -12 -2 L 12 -2 Q 12 10 0 11 Q -12 10 -12 -2 Z" fill="#fff5e0" />
+          <path d="M -10 -3 L 10 -3 L 10 0 L -10 0 Z" fill="#fff" opacity="0.7" />
+          {/* meat topping */}
+          <ellipse cx="-3" cy="2" rx="5" ry="3" fill="#a8623a" />
+          <ellipse cx="4" cy="3" rx="4" ry="2.5" fill="#c87830" />
+          <ellipse cx="0" cy="6" rx="4" ry="2" fill="#cc4030" opacity="0.7" />
+          {/* sesame */}
+          {[-3,3,0,5].map((x,i) => <circle key={i} cx={x} cy={1+(i%2)*4} r="0.4" fill="#3a2010" />)}
+        </g>
+      );
+    case "icecreambowl": // sundae with cherry
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -10 0 L 10 0 L 7 12 L -7 12 Z" fill="#a0d8e8" opacity="0.7" />
+          {/* scoops */}
+          <circle cx="-4" cy="-3" r="6" fill="#fff5e0" />
+          <circle cx="4" cy="-4" r="6" fill="#ffb0d0" />
+          <circle cx="0" cy="-9" r="5" fill="#a06840" />
+          <circle cx="-1" cy="-10" r="2" fill="#7a4820" opacity="0.6" />
+          {/* cherry */}
+          <circle cx="0" cy="-14" r="2" fill="#cc3030" />
+          <path d="M 0 -16 Q 2 -18 3 -16" stroke="#5caa5e" strokeWidth="0.8" fill="none" />
+        </g>
+      );
+    case "ramen": // ramen bowl with toppings
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="2" rx="16" ry="6" fill="#3a4a3a" />
+          <ellipse cx="0" cy="0" rx="14" ry="5" fill="#c89a5a" />
+          <ellipse cx="0" cy="-1" rx="13" ry="4" fill="#e8b878" opacity="0.5" />
+          {/* noodles */}
+          <path d="M -8 -2 Q -4 -3 0 -2 Q 4 -3 8 -2" stroke="#fff5e0" strokeWidth="1" fill="none" />
+          <path d="M -8 0 Q -4 -1 0 0 Q 4 -1 8 0" stroke="#fff5e0" strokeWidth="1" fill="none" />
+          {/* nori */}
+          <rect x="-9" y="-3" width="6" height="4" fill="#3a4a3a" />
+          {/* egg half */}
+          <ellipse cx="6" cy="-2" rx="3" ry="2" fill="#fff5e0" />
+          <circle cx="6" cy="-2" r="1.5" fill="#edb830" />
+          {/* steam */}
+          <path d="M -3 -10 Q -2 -13 -3 -16" stroke="#fff" strokeWidth="0.6" fill="none" opacity="0.6" />
+          <path d="M 3 -10 Q 4 -13 3 -16" stroke="#fff" strokeWidth="0.6" fill="none" opacity="0.6" />
+        </g>
+      );
+    case "sushiroll": // sushi pieces (2 maki)
+      return (
+        <g filter="url(#watercolorSoft)">
+          {[{x:-7,y:0},{x:7,y:0}].map((p,i) => (
+            <g key={i} transform={`translate(${p.x} ${p.y})`}>
+              <ellipse cx="0" cy="0" rx="7" ry="6" fill="#3a4a3a" />
+              <ellipse cx="0" cy="0" rx="5.5" ry="4.5" fill="#fff5e0" />
+              <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#ff6080" />
+              <ellipse cx="-1" cy="-1" rx="1.5" ry="1" fill="#5caa5e" />
+              <circle cx="0" cy="0" r="0.6" fill="#fff5e0" opacity="0.7" />
+            </g>
+          ))}
+        </g>
+      );
+
+    // ─── FOODS ─── Premium tier
+    case "matchaset": // matcha bowl + whisk
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -12 0 Q -12 10 0 11 Q 12 10 12 0 Z" fill="#3a3a4a" />
+          <path d="M -10 0 L 10 0 Q 10 8 0 9 Q -10 8 -10 0 Z" fill="#7cc080" />
+          <ellipse cx="0" cy="0" rx="10" ry="2" fill="#a8d878" />
+          <path d="M -3 -1 Q 0 1 3 -1" stroke="#fff" strokeWidth="0.6" fill="none" opacity="0.6" />
+          {/* chasen whisk */}
+          <rect x="6" y="-14" width="2.5" height="14" fill="#c89a5a" />
+          {[7,8,9,10,11,12].map((y,i) => <rect key={i} x={6 + (i%2)*0.3} y={-y} width="0.5" height="3" fill="#a07840" />)}
+        </g>
+      );
+    case "mochi": // 3 mochi balls
+      return (
+        <g filter="url(#watercolorSoft)">
+          {[{x:-9,y:2,c:"#ffd0e0"},{x:0,y:-3,c:"#fff5e0"},{x:9,y:2,c:"#a8d878"}].map((m,i) => (
+            <g key={i} transform={`translate(${m.x} ${m.y})`}>
+              <ellipse cx="0" cy="1" rx="6" ry="5.5" fill={m.c} />
+              <ellipse cx="-1.5" cy="-1" rx="2.5" ry="2" fill="white" opacity="0.55" />
+              <circle cx="0" cy="0" r="2" fill="#7a4820" opacity="0.4" />
+            </g>
+          ))}
+        </g>
+      );
+    case "katsu": // curry plate with cutlet
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="3" rx="16" ry="11" fill="#fff5e0" />
+          <ellipse cx="0" cy="3" rx="14" ry="9" fill="#fff" opacity="0.5" />
+          {/* curry */}
+          <path d="M -10 5 Q -6 -1 0 0 Q 8 0 10 6 Q 8 10 0 10 Q -10 10 -10 5 Z" fill="#a06430" />
+          {/* cutlet pieces */}
+          {[{x:-5,y:-3},{x:0,y:-5},{x:5,y:-3}].map((p,i) => (
+            <g key={i} transform={`translate(${p.x} ${p.y})`}>
+              <rect x="-3" y="-1.5" width="6" height="3" rx="0.8" fill="#c89a5a" />
+              <rect x="-3" y="-1.5" width="6" height="1" fill="#e8b878" opacity="0.6" />
+            </g>
+          ))}
+          {/* rice */}
+          <ellipse cx="-7" cy="0" rx="4" ry="3" fill="#fff5e0" />
+        </g>
+      );
+    case "strawberry": // strawberry tart
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="4" rx="14" ry="3" fill="#a07840" />
+          <ellipse cx="0" cy="0" rx="14" ry="6" fill="#c89a5a" />
+          <ellipse cx="0" cy="-3" rx="13" ry="5" fill="#fff5e0" />
+          {/* strawberries on top */}
+          {[{x:-6,y:-5},{x:0,y:-7},{x:6,y:-5}].map((b,i) => (
+            <g key={i} transform={`translate(${b.x} ${b.y})`}>
+              <path d="M -3 -1 L 3 -1 L 0 4 Z" fill="#cc3030" />
+              <path d="M -3 -1 L 3 -1 L 0 4 Z" fill="#ff5060" opacity="0.5" />
+              <path d="M -2 -1 L 2 -1 L 0 -2 L -2 -1 Z" fill="#5caa5e" />
+              {[-1,1].map((dx,j) => <circle key={j} cx={dx} cy="0" r="0.3" fill="#fff080" />)}
+            </g>
+          ))}
+        </g>
+      );
+    case "wagyu": // marbled steak
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="0" rx="15" ry="9" fill="#7a3a3a" />
+          <ellipse cx="0" cy="-1" rx="13" ry="7" fill="#a04848" />
+          {/* marbling */}
+          {[{x:-8,y:-2,r:6,a:30},{x:5,y:0,r:5,a:-20},{x:-2,y:3,r:4,a:60}].map((m,i) => (
+            <ellipse key={i} cx={m.x} cy={m.y} rx={m.r} ry="1.5" fill="#fff5e0" opacity="0.6" transform={`rotate(${m.a} ${m.x} ${m.y})`} />
+          ))}
+          {/* sear marks */}
+          <path d="M -14 -6 L 14 -4" stroke="#3a1810" strokeWidth="0.8" opacity="0.5" />
+          <path d="M -14 -2 L 14 0" stroke="#3a1810" strokeWidth="0.8" opacity="0.5" />
+        </g>
+      );
+
+    // ─── FOODS ─── Feasts tier
+    case "omakase": // bento box
+      return (
+        <g filter="url(#watercolorSoft)">
+          <rect x="-15" y="-10" width="30" height="20" rx="3" fill="#3a2010" />
+          <rect x="-13" y="-8" width="26" height="16" rx="2" fill="#7a4820" />
+          {/* sushi pieces */}
+          {[{x:-9,y:-3,c:"#ff6080"},{x:-3,y:-3,c:"#edb830"},{x:3,y:-3,c:"#cc4030"},{x:9,y:-3,c:"#fff5e0"}].map((s,i) => (
+            <g key={i} transform={`translate(${s.x} ${s.y})`}>
+              <ellipse cx="0" cy="0" rx="2.5" ry="2" fill={s.c} />
+              <rect x="-2.5" y="-3" width="5" height="2" fill="#fff5e0" opacity="0.8" />
+            </g>
+          ))}
+          {/* second row */}
+          {[{x:-9,y:5,c:"#5caa5e"},{x:0,y:5,c:"#ffb0d0"},{x:9,y:5,c:"#a06430"}].map((s,i) => (
+            <ellipse key={i} cx={s.x} cy={s.y} rx="3" ry="2" fill={s.c} />
+          ))}
+          {/* gold trim */}
+          <rect x="-14" y="-9" width="28" height="0.6" fill="#edb830" />
+        </g>
+      );
+    case "rainbowcake": // rainbow layer cake
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* layers from bottom up: red, orange, yellow, green, blue, purple */}
+          {[
+            {y:6, c:"#a060c0"},
+            {y:3, c:"#5a8fc7"},
+            {y:0, c:"#5caa5e"},
+            {y:-3, c:"#edb830"},
+            {y:-6, c:"#ff9050"},
+            {y:-9, c:"#cc3030"},
+          ].map((l,i) => (
+            <ellipse key={i} cx="0" cy={l.y} rx="13" ry="2.5" fill={l.c} opacity="0.85" />
+          ))}
+          {/* frosting outline */}
+          <ellipse cx="0" cy="-9" rx="13" ry="3" fill="#fff5e0" opacity="0.4" />
+          {/* candle */}
+          <rect x="-1" y="-15" width="2" height="5" fill="#fff" />
+          <ellipse cx="0" cy="-16" rx="1" ry="2" fill="#fff080" />
+          <ellipse cx="0" cy="-17" rx="0.5" ry="1.5" fill="#ff8030" />
+          {/* sparkles */}
+          {[-9,-3,3,9].map((x,i) => <text key={i} x={x} y="-12" fontSize="3" fill="#fff080" textAnchor="middle">✦</text>)}
+        </g>
+      );
+
+    // ─── MYSTERY PACKS ─── lustrous wrapped boxes
+    case "pack_starter": // soft bubble pack, blue
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="22" fill="#a0e0f0" opacity="0.5" />
+          <circle cx="0" cy="0" r="18" fill="#7cc8e0" opacity="0.6" />
+          <circle cx="0" cy="0" r="13" fill="#5ac8e8" />
+          {/* highlight */}
+          <ellipse cx="-5" cy="-5" rx="6" ry="4" fill="white" opacity="0.6" />
+          <ellipse cx="-7" cy="-7" rx="2" ry="1.5" fill="white" opacity="0.9" />
+          {/* small bubbles around */}
+          <circle cx="13" cy="-10" r="3" fill="#a0e0f0" opacity="0.7" />
+          <circle cx="-13" cy="11" r="2" fill="#a0e0f0" opacity="0.7" />
+          <circle cx="11" cy="13" r="2.5" fill="#a0e0f0" opacity="0.6" />
+        </g>
+      );
+    case "pack_jelly": // jelly drop, magenta
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M 0 -16 Q -14 -2 -10 8 Q -6 16 0 16 Q 6 16 10 8 Q 14 -2 0 -16 Z" fill="#c980c0" opacity="0.7" />
+          <path d="M 0 -13 Q -11 -1 -8 7 Q -4 13 0 13 Q 4 13 8 7 Q 11 -1 0 -13 Z" fill="#e0a0e0" />
+          {/* highlight */}
+          <ellipse cx="-4" cy="-2" rx="3" ry="6" fill="white" opacity="0.55" />
+          <ellipse cx="-4" cy="-2" rx="1.5" ry="3" fill="white" opacity="0.85" />
+          {/* jiggle dots */}
+          <circle cx="3" cy="6" r="1" fill="#fff" opacity="0.7" />
+        </g>
+      );
+    case "pack_frost": // frost glimmer, icy cyan crystal
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M 0 -18 L 14 -4 L 10 14 L -10 14 L -14 -4 Z" fill="#7adcdc" opacity="0.7" />
+          <path d="M 0 -14 L 10 -2 L 7 10 L -7 10 L -10 -2 Z" fill="#a0e8f0" />
+          {/* crystal facets */}
+          <path d="M 0 -14 L 0 10" stroke="#5ac0d8" strokeWidth="0.5" />
+          <path d="M -10 -2 L 10 -2" stroke="#5ac0d8" strokeWidth="0.5" />
+          <path d="M -7 10 L 0 -14 L 7 10" stroke="white" strokeWidth="0.4" opacity="0.5" />
+          {/* sparkles */}
+          {[{x:-13,y:-8},{x:13,y:-3},{x:0,y:16}].map((s,i) => (
+            <text key={i} x={s.x} y={s.y} fontSize="6" fill="#fff" textAnchor="middle">✦</text>
+          ))}
+        </g>
+      );
+    case "pack_sparkle": // golden sparkling pack
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="20" fill="#fff080" opacity="0.4" />
+          <circle cx="0" cy="0" r="14" fill="#ffd040" />
+          <circle cx="0" cy="0" r="11" fill="#fff080" opacity="0.6" />
+          {/* big star */}
+          <path d="M 0 -8 L 2 -2 L 8 -2 L 3 2 L 5 8 L 0 4 L -5 8 L -3 2 L -8 -2 L -2 -2 Z" fill="#fff5e0" />
+          <path d="M 0 -8 L 2 -2 L 8 -2 L 3 2 L 5 8 L 0 4 L -5 8 L -3 2 L -8 -2 L -2 -2 Z" fill="#ffd040" opacity="0.5" />
+          {/* surrounding sparkles */}
+          {[{x:-15,y:-10},{x:14,y:-8},{x:-13,y:12},{x:14,y:13},{x:0,y:-17}].map((s,i) => (
+            <text key={i} x={s.x} y={s.y} fontSize="5" fill="#fff080" textAnchor="middle">✦</text>
+          ))}
+        </g>
+      );
+    case "pack_mythic": // cosmic mythstone
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="22" fill="#a060c0" opacity="0.4" />
+          <circle cx="0" cy="0" r="16" fill="#5a3aa0" />
+          <circle cx="0" cy="0" r="13" fill="#a060c0" opacity="0.7" />
+          {/* swirling galaxy */}
+          <ellipse cx="0" cy="0" rx="12" ry="3" fill="#fff" opacity="0.4" transform="rotate(30)" />
+          <ellipse cx="0" cy="0" rx="10" ry="2" fill="#fff080" opacity="0.6" transform="rotate(30)" />
+          {/* stars inside */}
+          {[{x:-5,y:-3},{x:4,y:-1},{x:-2,y:3},{x:6,y:4},{x:-7,y:1}].map((s,i) => (
+            <circle key={i} cx={s.x} cy={s.y} r="0.6" fill="#fff" />
+          ))}
+          {/* surrounding stars */}
+          {[{x:-15,y:-10,s:6},{x:14,y:-8,s:5},{x:-12,y:13,s:4},{x:15,y:11,s:5},{x:0,y:-18,s:7}].map((s,i) => (
+            <text key={i} x={s.x} y={s.y} fontSize={s.s} fill="#fff080" textAnchor="middle">✦</text>
+          ))}
+        </g>
+      );
+
+    // ─── STREAK RANKS ─── badges shown in streak tracker
+    case "rank_sprout":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="10" rx="10" ry="3" fill="#5a3818" opacity="0.4" />
+          <path d="M 0 8 Q 0 -2 -6 -4 Q -2 0 -1 5" fill="#7cc080" />
+          <path d="M 0 8 Q 0 -2 6 -4 Q 2 0 1 5" fill="#7cc080" />
+          <path d="M 0 8 L 0 -8" stroke="#5caa5e" strokeWidth="1.5" />
+          <circle cx="0" cy="-9" r="3" fill="#a8e8b8" />
+          <ellipse cx="-1" cy="-10" rx="1" ry="0.8" fill="#fff" opacity="0.6" />
+        </g>
+      );
+    case "rank_bronze":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="14" fill="#cc6020" />
+          <circle cx="0" cy="0" r="11" fill="#ff9050" />
+          <circle cx="0" cy="0" r="9" fill="#ffc890" opacity="0.7" />
+          <text x="0" y="3" fontSize="11" fill="#7a3010" textAnchor="middle" fontWeight="bold">3</text>
+          <ellipse cx="-4" cy="-4" rx="3" ry="2" fill="white" opacity="0.5" />
+        </g>
+      );
+    case "rank_silver":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="14" fill="#90a8c0" />
+          <circle cx="0" cy="0" r="11" fill="#b8d4e8" />
+          <circle cx="0" cy="0" r="9" fill="#e0eef8" opacity="0.7" />
+          <text x="0" y="3" fontSize="11" fill="#506880" textAnchor="middle" fontWeight="bold">7</text>
+          <ellipse cx="-4" cy="-4" rx="3" ry="2" fill="white" opacity="0.7" />
+        </g>
+      );
+    case "rank_gold":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <circle cx="0" cy="0" r="14" fill="#a07810" />
+          <circle cx="0" cy="0" r="11" fill="#ffc430" />
+          <circle cx="0" cy="0" r="9" fill="#fff080" opacity="0.7" />
+          <text x="0" y="3" fontSize="10" fill="#7a4820" textAnchor="middle" fontWeight="bold">14</text>
+          <ellipse cx="-4" cy="-4" rx="3" ry="2" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "rank_crystal":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M 0 -14 L 11 -4 L 8 12 L -8 12 L -11 -4 Z" fill="#3aa8c8" />
+          <path d="M 0 -10 L 8 -2 L 6 10 L -6 10 L -8 -2 Z" fill="#5ac8e8" />
+          <path d="M 0 -10 L 8 -2 L 0 10 L -8 -2 Z" fill="#a0e8f0" opacity="0.6" />
+          <path d="M 0 -10 L 0 10" stroke="white" strokeWidth="0.5" opacity="0.7" />
+          <path d="M -8 -2 L 8 -2" stroke="white" strokeWidth="0.5" opacity="0.7" />
+          {[{x:0,y:-15},{x:13,y:-2}].map((s,i) => <text key={i} x={s.x} y={s.y} fontSize="6" fill="#fff" textAnchor="middle">✦</text>)}
+        </g>
+      );
+    case "rank_rainbow":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {[
+            {c:"#cc3030",r:14},{c:"#ff9050",r:12},{c:"#ffd040",r:10},
+            {c:"#5caa5e",r:8},{c:"#5a8fc7",r:6},{c:"#a060c0",r:4},
+          ].map((arc,i) => (
+            <path key={i} d={`M -${arc.r} 6 Q 0 -${arc.r*0.9} ${arc.r} 6`} fill="none" stroke={arc.c} strokeWidth="2" />
+          ))}
+          {/* clouds at base */}
+          <ellipse cx="-13" cy="7" rx="5" ry="2" fill="white" opacity="0.7" />
+          <ellipse cx="13" cy="7" rx="5" ry="2" fill="white" opacity="0.7" />
+        </g>
+      );
+    case "rank_legendary":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* outer glow */}
+          <circle cx="0" cy="0" r="16" fill="#ffd060" opacity="0.4" />
+          <circle cx="0" cy="0" r="13" fill="#ff8030" opacity="0.5" />
+          {/* big star */}
+          <path d="M 0 -12 L 3 -3 L 12 -3 L 5 3 L 8 12 L 0 7 L -8 12 L -5 3 L -12 -3 L -3 -3 Z" fill="#ff6020" />
+          <path d="M 0 -10 L 3 -2 L 10 -2 L 4 3 L 6 10 L 0 6 L -6 10 L -4 3 L -10 -2 L -3 -2 Z" fill="#ffd060" />
+          <path d="M 0 -10 L 0 6" stroke="#fff" strokeWidth="0.5" opacity="0.5" />
+          {/* surrounding sparkles */}
+          {[{x:-15,y:-12,s:5},{x:14,y:-10,s:5},{x:-13,y:14,s:4},{x:14,y:13,s:5}].map((s,i) => (
+            <text key={i} x={s.x} y={s.y} fontSize={s.s} fill="#fff080" textAnchor="middle">⭐</text>
+          ))}
+        </g>
+      );
+
+    // ─── MISSION GAME TYPES ───
+    case "game_blockblast": // tetris pieces
+      return (
+        <g filter="url(#watercolorSoft)">
+          <rect x="-12" y="-10" width="6" height="6" fill="#a060c0" rx="1" />
+          <rect x="-6" y="-10" width="6" height="6" fill="#a060c0" rx="1" />
+          <rect x="0" y="-10" width="6" height="6" fill="#a060c0" rx="1" />
+          <rect x="6" y="-10" width="6" height="6" fill="#a060c0" rx="1" />
+          <rect x="-6" y="-4" width="6" height="6" fill="#5caa5e" rx="1" />
+          <rect x="0" y="-4" width="6" height="6" fill="#5caa5e" rx="1" />
+          <rect x="-12" y="2" width="6" height="6" fill="#edb830" rx="1" />
+          <rect x="-6" y="2" width="6" height="6" fill="#edb830" rx="1" />
+          <rect x="0" y="2" width="6" height="6" fill="#edb830" rx="1" />
+          {/* highlights */}
+          {[[-12,-10],[-6,-10],[0,-10],[6,-10],[-6,-4],[0,-4],[-12,2],[-6,2],[0,2]].map((p,i) => (
+            <rect key={i} x={p[0]+0.5} y={p[1]+0.5} width="2" height="2" fill="white" opacity="0.4" rx="0.4" />
+          ))}
+        </g>
+      );
+    case "game_runner": // running monkey silhouette
+      return (
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="2" rx="14" ry="3" fill="#a07840" opacity="0.4" />
+          {/* simple running monkey */}
+          <ellipse cx="0" cy="-3" rx="8" ry="6" fill="#a07840" />
+          <ellipse cx="-6" cy="-7" rx="4" ry="3.5" fill="#a07840" />
+          <ellipse cx="-6" cy="-7" rx="3" ry="2.5" fill="#d4b090" />
+          <circle cx="-7" cy="-8" r="1" fill="#1a1a1a" />
+          {/* arm */}
+          <path d="M 4 -4 Q 9 -7 8 -2" stroke="#a07840" strokeWidth="3" fill="none" />
+          {/* legs running */}
+          <path d="M -3 2 Q -5 7 -7 5" stroke="#a07840" strokeWidth="3" fill="none" />
+          <path d="M 3 2 Q 7 5 5 8" stroke="#a07840" strokeWidth="3" fill="none" />
+          {/* speed lines */}
+          <path d="M -14 -4 L -10 -4" stroke="#5caa5e" strokeWidth="1" opacity="0.6" />
+          <path d="M -14 -1 L -11 -1" stroke="#5caa5e" strokeWidth="1" opacity="0.6" />
+        </g>
+      );
+    case "game_flappy": // icicles
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* top icicles */}
+          <path d="M -12 -14 L -8 -2 L -10 -14 Z" fill="#7adcdc" />
+          <path d="M -2 -14 L 2 -4 L 4 -14 Z" fill="#7adcdc" />
+          <path d="M 8 -14 L 10 -6 L 12 -14 Z" fill="#7adcdc" />
+          <path d="M -12 -14 L 14 -14" stroke="#5ac8e8" strokeWidth="1" />
+          {/* bottom icicles (mirrored) */}
+          <path d="M -12 14 L -10 6 L -8 14 Z" fill="#7adcdc" />
+          <path d="M 0 14 L 2 4 L 4 14 Z" fill="#7adcdc" />
+          <path d="M -12 14 L 14 14" stroke="#5ac8e8" strokeWidth="1" />
+          {/* monkey in middle */}
+          <ellipse cx="-2" cy="-1" rx="4" ry="3" fill="#a07840" />
+          <circle cx="-3" cy="-2" r="0.6" fill="#1a1a1a" />
+          {/* snowflakes */}
+          <text x="-13" y="2" fontSize="6" fill="#fff" textAnchor="middle">✦</text>
+          <text x="11" y="2" fontSize="5" fill="#fff" textAnchor="middle">✦</text>
+        </g>
+      );
+    case "game_crush": // mini grid of crush tiles
+      return (
+        <g filter="url(#watercolorSoft)">
+          {[
+            {x:-8,y:-8,c:"#ff90b8"},{x:0,y:-8,c:"#ffd040"},{x:8,y:-8,c:"#7cc080"},
+            {x:-8,y:0,c:"#5ac8e8"},{x:0,y:0,c:"#a87858"},{x:8,y:0,c:"#a8a8b0"},
+            {x:-8,y:8,c:"#7cc080"},{x:0,y:8,c:"#ff90b8"},{x:8,y:8,c:"#ffd040"},
+          ].map((t,i) => (
+            <g key={i} transform={`translate(${t.x} ${t.y})`}>
+              <rect x="-3.5" y="-3.5" width="7" height="7" rx="1.5" fill={t.c} opacity="0.85" />
+              <rect x="-2.5" y="-2.5" width="3" height="3" rx="0.5" fill="white" opacity="0.4" />
+            </g>
+          ))}
+          {/* sparkle */}
+          <text x="11" y="-10" fontSize="6" fill="#fff080" textAnchor="middle">✦</text>
+        </g>
+      );
+    case "game_quiz": // paper with question mark
+      return (
+        <g filter="url(#watercolorSoft)">
+          <rect x="-10" y="-13" width="20" height="26" rx="2" fill="#fff5e0" />
+          <rect x="-10" y="-13" width="20" height="3" fill="#5a8fc7" />
+          {/* lines */}
+          {[-4,1,6].map((y,i) => (
+            <rect key={i} x="-7" y={y} width="14" height="1.5" fill="#5a8fc7" opacity="0.4" rx="0.5" />
+          ))}
+          {/* big Q */}
+          <text x="0" y="-3" fontSize="12" fill="#5a8fc7" textAnchor="middle" fontWeight="bold">?</text>
+          {/* corner fold */}
+          <path d="M 7 -13 L 10 -13 L 10 -10 Z" fill="#d8c8a8" />
+        </g>
+      );
+
+    // ─── TOP NAVIGATION BUTTON ICONS ───
+    case "btn_daily": // jigsaw puzzle piece — Daily Challenge
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* main body */}
+          <path d="M -12 -12
+                   L 0 -12
+                   Q 0 -16 4 -16
+                   Q 8 -16 8 -12
+                   L 12 -12
+                   L 12 0
+                   Q 16 0 16 4
+                   Q 16 8 12 8
+                   L 12 12
+                   L -12 12
+                   L -12 4
+                   Q -16 4 -16 0
+                   Q -16 -4 -12 -4
+                   Z"
+                fill="#ffd040" />
+          {/* highlight */}
+          <ellipse cx="-4" cy="-4" rx="6" ry="3" fill="white" opacity="0.5" />
+          {/* shadow on right */}
+          <path d="M 8 -12 L 12 -12 L 12 12 L 8 12 Z" fill="#a07810" opacity="0.25" />
+          {/* sparkle */}
+          <text x="13" y="-10" fontSize="6" fill="#fff080" textAnchor="middle">✦</text>
+        </g>
+      );
+    case "btn_mission": // rocket — Missions
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* flame trail */}
+          <path d="M -3 10 Q -2 16 0 18 Q 2 16 3 10 Z" fill="#ff9050" />
+          <path d="M -2 10 Q -1 14 0 15 Q 1 14 2 10 Z" fill="#fff080" />
+          {/* body */}
+          <path d="M -5 10 Q -8 0 -5 -8 Q 0 -14 5 -8 Q 8 0 5 10 Z" fill="#e8e8f0" />
+          <path d="M -4 10 Q -6 0 -4 -7 Q 0 -12 4 -7 Q 6 0 4 10 Z" fill="white" opacity="0.5" />
+          {/* nose cone */}
+          <path d="M -5 -8 Q 0 -16 5 -8 Z" fill="#cc4030" />
+          {/* fins */}
+          <path d="M -5 4 L -10 10 L -5 8 Z" fill="#cc4030" />
+          <path d="M 5 4 L 10 10 L 5 8 Z" fill="#cc4030" />
+          {/* window */}
+          <circle cx="0" cy="-2" r="2.5" fill="#5a8fc7" />
+          <circle cx="-1" cy="-3" r="0.8" fill="white" opacity="0.7" />
+          {/* small clouds */}
+          <ellipse cx="-7" cy="14" rx="2" ry="1" fill="white" opacity="0.6" />
+          <ellipse cx="7" cy="14" rx="2" ry="1" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "btn_hotspring": // cherry blossom flower — Hot Spring
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* steam wisps */}
+          <path d="M -8 -14 Q -7 -18 -8 -22" stroke="white" strokeWidth="1.2" fill="none" opacity="0.7" />
+          <path d="M 0 -16 Q 1 -20 0 -24" stroke="white" strokeWidth="1.2" fill="none" opacity="0.7" />
+          <path d="M 8 -14 Q 9 -18 8 -22" stroke="white" strokeWidth="1.2" fill="none" opacity="0.7" />
+          {/* 5 petals */}
+          {[0, 72, 144, 216, 288].map((deg, i) => (
+            <g key={i} transform={`rotate(${deg})`}>
+              <path d="M 0 -2 Q -5 -8 -3 -12 Q 0 -14 3 -12 Q 5 -8 0 -2 Z" fill="#ffb0d0" />
+              <path d="M 0 -3 Q -3 -8 -2 -11 Q 0 -12 2 -11 Q 3 -8 0 -3 Z" fill="#ffd0e0" opacity="0.6" />
+              {/* petal notch */}
+              <path d="M 0 -12 Q -1 -10 0 -9 Q 1 -10 0 -12" fill="#ff90b8" opacity="0.7" />
+            </g>
+          ))}
+          {/* center */}
+          <circle cx="0" cy="0" r="3" fill="#ffd040" />
+          <circle cx="-1" cy="-1" r="1" fill="#fff080" />
+          {/* tiny star pollens */}
+          {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+            <circle key={i} cx={Math.cos(deg * Math.PI / 180) * 2} cy={Math.sin(deg * Math.PI / 180) * 2} r="0.3" fill="#a07810" />
+          ))}
+        </g>
+      );
+
+    default: return null;
+  }
+}
+
+/* ─── ACCESSORY PREVIEW HELPERS ───
+   Used in customize cards instead of emoji to show the actual SVG accessory.
+   Pet accessories: render directly via renderPetAccessory at center.
+   Monkey accessories: render a tiny monkey wearing the item — most accurate preview. */
+function PetAccessoryPreview({ accessoryId, size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="-10 -10 20 20" style={{ overflow: "visible", display: "block" }}>
+      {renderPetAccessory(accessoryId, { x: 0, y: 0, scale: 2.2 })}
+    </svg>
+  );
+}
+function MonkeyAccessoryPreview({ accessoryId, size = 60 }) {
+  // Render JUST the accessory SVG — no monkey body. The accessory art is positioned
+  // in monkey-relative coordinates, so we use a slot-aware translation to center it.
+  const acc = getAccessory(accessoryId);
+  if (!acc) return null;
+  // Slot-specific translation to bring the accessory toward (0,0) in the viewBox.
+  // These values offset the natural monkey-relative coordinates so the item appears centered.
+  const slotShift = {
+    head: { tx: 0,   ty: 44 },  // heads sit at y≈-44, shift down to center
+    face: { tx: 0,   ty: 16 },  // sunglasses/mustaches at y≈-16
+    neck: { tx: 0,   ty: -18 }, // scarves/ties at y≈18
+    hold: { tx: -25, ty: 8 },   // hand items at x≈25
+    back: { tx: 0,   ty: -4 },  // wings/capes around body center
+  };
+  const shift = slotShift[acc.slot] || { tx: 0, ty: 0 };
+  return (
+    <svg width={size} height={size} viewBox="-32 -32 64 64"
+      style={{ overflow: "visible", display: "block", pointerEvents: "none" }}>
+      <g transform={`translate(${shift.tx}, ${shift.ty})`}>
+        {renderMonkeyAccessoryArt(accessoryId)}
+      </g>
+    </svg>
+  );
+}
+/* ─── MONKEY ACCESSORY ART ─── extracted from MonkeySVG render code.
+   Returns the SVG <g> for an accessory at its monkey-relative position.
+   Used by MonkeyAccessoryPreview to show items without the monkey wearing them. */
+function renderMonkeyAccessoryArt(id) {
+  switch (id) {
+    case "scarf":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -22 14 Q 0 22 22 14 Q 24 22 22 28 Q 0 36 -22 28 Q -24 22 -22 14 Z"
+            fill="#c94c4c" stroke="#a02828" strokeWidth="0.5" />
+          <path d="M -22 17 L -16 32 L -10 28 L -14 17"
+            fill="#a02828" opacity="0.8" />
+          {/* stripes */}
+          <line x1="-18" y1="20" x2="18" y2="18" stroke="white" strokeWidth="1" opacity="0.4" />
+          <line x1="-18" y1="24" x2="18" y2="22" stroke="white" strokeWidth="1" opacity="0.3" />
+        </g>
+      );
+    case "sunglasses":
+      return (
+        <g>
+          <ellipse cx="-9" cy="-16" rx="7" ry="5" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+          <ellipse cx="9" cy="-16" rx="7" ry="5" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+          <line x1="-2" y1="-16" x2="2" y2="-16" stroke="#444" strokeWidth="1.5" />
+          <line x1="-16" y1="-15" x2="-19" y2="-13" stroke="#444" strokeWidth="1" />
+          <line x1="16" y1="-15" x2="19" y2="-13" stroke="#444" strokeWidth="1" />
+          {/* lens shine */}
+          <ellipse cx="-11" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
+          <ellipse cx="7" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
+        </g>
+      );
+    case "hat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* hat brim */}
+          <ellipse cx="0" cy="-38" rx="28" ry="5" fill="#3a4f6a" />
+          {/* hat top */}
+          <path d="M -18 -38 Q -16 -55 0 -57 Q 16 -55 18 -38 Z"
+            fill="#4a6080" stroke="#2a3a50" strokeWidth="0.8" />
+          {/* band */}
+          <ellipse cx="0" cy="-40" rx="19" ry="2.5" fill="#2a3a50" />
+          {/* small accent */}
+          <circle cx="-10" cy="-40" r="1.5" fill="#edb830" />
+        </g>
+      );
+    case "beanie":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* beanie body */}
+          <path d="M -26 -32 Q -28 -52 0 -56 Q 28 -52 26 -32 Q 13 -30 0 -30 Q -13 -30 -26 -32 Z"
+            fill="#d96666" stroke="#a04040" strokeWidth="0.5" />
+          {/* fold */}
+          <path d="M -26 -32 Q 0 -28 26 -32 L 26 -28 Q 0 -24 -26 -28 Z"
+            fill="#a04040" />
+          {/* pom pom */}
+          <circle cx="0" cy="-58" r="6" fill="#f5f0ea" filter="url(#furTexture)" />
+          <circle cx="-2" cy="-60" r="2" fill="white" opacity="0.5" />
+        </g>
+      );
+    case "crown":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* crown base */}
+          <path d="M -22 -38 L -22 -45 L -14 -52 L -7 -45 L 0 -55 L 7 -45 L 14 -52 L 22 -45 L 22 -38 Z"
+            fill="#edb830" stroke="#b88810" strokeWidth="0.8" />
+          <rect x="-22" y="-40" width="44" height="3" fill="#b88810" />
+          {/* gems */}
+          <circle cx="-14" cy="-45" r="2" fill="#e06060" />
+          <circle cx="0" cy="-48" r="2.5" fill="#5a8fc7" />
+          <circle cx="14" cy="-45" r="2" fill="#5caa5e" />
+          {/* shine */}
+          <path d="M -20 -42 L -20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
+          <path d="M 20 -42 L 20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
+        </g>
+      );
+    case "flower":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* flower petals */}
+          {[0, 72, 144, 216, 288].map((angle, i) => {
+            const rad = angle * Math.PI / 180;
+            const x = -22 + Math.cos(rad) * 5;
+            const y = -32 + Math.sin(rad) * 5;
+            return <ellipse key={i} cx={x} cy={y} rx="4" ry="3" fill="#ffb6d9"
+              transform={`rotate(${angle} ${x} ${y})`} />;
+          })}
+          <circle cx="-22" cy="-32" r="3" fill="#edb830" />
+          <ellipse cx="-23" cy="-33" rx="1" ry="0.8" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "bowtie":
+      return (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -10 8 L -16 4 L -16 14 Z" fill="#c94c4c" />
+          <path d="M 10 8 L 16 4 L 16 14 Z" fill="#c94c4c" />
+          <rect x="-3" y="6" width="6" height="6" rx="1" fill="#a02828" />
+          <circle cx="0" cy="9" r="1" fill="#edb830" />
+        </g>
+      );
+    case "headphones":
+      return (
+        <g>
+          {/* band */}
+          <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
+          <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
+          {/* ear cups */}
+          <circle cx="-28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+          <circle cx="28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+          <circle cx="-28" cy="-22" r="3" fill="#e06060" />
+          <circle cx="28" cy="-22" r="3" fill="#e06060" />
+        </g>
+      );
+    case "earphones":
+      return (
+        <g>
+          {/* Wired earphones - small earbuds with cable hanging down */}
+          <ellipse cx="-28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
+          <ellipse cx="28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
+          <ellipse cx="-28" cy="-15" rx="2" ry="2.5" fill="#444" />
+          <ellipse cx="28" cy="-15" rx="2" ry="2.5" fill="#444" />
+          {/* Wires hanging down */}
+          <path d="M -28 -10 Q -30 0 -22 12 Q -12 18 -2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+          <path d="M 28 -10 Q 30 0 22 12 Q 12 18 2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+          <path d="M -2 16 L 2 16 L 0 22" fill="none" stroke="#fafafa" strokeWidth="1.5" />
+          <rect x="-2" y="20" width="4" height="6" rx="1" fill="#444" />
+        </g>
+      );
+    case "vrheadset":
+      return (
+        <g>
+          {/* Strap */}
+          <path d="M -28 -22 Q 0 -45 28 -22" fill="none" stroke="#2a2a2a" strokeWidth="4" strokeLinecap="round" />
+          {/* Main headset block */}
+          <rect x="-22" y="-22" width="44" height="16" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
+          {/* Lens area */}
+          <rect x="-19" y="-19" width="38" height="10" rx="2" fill="#0a0a0a" />
+          {/* Glow eyes through lens */}
+          <ellipse cx="-10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
+          <ellipse cx="10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
+          <ellipse cx="-10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
+          <ellipse cx="10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
+          {/* Brand strip */}
+          <rect x="-8" y="-21" width="16" height="2" fill="#5a8fc7" />
+        </g>
+      );
+    case "halo":
+      return (
+        <g>
+          {/* Glowing halo */}
+          <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#fff8b0" strokeWidth="3" opacity="0.9" />
+          <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#edb830" strokeWidth="1.5" />
+          <ellipse cx="0" cy="-50" rx="20" ry="4" fill="none" stroke="white" strokeWidth="1" opacity="0.8" />
+          {/* Twinkles */}
+          <text x="-22" y="-46" fontSize="10" fill="#fff8b0">✦</text>
+          <text x="18" y="-46" fontSize="10" fill="#fff8b0">✦</text>
+          <text x="-2" y="-58" fontSize="8" fill="#fff8b0">✧</text>
+        </g>
+      );
+    case "tennis":
+      return (
+        <g transform="translate(28, 18) rotate(-20)">
+          {/* Handle */}
+          <rect x="-1.5" y="-5" width="3" height="14" rx="1" fill="#3a2810" />
+          <rect x="-1.5" y="-5" width="3" height="3" fill="#7a5818" />
+          {/* Head */}
+          <ellipse cx="0" cy="-15" rx="9" ry="11" fill="none" stroke="#1a1a1a" strokeWidth="1.8" />
+          <ellipse cx="0" cy="-15" rx="9" ry="11" fill="#fffabf" opacity="0.9" stroke="#1a1a1a" strokeWidth="0.5" />
+          {/* String pattern */}
+          {[-6, -3, 0, 3, 6].map((x, i) => <line key={`v${i}`} x1={x} y1="-25" x2={x} y2="-5" stroke="#bbb" strokeWidth="0.5" />)}
+          {[-22, -18, -14, -10].map((y, i) => <line key={`h${i}`} x1="-9" y1={y} x2="9" y2={y} stroke="#bbb" strokeWidth="0.5" />)}
+        </g>
+      );
+    case "basketball":
+      return (
+        <g transform="translate(30, 20)">
+          <circle cx="0" cy="0" r="9" fill="#e07020" stroke="#a04010" strokeWidth="1" />
+          <circle cx="-2" cy="-2" r="4" fill="#ff9050" opacity="0.6" />
+          {/* Ball lines */}
+          <path d="M -9 0 Q 0 3 9 0" stroke="#1a1a1a" strokeWidth="1" fill="none" />
+          <path d="M 0 -9 Q 3 0 0 9" stroke="#1a1a1a" strokeWidth="1" fill="none" />
+          <path d="M -7 -6 Q 0 0 7 -6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
+          <path d="M -7 6 Q 0 0 7 6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
+        </g>
+      );
+    case "controller":
+      return (
+        <g transform="translate(28, 22) rotate(-15)">
+          {/* Body */}
+          <rect x="-12" y="-5" width="24" height="11" rx="6" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
+          {/* D-pad */}
+          <rect x="-9" y="-3" width="2" height="6" fill="#fafafa" />
+          <rect x="-11" y="-1" width="6" height="2" fill="#fafafa" />
+          {/* Buttons */}
+          <circle cx="6" cy="-2" r="1.5" fill="#e06060" />
+          <circle cx="9" cy="1" r="1.5" fill="#5a8fc7" />
+          <circle cx="3" cy="1" r="1.5" fill="#edb830" />
+          <circle cx="6" cy="4" r="1.5" fill="#5caa5e" />
+        </g>
+      );
+    case "guitar":
+      return (
+        <g transform="translate(26, 12) rotate(20)">
+          {/* Body - figure 8 */}
+          <ellipse cx="0" cy="6" rx="9" ry="11" fill="#a04010" stroke="#5a2008" strokeWidth="0.8" />
+          <ellipse cx="-2" cy="4" rx="6" ry="7" fill="#c05028" opacity="0.6" />
+          {/* Sound hole */}
+          <circle cx="0" cy="6" r="2.5" fill="#1a1a1a" />
+          <circle cx="0" cy="6" r="3.2" fill="none" stroke="#3a1810" strokeWidth="0.6" />
+          {/* Neck */}
+          <rect x="-1.5" y="-15" width="3" height="13" fill="#5a3818" />
+          {/* Frets */}
+          {[-13, -10, -7, -4].map((y, i) => <line key={i} x1="-1.5" y1={y} x2="1.5" y2={y} stroke="#fafafa" strokeWidth="0.4" />)}
+          {/* Headstock */}
+          <rect x="-2" y="-19" width="4" height="4" fill="#5a3818" />
+          {/* Strings */}
+          {[-1, 0, 1].map((x, i) => <line key={i} x1={x * 0.5} y1="-15" x2={x * 0.5} y2="15" stroke="#fff8b0" strokeWidth="0.3" />)}
+        </g>
+      );
+    case "microphone":
+      return (
+        <g transform="translate(28, 14) rotate(-15)">
+          {/* Head */}
+          <ellipse cx="0" cy="-10" rx="5" ry="6" fill="#5a5a5a" stroke="#2a2a2a" strokeWidth="0.8" />
+          {/* Grill texture */}
+          {[-8, -6, -4].map((y, i) => <line key={i} x1="-4" y1={y} x2="4" y2={y} stroke="#2a2a2a" strokeWidth="0.4" />)}
+          <ellipse cx="-1" cy="-13" rx="2" ry="2" fill="#9a9a9a" opacity="0.6" />
+          {/* Body/handle */}
+          <rect x="-1.5" y="-4" width="3" height="14" fill="#2a2a2a" />
+          <rect x="-1.5" y="-4" width="3" height="2" fill="#5a5a5a" />
+        </g>
+      );
+    case "umbrella":
+      return (
+        <g transform="translate(28, 16)">
+          {/* Canopy */}
+          <path d="M -14 -8 Q 0 -22 14 -8 Q 12 -10 8 -10 Q 4 -12 0 -10 Q -4 -12 -8 -10 Q -12 -10 -14 -8 Z"
+            fill="#e06060" stroke="#a02828" strokeWidth="0.8" />
+          <path d="M 0 -22 L 0 -8" stroke="#a02828" strokeWidth="0.5" />
+          <path d="M -7 -14 L -4 -10 M 7 -14 L 4 -10" stroke="#a02828" strokeWidth="0.5" />
+          {/* Handle */}
+          <path d="M 0 -8 L 0 12 Q 0 16 4 16 Q 8 16 8 12" stroke="#5a3818" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <circle cx="0" cy="-22" r="1.5" fill="#5a3818" />
+        </g>
+      );
+    case "lightsaber":
+      return (
+        <g transform="translate(28, 18) rotate(-25)">
+          {/* Hilt */}
+          <rect x="-2" y="0" width="4" height="14" rx="0.5" fill="#5a5a5a" stroke="#1a1a1a" strokeWidth="0.5" />
+          <rect x="-2" y="2" width="4" height="2" fill="#1a1a1a" />
+          <rect x="-2" y="6" width="4" height="2" fill="#1a1a1a" />
+          <circle cx="0" cy="13" r="1.5" fill="#e06060" />
+          {/* Glow blade */}
+          <rect x="-2" y="-26" width="4" height="26" fill="#a0d4ff" opacity="0.5" />
+          <rect x="-1" y="-26" width="2" height="26" fill="#ffffff" opacity="0.9" />
+          <rect x="-3" y="-26" width="6" height="3" fill="#5a8fc7" opacity="0.4" />
+          {/* Tip glow */}
+          <circle cx="0" cy="-26" r="3" fill="#a0d4ff" opacity="0.5" />
+        </g>
+      );
+    case "magicwand":
+      return (
+        <g transform="translate(28, 16) rotate(-20)">
+          {/* Wand */}
+          <rect x="-1" y="-2" width="2" height="18" rx="1" fill="#5a3818" />
+          <rect x="-1.5" y="14" width="3" height="3" fill="#3a2010" />
+          {/* Star tip */}
+          <path d="M 0 -10 L 2 -4 L 8 -4 L 3 0 L 5 6 L 0 2 L -5 6 L -3 0 L -8 -4 L -2 -4 Z"
+            fill="#fff8b0" stroke="#edb830" strokeWidth="0.6" />
+          <path d="M 0 -8 L 1 -4 L 5 -4 L 2 -1 L 3 3 L 0 1 L -3 3 L -2 -1 L -5 -4 L -1 -4 Z"
+            fill="#edb830" />
+          {/* Sparkles */}
+          <text x="-14" y="-8" fontSize="6" fill="#fff8b0">✦</text>
+          <text x="10" y="-12" fontSize="5" fill="#fff8b0">✧</text>
+          <text x="6" y="6" fontSize="4" fill="#fff8b0">✦</text>
+        </g>
+      );
+    case "icecream":
+      return (
+        <g transform="translate(28, 18)">
+          {/* Cone */}
+          <path d="M -4 -3 L 4 -3 L 0 12 Z" fill="#d4a060" stroke="#7a5818" strokeWidth="0.5" />
+          <path d="M -4 -3 L 4 -3 M -3 0 L 3 0 M -2 3 L 2 3" stroke="#7a5818" strokeWidth="0.4" />
+          {/* Scoops */}
+          <circle cx="0" cy="-5" r="5" fill="#ff9080" />
+          <circle cx="-1" cy="-7" r="2.5" fill="#ffb0a0" opacity="0.7" />
+          <circle cx="-2" cy="-12" r="4" fill="#fff5d0" />
+          <circle cx="-3" cy="-13" r="2" fill="#ffeebb" opacity="0.7" />
+          {/* Cherry on top */}
+          <circle cx="-2" cy="-16" r="1.5" fill="#e84050" />
+          <path d="M -2 -17 L -1 -19" stroke="#3a7a3c" strokeWidth="0.5" />
+        </g>
+      );
+    case "backpack":
+      return (
+        <g>
+          {/* Straps */}
+          <path d="M -18 -2 Q -22 8 -20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
+          <path d="M 18 -2 Q 22 8 20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
+          {/* Body of pack peeking from sides */}
+          <ellipse cx="-30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
+          <ellipse cx="30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
+          <rect x="-32" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
+          <rect x="29" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
+        </g>
+      );
+    case "wings":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* Left wing */}
+          <path d="M -28 4 Q -52 -8 -56 14 Q -50 14 -42 14 Q -36 18 -28 12 Z"
+            fill="#a060c0" opacity="0.85" />
+          <path d="M -28 8 Q -50 4 -54 22 Q -46 22 -38 20 Q -32 22 -28 18 Z"
+            fill="#c080d8" opacity="0.7" />
+          <ellipse cx="-46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
+          <ellipse cx="-42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
+          {/* Right wing */}
+          <path d="M 28 4 Q 52 -8 56 14 Q 50 14 42 14 Q 36 18 28 12 Z"
+            fill="#a060c0" opacity="0.85" />
+          <path d="M 28 8 Q 50 4 54 22 Q 46 22 38 20 Q 32 22 28 18 Z"
+            fill="#c080d8" opacity="0.7" />
+          <ellipse cx="46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
+          <ellipse cx="42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
+        </g>
+      );
+    case "cape":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* Left cape edge */}
+          <path d="M -18 0 Q -32 8 -34 28 Q -28 24 -22 20 Q -18 12 -18 0 Z"
+            fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
+          {/* Right cape edge */}
+          <path d="M 18 0 Q 32 8 34 28 Q 28 24 22 20 Q 18 12 18 0 Z"
+            fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
+          {/* Inside lining */}
+          <path d="M -16 2 Q -22 14 -22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
+          <path d="M 16 2 Q 22 14 22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
+        </g>
+      );
+    case "partyhat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* cone */}
+          <path d="M -13 -32 L 0 -58 L 13 -32 Z" fill="#ff5c87" stroke="#c83870" strokeWidth="0.8" />
+          {/* stripes */}
+          <path d="M -7 -44 L 7 -44" stroke="#ffd140" strokeWidth="2" />
+          <path d="M -10 -38 L 10 -38" stroke="#5caa5e" strokeWidth="2" />
+          {/* pom-pom */}
+          <circle cx="0" cy="-58" r="3.5" fill="#ffd140" />
+          <circle cx="-1" cy="-59" r="1" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "graduationcap":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base cap */}
+          <ellipse cx="0" cy="-34" rx="14" ry="4" fill="#1a1a1a" />
+          {/* mortarboard square */}
+          <path d="M -22 -38 L 0 -42 L 22 -38 L 0 -34 Z" fill="#2a2a2a" stroke="#000" strokeWidth="0.6" />
+          {/* button */}
+          <circle cx="0" cy="-39" r="1.5" fill="#edb830" />
+          {/* tassel */}
+          <path d="M 0 -39 Q 18 -36 20 -28" stroke="#edb830" strokeWidth="1.2" fill="none" />
+          <ellipse cx="20" cy="-26" rx="1.5" ry="3" fill="#edb830" />
+        </g>
+      );
+    case "leaf":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* leaf crown */}
+          <path d="M -18 -34 Q -22 -42 -14 -42 Q -10 -38 -10 -34" fill="#5caa5e" />
+          <path d="M -8 -36 Q -10 -46 -2 -46 Q 0 -40 0 -36" fill="#7ac87c" />
+          <path d="M 8 -36 Q 6 -46 14 -46 Q 16 -42 14 -36" fill="#5caa5e" />
+          <path d="M 18 -34 Q 22 -42 14 -42 Q 10 -38 10 -34" fill="#7ac87c" />
+          {/* stem */}
+          <path d="M -18 -34 Q 0 -36 18 -34" stroke="#3a7a3c" strokeWidth="1" fill="none" />
+          {/* dewdrop */}
+          <ellipse cx="-2" cy="-44" rx="1" ry="1.5" fill="white" opacity="0.7" />
+        </g>
+      );
+    case "rainbow":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* headband base */}
+          <path d="M -20 -34 Q 0 -44 20 -34" stroke="#a8c8d4" strokeWidth="2.5" fill="none" />
+          {/* rainbow arches */}
+          <path d="M -14 -34 Q 0 -44 14 -34" stroke="#e06060" strokeWidth="2" fill="none" />
+          <path d="M -12 -34 Q 0 -42 12 -34" stroke="#edb830" strokeWidth="1.5" fill="none" />
+          <path d="M -10 -34 Q 0 -40 10 -34" stroke="#5caa5e" strokeWidth="1.5" fill="none" />
+          <path d="M -8 -34 Q 0 -38 8 -34" stroke="#5a8fc7" strokeWidth="1.5" fill="none" />
+          <path d="M -6 -34 Q 0 -36 6 -34" stroke="#a060c0" strokeWidth="1.5" fill="none" />
+        </g>
+      );
+    case "cowboyhat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* brim - wide curved */}
+          <path d="M -28 -34 Q -14 -38 0 -38 Q 14 -38 28 -34 Q 24 -32 0 -32 Q -24 -32 -28 -34 Z"
+            fill="#8b6342" stroke="#553928" strokeWidth="0.7" />
+          {/* crown of hat */}
+          <path d="M -12 -38 Q -14 -50 0 -52 Q 14 -50 12 -38 Z" fill="#a3796a" stroke="#553928" strokeWidth="0.7" />
+          {/* dent in top */}
+          <path d="M -6 -50 Q 0 -47 6 -50" stroke="#553928" strokeWidth="0.6" fill="none" />
+          {/* band */}
+          <ellipse cx="0" cy="-40" rx="13" ry="2" fill="#3a2a1a" />
+          {/* star */}
+          <text x="0" y="-39" fontSize="4" textAnchor="middle" fill="#edb830">★</text>
+        </g>
+      );
+    case "tophat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* wizard hat - tall pointed */}
+          <path d="M -14 -32 Q 0 -34 14 -32 L 4 -54 Q 0 -60 -4 -54 Z"
+            fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
+          {/* tip droops a bit */}
+          <path d="M 0 -60 Q 5 -56 4 -54" fill="none" stroke="#3a1a5a" strokeWidth="0.5" />
+          {/* stars */}
+          <text x="-5" y="-40" fontSize="3" fill="#ffd140">✦</text>
+          <text x="6" y="-46" fontSize="2.5" fill="#ffd140">✦</text>
+          <text x="0" y="-52" fontSize="2" fill="white">✦</text>
+          {/* moon */}
+          <path d="M -2 -38 Q -6 -36 -2 -34 Q 0 -36 -2 -38" fill="#edb830" />
+        </g>
+      );
+    case "vikinghelm":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* helmet body - rounded dome */}
+          <path d="M -16 -32 Q -16 -50 0 -52 Q 16 -50 16 -32 Z" fill="#888a90" stroke="#404248" strokeWidth="0.8" />
+          {/* highlight */}
+          <path d="M -10 -46 Q -8 -50 -4 -50" stroke="#c0c2c8" strokeWidth="2" fill="none" />
+          {/* nose guard */}
+          <rect x="-1.5" y="-32" width="3" height="6" fill="#666870" />
+          {/* horns */}
+          <path d="M -16 -36 Q -28 -40 -28 -32 Q -22 -34 -16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
+          <path d="M 16 -36 Q 28 -40 28 -32 Q 22 -34 16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
+        </g>
+      );
+    case "policehat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base brim */}
+          <ellipse cx="0" cy="-32" rx="20" ry="3" fill="#1a2a4a" />
+          {/* main body */}
+          <path d="M -16 -34 Q -16 -48 0 -48 Q 16 -48 16 -34 Z" fill="#2a3a6a" stroke="#0a1a3a" strokeWidth="0.7" />
+          {/* center band */}
+          <rect x="-16" y="-38" width="32" height="3" fill="#1a2a4a" />
+          {/* badge */}
+          <text x="0" y="-41" fontSize="6" textAnchor="middle" fill="#edb830">★</text>
+          {/* visor strap */}
+          <ellipse cx="0" cy="-31" rx="14" ry="1.5" fill="#0a1a3a" />
+        </g>
+      );
+    case "chefhat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* band */}
+          <rect x="-14" y="-36" width="28" height="4" fill="#f5f0ea" stroke="#c0b8a8" strokeWidth="0.6" />
+          {/* puff body */}
+          <path d="M -16 -36 Q -22 -56 -8 -54 Q -4 -60 4 -56 Q 8 -62 14 -54 Q 22 -54 16 -36 Z"
+            fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.6" />
+          {/* puff bumps */}
+          <circle cx="-8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+          <circle cx="0" cy="-54" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+          <circle cx="8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+        </g>
+      );
+    case "santahat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* white fur band */}
+          <ellipse cx="0" cy="-34" rx="18" ry="3.5" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+          {/* red cone */}
+          <path d="M -16 -36 Q -10 -54 14 -52 Q 18 -42 16 -36 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.6" />
+          {/* fluffy fur dots */}
+          <circle cx="-10" cy="-34" r="2" fill="#fffefa" />
+          <circle cx="0" cy="-32" r="2.5" fill="#fffefa" />
+          <circle cx="10" cy="-34" r="2" fill="#fffefa" />
+          {/* white ball at tip */}
+          <circle cx="14" cy="-52" r="3" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+        </g>
+      );
+    case "witchhat":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* wide brim */}
+          <ellipse cx="0" cy="-32" rx="24" ry="4" fill="#2a1a3a" stroke="#0a0a1a" strokeWidth="0.6" />
+          {/* tall pointed cone, slightly tilted */}
+          <path d="M -12 -34 Q 0 -36 12 -34 L 18 -56 Q 14 -60 8 -54 Z"
+            fill="#3a1a5a" stroke="#1a0a2a" strokeWidth="0.7" />
+          {/* purple band */}
+          <ellipse cx="0" cy="-36" rx="13" ry="2" fill="#5a3a8a" />
+          {/* gold buckle */}
+          <rect x="-3" y="-37.5" width="6" height="3" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+          {/* tip curl + star */}
+          <text x="20" y="-54" fontSize="3" fill="#edb830">✦</text>
+        </g>
+      );
+    case "antlers":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* left antler */}
+          <path d="M -10 -32 Q -14 -42 -18 -50 M -16 -46 Q -22 -48 -24 -42 M -16 -50 Q -22 -52 -22 -46"
+            stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          {/* right antler */}
+          <path d="M 10 -32 Q 14 -42 18 -50 M 16 -46 Q 22 -48 24 -42 M 16 -50 Q 22 -52 22 -46"
+            stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          {/* bows on antlers (festive) */}
+          <path d="M -12 -36 Q -14 -38 -16 -36 Q -14 -34 -12 -36" fill="#c94c4c" />
+          <path d="M 12 -36 Q 14 -38 16 -36 Q 14 -34 12 -36" fill="#c94c4c" />
+        </g>
+      );
+    case "starcrown":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base */}
+          <rect x="-22" y="-38" width="44" height="4" fill="#edb830" stroke="#b88810" strokeWidth="0.7" />
+          {/* star points */}
+          <path d="M -20 -40 L -18 -50 L -16 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+          <path d="M -8 -40 L -6 -54 L -4 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+          <path d="M -2 -40 L 0 -58 L 2 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+          <path d="M 4 -40 L 6 -54 L 8 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+          <path d="M 16 -40 L 18 -50 L 20 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+          {/* star tips with sparkles */}
+          <circle cx="-6" cy="-54" r="1.2" fill="white" />
+          <circle cx="0" cy="-58" r="1.5" fill="white" />
+          <circle cx="6" cy="-54" r="1.2" fill="white" />
+        </g>
+      );
+    case "fireheadband":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* headband */}
+          <path d="M -22 -32 Q 0 -38 22 -32 L 22 -28 Q 0 -34 -22 -28 Z"
+            fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+          {/* flames */}
+          <path d="M -16 -34 Q -14 -42 -10 -38 Q -8 -44 -4 -38 Q -2 -46 2 -40 Q 4 -46 8 -40 Q 10 -44 14 -38 Q 16 -42 18 -36"
+            fill="#ff5500" stroke="#aa3300" strokeWidth="0.5" />
+          {/* yellow flame core */}
+          <path d="M -10 -40 Q -8 -42 -6 -40 M 0 -42 Q 2 -44 4 -42 M 8 -40 Q 10 -42 12 -40"
+            stroke="#ffd140" strokeWidth="1.5" fill="none" />
+        </g>
+      );
+    case "alien":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base band */}
+          <ellipse cx="0" cy="-32" rx="13" ry="2.5" fill="#3a3a5a" />
+          {/* left antenna */}
+          <path d="M -10 -34 Q -16 -44 -14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
+          <circle cx="-14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
+          {/* right antenna */}
+          <path d="M 10 -34 Q 16 -44 14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
+          <circle cx="14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
+          {/* glow on balls */}
+          <circle cx="-15" cy="-55" r="1" fill="white" opacity="0.7" />
+          <circle cx="13" cy="-55" r="1" fill="white" opacity="0.7" />
+        </g>
+      );
+    case "smile":
+      return (
+        <g>
+          {/* extra-big curved smile drawn over normal mouth */}
+          <path d="M -10 -2 Q 0 8 10 -2" fill="none" stroke="#3a2a1a" strokeWidth="2" strokeLinecap="round" />
+          {/* tooth highlight */}
+          <path d="M -3 2 L -3 5 M 0 2 L 0 5 M 3 2 L 3 5" stroke="white" strokeWidth="1.5" />
+        </g>
+      );
+    case "monocle":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* monocle ring (right eye) */}
+          <circle cx="8" cy="-15" r="6" fill="rgba(180,210,230,0.3)" stroke="#444" strokeWidth="1.2" />
+          <circle cx="8" cy="-15" r="6" fill="none" stroke="#edb830" strokeWidth="0.6" />
+          {/* chain */}
+          <path d="M 14 -13 Q 18 -8 18 -2" stroke="#edb830" strokeWidth="0.7" fill="none" strokeDasharray="1,1" />
+          {/* shine */}
+          <path d="M 5 -18 Q 7 -19 9 -18" stroke="white" strokeWidth="0.8" fill="none" opacity="0.7" />
+        </g>
+      );
+    case "mustache":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* curly mustache below nose */}
+          <path d="M -10 -4 Q -14 -2 -12 2 Q -8 0 -4 -2 Q 0 -4 4 -2 Q 8 0 12 2 Q 14 -2 10 -4 Q 6 -2 0 -3 Q -6 -2 -10 -4 Z"
+            fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.5" />
+          {/* curly tips */}
+          <path d="M -12 -2 Q -16 -4 -14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
+          <path d="M 12 -2 Q 16 -4 14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
+        </g>
+      );
+    case "eyepatch":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* patch over right eye */}
+          <ellipse cx="8" cy="-16" rx="6" ry="5" fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+          {/* strap going around head */}
+          <path d="M 14 -14 Q 24 -12 22 -22 Q 12 -22 4 -20" stroke="#1a1a1a" strokeWidth="1.2" fill="none" />
+          {/* skull */}
+          <text x="8" y="-14" fontSize="4" textAnchor="middle" fill="white">☠</text>
+        </g>
+      );
+    case "facepaint":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* warrior stripes under each eye */}
+          <path d="M -12 -10 L -4 -8" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
+          <path d="M 4 -8 L 12 -10" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
+          {/* zigzag on cheeks */}
+          <path d="M -10 -6 L -8 -4 L -6 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
+          <path d="M 6 -6 L 8 -4 L 10 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
+          {/* dot on forehead */}
+          <circle cx="0" cy="-22" r="2" fill="#edb830" />
+        </g>
+      );
+    case "ninjamask":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* wide black band across eyes */}
+          <path d="M -22 -18 Q 0 -16 22 -18 L 22 -12 Q 0 -10 -22 -12 Z"
+            fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+          {/* tied tails on the side */}
+          <path d="M -22 -16 Q -28 -14 -30 -8 Q -28 -10 -22 -12" fill="#1a1a1a" />
+          <path d="M -28 -10 L -32 -2" stroke="#1a1a1a" strokeWidth="1.5" />
+          {/* eye holes */}
+          <ellipse cx="-8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
+          <ellipse cx="8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
+          <circle cx="-7.5" cy="-15" r="1.8" fill="#1a1a1a" />
+          <circle cx="8.5" cy="-15" r="1.8" fill="#1a1a1a" />
+        </g>
+      );
+    case "starshades":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* star-shaped sunglasses (5-pointed star outline x2) */}
+          <path d="M -8 -19 L -6 -14 L -1 -14 L -5 -11 L -3 -16 L -8 -13 L -8 -19 Z"
+            fill="#edb830" stroke="#b88810" strokeWidth="0.5" />
+          <path d="M -14 -16 L -8 -16 L -3 -13 L -8 -10 L -14 -13 Z"
+            fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
+          <path d="M 3 -13 L 8 -16 L 14 -16 L 14 -13 L 8 -10 Z"
+            fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
+          {/* star sparkles */}
+          <text x="-9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
+          <text x="9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
+          {/* bridge */}
+          <path d="M -3 -13 L 3 -13" stroke="#1a1a3a" strokeWidth="1" />
+        </g>
+      );
+    case "diamondeyes":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* sparkly diamond eyes */}
+          <path d="M -8 -19 L -5 -16 L -8 -12 L -11 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
+          <path d="M 8 -19 L 11 -16 L 8 -12 L 5 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
+          {/* shines */}
+          <path d="M -9 -17 L -7 -15" stroke="white" strokeWidth="0.8" />
+          <path d="M 7 -17 L 9 -15" stroke="white" strokeWidth="0.8" />
+          {/* sparkle around */}
+          <text x="-14" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
+          <text x="13" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
+        </g>
+      );
+    case "leafnecklace":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* string */}
+          <path d="M -16 4 Q 0 12 16 4" stroke="#7a5a3a" strokeWidth="0.8" fill="none" />
+          {/* leaves */}
+          <ellipse cx="-12" cy="6" rx="2.5" ry="3.5" fill="#5caa5e" transform="rotate(-30 -12 6)" />
+          <ellipse cx="-4" cy="9" rx="2.5" ry="3.5" fill="#7ac87c" />
+          <ellipse cx="4" cy="9" rx="2.5" ry="3.5" fill="#5caa5e" />
+          <ellipse cx="12" cy="6" rx="2.5" ry="3.5" fill="#7ac87c" transform="rotate(30 12 6)" />
+          {/* center leaf - bigger */}
+          <ellipse cx="0" cy="11" rx="3" ry="4" fill="#3a7a3c" />
+          <path d="M 0 8 L 0 14" stroke="#1a4a1c" strokeWidth="0.4" />
+        </g>
+      );
+    case "tie":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* knot */}
+          <path d="M -3 4 L 3 4 L 4 8 L -4 8 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
+          {/* tie body */}
+          <path d="M -4 8 L 4 8 L 6 22 L 0 28 L -6 22 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
+          {/* stripes */}
+          <path d="M -4 12 L 4 12 M -5 18 L 5 18" stroke="#7a2828" strokeWidth="0.6" />
+        </g>
+      );
+    case "pearls":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* string */}
+          <path d="M -16 4 Q 0 14 16 4" stroke="#c0b8a8" strokeWidth="0.4" fill="none" />
+          {/* pearls */}
+          {[-14,-10,-6,-2,2,6,10,14].map((x, i) => (
+            <g key={i}>
+              <circle cx={x} cy={4 + Math.abs(x) * 0.3} r="2" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.3" />
+              <circle cx={x - 0.5} cy={3.5 + Math.abs(x) * 0.3} r="0.6" fill="white" opacity="0.8" />
+            </g>
+          ))}
+          {/* center pearl - bigger */}
+          <circle cx="0" cy="12" r="2.8" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+          <circle cx="-0.8" cy="11" r="0.9" fill="white" opacity="0.9" />
+        </g>
+      );
+    case "medal":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* ribbon */}
+          <path d="M -8 -2 L -4 8 L 0 8 L -4 -2 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.4" />
+          <path d="M 8 -2 L 4 8 L 0 8 L 4 -2 Z" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
+          {/* medal disc */}
+          <circle cx="0" cy="14" r="6" fill="#edb830" stroke="#a87810" strokeWidth="0.8" />
+          {/* engraved star */}
+          <text x="0" y="16" fontSize="6" textAnchor="middle" fill="#a87810">★</text>
+          {/* shine */}
+          <path d="M -3 11 Q -2 9 0 9" stroke="white" strokeWidth="0.7" fill="none" opacity="0.7" />
+        </g>
+      );
+    case "diamond":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* chain */}
+          <path d="M -14 4 Q 0 10 14 4" stroke="#c0c0c0" strokeWidth="0.5" fill="none" />
+          {/* pendant diamond */}
+          <path d="M 0 8 L 5 12 L 0 22 L -5 12 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.7" />
+          {/* facet lines */}
+          <path d="M -5 12 L 5 12 M 0 8 L 0 22" stroke="#4080a0" strokeWidth="0.4" opacity="0.6" />
+          {/* shine */}
+          <path d="M -3 11 L -1 13" stroke="white" strokeWidth="1.2" />
+          {/* sparkles */}
+          <text x="-8" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
+          <text x="6" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
+        </g>
+      );
+    case "amulet":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* chain */}
+          <path d="M -14 4 Q 0 10 14 4" stroke="#a85ac0" strokeWidth="0.6" fill="none" />
+          {/* gem holder - circle frame */}
+          <circle cx="0" cy="14" r="6" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
+          {/* purple gem center */}
+          <circle cx="0" cy="14" r="3.5" fill="#a060c0" stroke="#5a30b8" strokeWidth="0.4" />
+          {/* magical glow */}
+          <circle cx="0" cy="14" r="1.5" fill="#e0a8ff" />
+          <circle cx="-1" cy="13" r="0.6" fill="white" opacity="0.9" />
+          {/* runes around frame */}
+          <text x="-5" y="9" fontSize="2.5" fill="#edb830">✦</text>
+          <text x="3" y="9" fontSize="2.5" fill="#edb830">✦</text>
+        </g>
+      );
+    case "book":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* book back cover */}
+          <rect x="22" y="14" width="14" height="16" fill="#5a3a2a" stroke="#3a1a1a" strokeWidth="0.6" />
+          {/* pages */}
+          <rect x="23" y="15" width="13" height="14" fill="#fffafa" stroke="#c0b8a8" strokeWidth="0.4" />
+          {/* page lines */}
+          <path d="M 25 18 L 34 18 M 25 21 L 34 21 M 25 24 L 34 24 M 25 27 L 32 27" stroke="#c0b8a8" strokeWidth="0.3" />
+          {/* spine details */}
+          <rect x="22" y="14" width="2" height="16" fill="#3a1a1a" />
+          <text x="23" y="22" fontSize="3" fill="#edb830">★</text>
+        </g>
+      );
+    case "pencil":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* pencil body */}
+          <path d="M 22 26 L 36 12 L 38 14 L 24 28 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+          {/* tip */}
+          <path d="M 36 12 L 38 14 L 40 12 L 38 10 Z" fill="#3a2a1a" />
+          <path d="M 38 12 L 39 12.5" stroke="#1a1a1a" strokeWidth="1.2" />
+          {/* eraser */}
+          <path d="M 22 26 L 24 28 L 22 30 L 20 28 Z" fill="#ff8090" stroke="#aa4050" strokeWidth="0.4" />
+          {/* metal band */}
+          <path d="M 23 27 L 25 29" stroke="#888" strokeWidth="1.5" />
+          {/* shading */}
+          <path d="M 25 25 L 35 15" stroke="#a87810" strokeWidth="0.4" />
+        </g>
+      );
+    case "leafhold":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* maple leaf */}
+          <path d="M 30 12 L 32 16 L 36 14 L 34 18 L 38 20 L 33 22 L 36 26 L 30 24 L 28 30 L 26 24 L 20 26 L 23 22 L 18 20 L 22 18 L 20 14 L 24 16 L 26 12 L 28 14 Z"
+            fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
+          {/* veins */}
+          <path d="M 28 16 L 28 26" stroke="#a82828" strokeWidth="0.4" />
+          <path d="M 28 18 L 32 16 M 28 20 L 34 22 M 28 18 L 24 16 M 28 20 L 22 22"
+            stroke="#a82828" strokeWidth="0.3" />
+          {/* stem */}
+          <path d="M 28 26 L 28 32" stroke="#5a3a1a" strokeWidth="1.5" />
+        </g>
+      );
+    case "balloon":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* balloon */}
+          <ellipse cx="32" cy="6" rx="6" ry="7" fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
+          {/* knot */}
+          <path d="M 30 12 L 32 14 L 34 12 Z" fill="#a82828" />
+          {/* string going to hand */}
+          <path d="M 32 14 Q 30 18 28 22" stroke="#1a1a1a" strokeWidth="0.5" fill="none" />
+          {/* shine */}
+          <ellipse cx="29" cy="3" rx="1.5" ry="2.5" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "trophy":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base */}
+          <rect x="22" y="26" width="12" height="3" fill="#a87810" />
+          <rect x="24" y="22" width="8" height="4" fill="#c89018" />
+          {/* cup */}
+          <path d="M 22 22 Q 22 12 28 12 Q 34 12 34 22 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.6" />
+          {/* handles */}
+          <path d="M 22 16 Q 18 14 20 18 Q 22 18 22 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+          <path d="M 34 16 Q 38 14 36 18 Q 34 18 34 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+          {/* shine */}
+          <path d="M 24 14 Q 26 12 28 14" stroke="white" strokeWidth="1" opacity="0.7" />
+          {/* star */}
+          <text x="28" y="20" fontSize="5" textAnchor="middle" fill="#a87810">★</text>
+        </g>
+      );
+    case "lollipop":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* stick */}
+          <rect x="27" y="14" width="2" height="14" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+          {/* candy circle */}
+          <circle cx="28" cy="10" r="6" fill="#ff5c87" stroke="#c83870" strokeWidth="0.6" />
+          {/* swirl */}
+          <path d="M 28 10 Q 30 8 32 10 Q 30 12 28 12 Q 26 10 28 8 Q 30 8 32 10"
+            fill="none" stroke="white" strokeWidth="0.8" />
+          <path d="M 24 10 Q 26 6 30 6" stroke="white" strokeWidth="0.6" fill="none" />
+          {/* shine */}
+          <ellipse cx="26" cy="7" rx="1.5" ry="2" fill="white" opacity="0.6" />
+        </g>
+      );
+    case "cupcake":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* base wrapper */}
+          <path d="M 22 18 L 26 28 L 32 28 L 36 18 Z" fill="#c83870" stroke="#7a2050" strokeWidth="0.5" />
+          <path d="M 24 22 L 24 28 M 28 22 L 28 28 M 32 22 L 32 28" stroke="#7a2050" strokeWidth="0.4" />
+          {/* frosting swirl */}
+          <path d="M 22 18 Q 22 10 28 10 Q 34 10 34 18 Q 30 14 28 16 Q 26 14 22 18 Z"
+            fill="#fffafa" stroke="#c0a8b8" strokeWidth="0.5" />
+          {/* sprinkles */}
+          <rect x="25" y="13" width="0.8" height="2" fill="#ff5c87" transform="rotate(20 25 13)" />
+          <rect x="29" y="11" width="0.8" height="2" fill="#7ac87c" />
+          <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-20 32 14)" />
+          {/* cherry */}
+          <circle cx="28" cy="9" r="1.5" fill="#c94c4c" />
+        </g>
+      );
+    case "donut":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* donut */}
+          <circle cx="28" cy="18" r="7" fill="#d8a060" stroke="#8a5028" strokeWidth="0.6" />
+          <circle cx="28" cy="18" r="2.5" fill={C.face} />
+          {/* pink frosting on top */}
+          <path d="M 21 18 Q 21 12 28 11 Q 35 12 35 18 Q 32 14 28 16 Q 24 14 21 18 Z"
+            fill="#ff9bb8" stroke="#c83870" strokeWidth="0.4" />
+          {/* sprinkles */}
+          <rect x="24" y="14" width="0.8" height="2" fill="#5caa5e" transform="rotate(15 24 14)" />
+          <rect x="28" y="12" width="0.8" height="2" fill="#edb830" />
+          <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-15 32 14)" />
+          <rect x="26" y="16" width="0.8" height="2" fill="#a060c0" transform="rotate(30 26 16)" />
+        </g>
+      );
+    case "fishingrod":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* rod */}
+          <path d="M 22 26 L 40 -8" stroke="#5a3a1a" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M 22 26 L 40 -8" stroke="#8b6342" strokeWidth="0.8" strokeLinecap="round" />
+          {/* reel */}
+          <circle cx="24" cy="22" r="2" fill="#888" stroke="#444" strokeWidth="0.4" />
+          {/* line */}
+          <path d="M 40 -8 Q 42 4 38 16" stroke="#fff" strokeWidth="0.4" fill="none" opacity="0.8" />
+          {/* hook + fish */}
+          <path d="M 38 16 Q 40 18 38 19" stroke="#666" strokeWidth="0.5" fill="none" />
+          <ellipse cx="40" cy="22" rx="3" ry="1.8" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
+          <path d="M 43 22 L 45 20 L 45 24 Z" fill="#5a8fc7" />
+        </g>
+      );
+    case "paintbrush":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* handle */}
+          <path d="M 22 26 L 36 12" stroke="#5a3a1a" strokeWidth="2" strokeLinecap="round" />
+          {/* metal ferrule */}
+          <path d="M 35 11 L 39 15" stroke="#888" strokeWidth="2.5" />
+          {/* bristles */}
+          <path d="M 38 8 L 42 12 L 39 16 L 35 12 Z" fill="#c0a080" stroke="#7a5a3a" strokeWidth="0.4" />
+          <path d="M 38 8 L 42 12" stroke="#5a3a1a" strokeWidth="0.4" />
+          {/* paint drip */}
+          <ellipse cx="42" cy="14" rx="2" ry="3" fill="#c94c4c" opacity="0.85" />
+          <ellipse cx="42" cy="18" rx="0.8" ry="1.5" fill="#c94c4c" opacity="0.7" />
+        </g>
+      );
+    case "flute":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* flute */}
+          <rect x="22" y="22" width="22" height="3" fill="#c0b090" stroke="#5a4a2a" strokeWidth="0.4" rx="1.5" />
+          {/* metal bands */}
+          <rect x="26" y="22" width="0.6" height="3" fill="#5a4a2a" />
+          <rect x="32" y="22" width="0.6" height="3" fill="#5a4a2a" />
+          <rect x="38" y="22" width="0.6" height="3" fill="#5a4a2a" />
+          {/* finger holes */}
+          <circle cx="29" cy="23.5" r="0.5" fill="#3a2a0a" />
+          <circle cx="35" cy="23.5" r="0.5" fill="#3a2a0a" />
+          {/* music notes floating */}
+          <text x="40" y="14" fontSize="6" fill={C.text}>♪</text>
+          <text x="34" y="10" fontSize="5" fill={C.textLight}>♫</text>
+        </g>
+      );
+    case "violin":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* body */}
+          <path d="M 22 26 Q 18 22 22 18 Q 26 14 30 18 Q 34 14 38 18 Q 42 22 38 26 Q 34 30 30 26 Q 26 30 22 26 Z"
+            fill="#a85a2a" stroke="#5a2a0a" strokeWidth="0.7" />
+          {/* center waist */}
+          <path d="M 26 22 L 34 22" stroke="#5a2a0a" strokeWidth="0.5" />
+          {/* neck */}
+          <rect x="23" y="8" width="2" height="12" fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.3" transform="rotate(20 24 14)" />
+          {/* strings */}
+          <path d="M 22 26 L 27 8" stroke="#fff" strokeWidth="0.3" />
+          <path d="M 24 26 L 29 8" stroke="#fff" strokeWidth="0.3" />
+          <path d="M 26 26 L 31 8" stroke="#fff" strokeWidth="0.3" />
+          {/* f-holes */}
+          <path d="M 27 20 Q 28 22 27 24 M 33 20 Q 32 22 33 24" stroke="#3a1a0a" strokeWidth="0.5" fill="none" />
+        </g>
+      );
+    case "telescope":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* tube */}
+          <rect x="20" y="14" width="20" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" rx="1" transform="rotate(-20 30 16.5)" />
+          {/* far end (bigger) */}
+          <ellipse cx="42" cy="9" rx="3" ry="4" fill="#3a1a5a" stroke="#1a0a3a" strokeWidth="0.5" />
+          {/* near end (smaller) */}
+          <ellipse cx="20" cy="22" rx="2.5" ry="3" fill="#1a0a3a" stroke="#000" strokeWidth="0.4" />
+          {/* gold rings */}
+          <rect x="26" y="14" width="0.8" height="5" fill="#edb830" transform="rotate(-20 26 16.5)" />
+          <rect x="34" y="11" width="0.8" height="5" fill="#edb830" transform="rotate(-20 34 13.5)" />
+          {/* star at end */}
+          <text x="48" y="6" fontSize="3" fill="#edb830">✦</text>
+        </g>
+      );
+    case "potion":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* bottle body */}
+          <path d="M 24 14 L 24 18 Q 22 22 24 26 L 32 26 Q 34 22 32 18 L 32 14 Z"
+            fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" opacity="0.85" />
+          {/* neck */}
+          <rect x="26" y="10" width="4" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" />
+          {/* cork */}
+          <rect x="25" y="8" width="6" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" />
+          {/* bubble inside */}
+          <circle cx="27" cy="20" r="1" fill="white" opacity="0.6" />
+          <circle cx="29" cy="22" r="1.3" fill="white" opacity="0.5" />
+          {/* shine */}
+          <path d="M 25 17 Q 25 21 26 23" stroke="white" strokeWidth="0.5" fill="none" opacity="0.7" />
+          {/* sparkles */}
+          <text x="34" y="14" fontSize="3" fill="#a060c0">✦</text>
+        </g>
+      );
+    case "sword":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* blade */}
+          <path d="M 24 26 L 42 4 L 40 2 L 22 24 Z" fill="#d0d8e0" stroke="#5a6878" strokeWidth="0.5" />
+          {/* center groove */}
+          <path d="M 23 25 L 41 3" stroke="#888" strokeWidth="0.4" />
+          {/* shine */}
+          <path d="M 35 9 L 39 5" stroke="white" strokeWidth="1.2" opacity="0.7" />
+          {/* crossguard */}
+          <rect x="20" y="22" width="8" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" transform="rotate(45 24 23.5)" />
+          {/* handle */}
+          <rect x="20" y="26" width="3" height="6" fill="#5a3a1a" stroke="#3a1a0a" strokeWidth="0.4" />
+          {/* pommel */}
+          <circle cx="21.5" cy="33" r="1.5" fill="#edb830" stroke="#a87810" strokeWidth="0.4" />
+        </g>
+      );
+    case "shield":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* shield shape */}
+          <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
+            fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.8" />
+          {/* metal rim */}
+          <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
+            fill="none" stroke="#888" strokeWidth="0.6" />
+          {/* cross emblem */}
+          <rect x="29" y="15" width="2.5" height="14" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+          <rect x="24" y="20" width="13" height="2.5" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+          {/* shine */}
+          <path d="M 26 14 Q 24 18 24 22" stroke="white" strokeWidth="0.8" fill="none" opacity="0.6" />
+        </g>
+      );
+    case "phone":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* phone body */}
+          <rect x="23" y="10" width="10" height="18" rx="2" fill="#1a1a2a" stroke="#000" strokeWidth="0.5" />
+          {/* screen */}
+          <rect x="24.5" y="12" width="7" height="13" fill="#5a8fc7" />
+          {/* gradient app blocks */}
+          <rect x="25" y="13" width="2" height="2" fill="#edb830" rx="0.4" />
+          <rect x="28" y="13" width="2" height="2" fill="#5caa5e" rx="0.4" />
+          <rect x="25" y="16" width="2" height="2" fill="#c94c4c" rx="0.4" />
+          <rect x="28" y="16" width="2" height="2" fill="#a060c0" rx="0.4" />
+          {/* home button */}
+          <circle cx="28" cy="26.5" r="0.8" fill="#3a3a4a" stroke="#888" strokeWidth="0.3" />
+          {/* shine */}
+          <path d="M 24.5 12 L 26 14" stroke="white" strokeWidth="0.5" opacity="0.4" />
+        </g>
+      );
+    case "camera":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* body */}
+          <rect x="20" y="14" width="18" height="12" rx="2" fill="#2a2a3a" stroke="#000" strokeWidth="0.5" />
+          {/* top viewfinder bump */}
+          <rect x="26" y="11" width="6" height="3" fill="#1a1a2a" />
+          {/* lens */}
+          <circle cx="29" cy="20" r="4.5" fill="#1a1a2a" stroke="#444" strokeWidth="0.6" />
+          <circle cx="29" cy="20" r="3" fill="#5a8fc7" stroke="#222" strokeWidth="0.4" />
+          <circle cx="29" cy="20" r="1.5" fill="#1a1a2a" />
+          {/* shine on lens */}
+          <circle cx="27.5" cy="18.5" r="0.8" fill="white" opacity="0.7" />
+          {/* flash */}
+          <rect x="22" y="15" width="2" height="2" fill="#edb830" />
+          {/* shutter button */}
+          <circle cx="36" cy="13" r="0.8" fill="#c94c4c" />
+        </g>
+      );
+    case "leafback":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* leaves bundled */}
+          <ellipse cx="-22" cy="6" rx="5" ry="8" fill="#5caa5e" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-30 -22 6)" />
+          <ellipse cx="-26" cy="10" rx="5" ry="8" fill="#7ac87c" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-50 -26 10)" />
+          <ellipse cx="-20" cy="14" rx="5" ry="8" fill="#3a7a3c" stroke="#1a4a1c" strokeWidth="0.5" transform="rotate(-10 -20 14)" />
+          {/* veins */}
+          <path d="M -22 0 L -22 12" stroke="#1a4a1c" strokeWidth="0.4" transform="rotate(-30 -22 6)" />
+        </g>
+      );
+    case "jetpack":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* tank */}
+          <rect x="-30" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
+          {/* second tank */}
+          <rect x="-20" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
+          {/* connector */}
+          <rect x="-24" y="6" width="4" height="3" fill="#444" />
+          {/* nozzles */}
+          <rect x="-29" y="18" width="4" height="2" fill="#444" />
+          <rect x="-19" y="18" width="4" height="2" fill="#444" />
+          {/* flames */}
+          <path d="M -27 20 Q -28 26 -25 24 Q -23 28 -22 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
+          <path d="M -17 20 Q -18 26 -15 24 Q -13 28 -12 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
+          <path d="M -25 22 Q -23 26 -22 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
+          <path d="M -15 22 Q -13 26 -12 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
+        </g>
+      );
+    case "angelwings":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* left wing */}
+          <path d="M -16 0 Q -32 -10 -36 6 Q -32 18 -22 14 Q -18 8 -16 0 Z"
+            fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
+          {/* feather lines */}
+          <path d="M -32 -4 Q -28 4 -22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          <path d="M -32 4 Q -28 8 -22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          <path d="M -30 10 Q -26 12 -22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          {/* right wing */}
+          <path d="M 16 0 Q 32 -10 36 6 Q 32 18 22 14 Q 18 8 16 0 Z"
+            fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
+          <path d="M 32 -4 Q 28 4 22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          <path d="M 32 4 Q 28 8 22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          <path d="M 30 10 Q 26 12 22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+          {/* glow shimmer */}
+          <ellipse cx="-26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
+          <ellipse cx="26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
+        </g>
+      );
+    case "demonwings":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* left bat wing */}
+          <path d="M -16 0 Q -34 -8 -38 6 L -34 6 L -36 12 L -30 10 L -32 16 L -26 12 L -22 14 Q -18 8 -16 0 Z"
+            fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
+          {/* membrane lines */}
+          <path d="M -16 0 Q -22 4 -26 12 M -16 0 Q -28 4 -32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
+          {/* right bat wing */}
+          <path d="M 16 0 Q 34 -8 38 6 L 34 6 L 36 12 L 30 10 L 32 16 L 26 12 L 22 14 Q 18 8 16 0 Z"
+            fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
+          <path d="M 16 0 Q 22 4 26 12 M 16 0 Q 28 4 32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
+        </g>
+      );
+    case "rainbowcape":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* rainbow stripes */}
+          <path d="M -20 0 Q -34 12 -34 30 L -28 28 Q -28 14 -16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
+          <path d="M -16 4 Q -28 14 -28 28 L -22 26 Q -22 16 -12 8 Z" fill="#ff8030" />
+          <path d="M -12 8 Q -22 16 -22 26 L -16 24 Q -16 18 -8 12 Z" fill="#edb830" />
+          <path d="M -8 12 Q -16 18 -16 24 L -10 22 Q -10 18 -4 14 Z" fill="#5caa5e" />
+          <path d="M -4 14 Q -10 18 -10 22 L -2 18 Z" fill="#5a8fc7" />
+          {/* right side mirror */}
+          <path d="M 20 0 Q 34 12 34 30 L 28 28 Q 28 14 16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
+          <path d="M 16 4 Q 28 14 28 28 L 22 26 Q 22 16 12 8 Z" fill="#ff8030" />
+          <path d="M 12 8 Q 22 16 22 26 L 16 24 Q 16 18 8 12 Z" fill="#edb830" />
+          <path d="M 8 12 Q 16 18 16 24 L 10 22 Q 10 18 4 14 Z" fill="#5caa5e" />
+          <path d="M 4 14 Q 10 18 10 22 L 2 18 Z" fill="#5a8fc7" />
+        </g>
+      );
+    case "dragoncape":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* left dragon wing - membranous */}
+          <path d="M -14 -2 Q -36 -4 -40 12 L -36 14 L -38 20 L -32 18 L -34 24 L -28 22 Q -22 16 -14 -2 Z"
+            fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
+          {/* wing bones */}
+          <path d="M -14 -2 Q -28 4 -38 14 M -14 -2 Q -24 6 -34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
+          {/* spikes on top edge */}
+          <path d="M -28 0 L -26 -4 L -24 0 Z M -34 4 L -32 0 L -30 4 Z" fill="#3a1a5a" />
+          {/* right wing */}
+          <path d="M 14 -2 Q 36 -4 40 12 L 36 14 L 38 20 L 32 18 L 34 24 L 28 22 Q 22 16 14 -2 Z"
+            fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
+          <path d="M 14 -2 Q 28 4 38 14 M 14 -2 Q 24 6 34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
+          <path d="M 28 0 L 26 -4 L 24 0 Z M 34 4 L 32 0 L 30 4 Z" fill="#3a1a5a" />
+          {/* glow */}
+          <ellipse cx="-30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
+          <ellipse cx="30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
+        </g>
+      );
+    case "bowarrow":
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* bow arc on the back */}
+          <path d="M -32 -4 Q -38 12 -32 28" stroke="#8b6342" strokeWidth="2.5" fill="none" />
+          {/* string */}
+          <path d="M -32 -4 L -32 28" stroke="#fff" strokeWidth="0.4" />
+          {/* arrow */}
+          <path d="M -34 12 L -22 12" stroke="#5a3a1a" strokeWidth="1.2" />
+          {/* arrowhead */}
+          <path d="M -22 12 L -18 9 L -18 15 Z" fill="#888" stroke="#444" strokeWidth="0.4" />
+          {/* fletching */}
+          <path d="M -34 12 L -36 9 L -36 15 Z" fill="#c94c4c" />
+          {/* bow tips */}
+          <circle cx="-32" cy="-4" r="1" fill="#5a3a1a" />
+          <circle cx="-32" cy="28" r="1" fill="#5a3a1a" />
+        </g>
+      );
+    default: return null;
+  }
+}
+
 /* ─── PET SVG ─── small companion that floats next to the monkey */
 function PetSVG({ petId, side = "right", centered = false, mood = "neutral", petAccessories = [] }) {
   const [bob, setBob] = useState(0);
@@ -1845,14 +3689,13 @@ function PetEatingAnimation({ petId, feedingFood, showHearts, size = 180, petAcc
         <div style={{
           position: "absolute",
           left: "50%", top: "50%",
-          fontSize: Math.round(size * 0.32),
           pointerEvents: "none",
           animation: "foodFly 0.85s ease-in 0s 1 forwards",
           textAlign: "center",
           width: 1, height: 1,
           lineHeight: 1,
         }}>
-          {feedingFood.emoji}
+          <WatercolorIcon name={feedingFood.id} size={Math.round(size * 0.32)} />
         </div>
       )}
 
@@ -2019,7 +3862,9 @@ function FoodShop({ student, onClose, onBuy }) {
                     onMouseEnter={e => affordable && (e.currentTarget.style.transform = "scale(1.04)")}
                     onMouseLeave={e => affordable && (e.currentTarget.style.transform = "scale(1)")}
                   >
-                    <div style={{ fontSize: 30, marginBottom: 2 }}>{food.emoji}</div>
+                    <div style={{ marginBottom: 2, height: 38, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <WatercolorIcon name={food.id} size={36} />
+                    </div>
                     <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{food.name}</div>
                     <div style={{ fontSize: 10, color: C.textLight, fontStyle: "italic", marginBottom: 4 }}>{food.flavor}</div>
                     <div style={{ display: "flex", justifyContent: "center", gap: 4, fontSize: 11, marginBottom: 4 }}>
@@ -2379,7 +4224,13 @@ function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart, onToggleP
                                 letterSpacing: 0.5, textTransform: "uppercase",
                               }}>{acc.rarity}</div>
                             )}
-                            <div style={{ fontSize: 32, marginTop: acc.price > 0 ? 8 : 0 }}>{acc.emoji}</div>
+                            <div style={{
+                              marginTop: acc.price > 0 ? 8 : 0,
+                              height: 36, width: 36,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              <PetAccessoryPreview accessoryId={acc.id} size={34} />
+                            </div>
                             <div style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</div>
                             {isEquipped ? (
                               <div style={{ fontSize: 9, color: C.gold, fontWeight: 700, letterSpacing: 0.5 }}>EQUIPPED</div>
@@ -10058,7 +11909,13 @@ function SnowMonkeyTrackerInner() {
                                   background: rarityColor, color: "white", fontWeight: 700, textTransform: "uppercase",
                                 }}>{acc.rarity}</div>
                               )}
-                              <span style={{ fontSize: 28, marginTop: acc.price > 0 ? 6 : 0 }}>{acc.emoji}</span>
+                              <div style={{
+                                marginTop: acc.price > 0 ? 6 : 0,
+                                width: 52, height: 52,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <MonkeyAccessoryPreview accessoryId={acc.id} size={50} />
+                              </div>
                               <span style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</span>
                               {active && <span style={{ fontSize: 9, color: C.gold, fontWeight: 700 }}>EQUIPPED</span>}
                             </button>
@@ -10307,8 +12164,8 @@ function SnowMonkeyTrackerInner() {
                       onMouseLeave={e => e.currentTarget.style.background = `${C.green}15`}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 17 }}>{(m.type === "any" ? "🚀" : m.type === "runner" ? "🏃" : m.type === "flappy" ? "❄️" : "🧩")} {m.name}</div>
-                        <div style={{ fontSize: 12, color: C.textLight }}>{m.type === "any" ? "Choose how to play" : m.type === "runner" ? "Fruit Runner" : m.type === "flappy" ? "Icicle Flap" : "Block Blast"} · {m.questions.length} questions</div>
+                        <div style={{ fontWeight: 700, fontSize: 17 }}>{m.name}</div>
+                        <div style={{ fontSize: 12, color: C.textLight }}>{m.questions.length} question{m.questions.length === 1 ? "" : "s"}</div>
                       </div>
                       <div style={{ background: C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700 }}>
                         ★ {m.points}
@@ -10405,7 +12262,9 @@ function SnowMonkeyTrackerInner() {
                           onMouseEnter={e => e.currentTarget.style.background = `${c.color}25`}
                           onMouseLeave={e => e.currentTarget.style.background = `${c.color}10`}
                         >
-                          <div style={{ fontSize: 38, lineHeight: 1 }}>{c.emoji}</div>
+                          <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <WatercolorIcon name={`game_${c.id}`} size={42} />
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 700, fontSize: 18, color: c.color, marginBottom: 2 }}>
                               {c.title}
@@ -10521,7 +12380,17 @@ function SnowMonkeyTrackerInner() {
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
                 }}>
-                {done ? "✅ Daily Done!" : "🧩 Daily Challenge"}
+                {done ? (
+                  <>
+                    <span style={{ fontSize: 18 }}>✅</span>
+                    Daily Done!
+                  </>
+                ) : (
+                  <>
+                    <WatercolorIcon name="btn_daily" size={22} />
+                    Daily Challenge
+                  </>
+                )}
               </button>
               <button onClick={() => hasMission && setShowMissionPicker(true)}
                 style={{
@@ -10535,7 +12404,8 @@ function SnowMonkeyTrackerInner() {
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
                 }}>
-                {hasMission ? `🚀 Missions (${myMissions.length})` : "🚀 No Missions"}
+                <WatercolorIcon name="btn_mission" size={22} />
+                {hasMission ? `Missions (${myMissions.length})` : "No Missions"}
               </button>
               <button onClick={() => { setPetMartTab("packs"); setShowPetMart(true); }}
                 style={{
@@ -10594,7 +12464,7 @@ function SnowMonkeyTrackerInner() {
                         50% { box-shadow: 0 6px 26px #ff80c0c0, 0 0 0 6px #ff80c020; }
                       }
                     `}</style>
-                    <span style={{ fontSize: 22 }}>🌸</span>
+                    <WatercolorIcon name="btn_hotspring" size={26} />
                     My Hot Spring
                     {careLbl && me.pet && <span style={{ fontSize: 14 }}>{careLbl.emoji}</span>}
                     {needsAttention && (
@@ -10735,7 +12605,13 @@ function SnowMonkeyTrackerInner() {
                                   background: rarityColor, color: "white", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
                                 }}>{acc.rarity}</div>
                               )}
-                              <div style={{ fontSize: 32, marginTop: acc.price > 0 ? 8 : 0 }}>{acc.emoji}</div>
+                              <div style={{
+                                marginTop: acc.price > 0 ? 8 : 0,
+                                width: 60, height: 60,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <MonkeyAccessoryPreview accessoryId={acc.id} size={58} />
+                              </div>
                               <div style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</div>
                               {isEquipped ? (
                                 <div style={{ fontSize: 9, color: C.gold, fontWeight: 700, letterSpacing: 0.5 }}>EQUIPPED</div>
@@ -10902,8 +12778,8 @@ function SnowMonkeyTrackerInner() {
                           onMouseEnter={e => canAfford && (e.currentTarget.style.transform = "translateY(-3px)")}
                           onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}
                         >
-                          <div style={{ fontSize: 56, textAlign: "center", marginBottom: 4 }}>
-                            <span style={{ filter: `drop-shadow(0 4px 12px ${pack.color}90)` }}>{pack.flavor}</span>
+                          <div style={{ textAlign: "center", marginBottom: 4, height: 64, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 4px 12px ${pack.color}90)` }}>
+                            <WatercolorIcon name={`pack_${pack.id}`} size={62} />
                           </div>
                           <div style={{ fontSize: 16, color: C.text, fontWeight: 700, textAlign: "center" }}>{pack.name}</div>
                           <div style={{ fontSize: 11, color: C.textLight, textAlign: "center", margin: "4px 0 8px", minHeight: 30, lineHeight: 1.3 }}>
@@ -10977,8 +12853,19 @@ function SnowMonkeyTrackerInner() {
                               fontSize: 9, fontWeight: 700, padding: "1px 6px",
                               borderRadius: 6, letterSpacing: 0.5, textTransform: "uppercase",
                             }}>{pet.rarity}</div>
-                            <div style={{ fontSize: 44, marginTop: 14, marginBottom: 4, filter: isOwned ? "none" : "grayscale(100%)" }}>
-                              {isOwned ? pet.emoji : "❓"}
+                            <div style={{
+                              marginTop: 8, marginBottom: 4,
+                              height: 56, width: "100%",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              filter: isOwned ? "none" : "grayscale(100%) opacity(0.5)",
+                            }}>
+                              {isOwned ? (
+                                <svg width={50} height={50} viewBox="-22 -22 44 44" style={{ overflow: "visible" }}>
+                                  <PetSVG petId={pet.id} centered={true} mood="happy" petAccessories={[]} />
+                                </svg>
+                              ) : (
+                                <span style={{ fontSize: 36, color: C.textLight }}>❓</span>
+                              )}
                             </div>
                             <div style={{ fontSize: 13, color: C.text, fontWeight: 700, lineHeight: 1.1 }}>
                               {isOwned ? pet.name : "Unknown"}
@@ -11063,11 +12950,14 @@ function SnowMonkeyTrackerInner() {
                   {pet.rarity}
                 </div>
                 <div style={{
-                  fontSize: 96, marginBottom: 8,
+                  marginBottom: 8,
                   animation: "packPetBob 1.6s ease-in-out infinite",
                   filter: `drop-shadow(0 6px 20px ${rarityColor}80)`,
+                  display: "flex", justifyContent: "center",
                 }}>
-                  {pet.emoji}
+                  <svg width={120} height={120} viewBox="-22 -22 44 44" style={{ overflow: "visible" }}>
+                    <PetSVG petId={pet.id} centered={true} mood="excited" petAccessories={[]} />
+                  </svg>
                 </div>
                 <div style={{ fontSize: 24, color: C.text, fontWeight: 700, marginBottom: 4 }}>
                   {pet.name}
@@ -11302,8 +13192,12 @@ function SnowMonkeyTrackerInner() {
                           marginBottom: 3,
                           opacity: reached ? 1 : 0.55,
                         }}>
-                          <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>
-                            {reached ? lvl.icon : "🔒"}
+                          <span style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {reached ? (
+                              <WatercolorIcon name={`rank_${lvl.id}`} size={24} />
+                            ) : (
+                              <span style={{ fontSize: 16 }}>🔒</span>
+                            )}
                           </span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
