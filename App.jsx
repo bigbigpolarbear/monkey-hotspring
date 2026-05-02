@@ -182,6 +182,84 @@ const PET_CATALOG = [
 ];
 function getPet(id) { return PET_CATALOG.find(p => p.id === id); }
 
+/* ─── FOOD CATALOG ─── creative treats students buy with stars to feed their pet
+   - hunger: how much it fills the pet's hunger meter (0-100)
+   - happiness: how much it boosts happiness (0-100)
+   - price: cost in stars
+*/
+const FOOD_CATALOG = [
+  // Cheap snacks (under 30★) — small refills
+  { id: "yakult",      name: "Yakult",         emoji: "🍶", price: 12,  hunger: 12, happiness: 8,  flavor: "Probiotic shot of joy" },
+  { id: "gummybears",  name: "Gummy Bears",    emoji: "🐻", price: 15,  hunger: 8,  happiness: 18, flavor: "Sugar power-up!" },
+  { id: "crackers",    name: "Rice Crackers",  emoji: "🍘", price: 10,  hunger: 14, happiness: 4,  flavor: "Crunchy & filling" },
+  { id: "milk",        name: "Strawberry Milk",emoji: "🥛", price: 18,  hunger: 14, happiness: 12, flavor: "Pink & dreamy" },
+  { id: "onigiri",     name: "Onigiri",        emoji: "🍙", price: 22,  hunger: 22, happiness: 6,  flavor: "Wrapped in seaweed" },
+  { id: "pocky",       name: "Pocky Sticks",   emoji: "🥢", price: 20,  hunger: 8,  happiness: 22, flavor: "Snap, chocolate, smile" },
+  { id: "boba",        name: "Bubble Tea",     emoji: "🧋", price: 28,  hunger: 16, happiness: 24, flavor: "Chewy pearls of bliss" },
+  // Mid (30-80★) — solid meals
+  { id: "mamacup",     name: "Mama Cup Noodle",emoji: "🍜", price: 35,  hunger: 30, happiness: 18, flavor: "Slurp-tastic & warm" },
+  { id: "takoyaki",    name: "Takoyaki",       emoji: "🐙", price: 45,  hunger: 32, happiness: 22, flavor: "Octopus surprise!" },
+  { id: "donburi",     name: "Donburi Bowl",   emoji: "🍚", price: 55,  hunger: 42, happiness: 18, flavor: "Rice topped with love" },
+  { id: "icecreambowl",name: "Sundae",         emoji: "🍨", price: 50,  hunger: 18, happiness: 38, flavor: "Three scoops of glee" },
+  { id: "ramen",       name: "Tonkotsu Ramen", emoji: "🍲", price: 70,  hunger: 50, happiness: 28, flavor: "Rich, slow-cooked broth" },
+  { id: "sushiroll",   name: "Sushi Roll",     emoji: "🍣", price: 75,  hunger: 38, happiness: 32, flavor: "Fresh chef's choice" },
+  // Premium (80-200★) — feasts that boost both stats high
+  { id: "matchaset",   name: "Matcha Set",     emoji: "🍵", price: 90,  hunger: 30, happiness: 50, flavor: "Zen & ceremonial" },
+  { id: "mochi",       name: "Mochi Trio",     emoji: "🍡", price: 95,  hunger: 32, happiness: 48, flavor: "Sweet, soft, springy" },
+  { id: "katsu",       name: "Katsu Curry",    emoji: "🍛", price: 110, hunger: 60, happiness: 35, flavor: "Crispy & comforting" },
+  { id: "strawberry",  name: "Strawberry Tart",emoji: "🍓", price: 130, hunger: 30, happiness: 65, flavor: "Patisserie perfection" },
+  { id: "wagyu",       name: "Wagyu Steak",    emoji: "🥩", price: 180, hunger: 65, happiness: 60, flavor: "Marbled & mouthwatering" },
+  // Mythic feasts (200+) — fully restore both
+  { id: "omakase",     name: "Omakase Dinner", emoji: "🍱", price: 250, hunger: 90, happiness: 85, flavor: "Chef's choice tasting menu" },
+  { id: "rainbowcake", name: "Rainbow Cake",   emoji: "🌈", price: 300, hunger: 70, happiness: 100, flavor: "A miracle of color & sugar" },
+];
+function getFood(id) { return FOOD_CATALOG.find(f => f.id === id); }
+
+/* ─── PET CARE HELPERS ─── hunger & happiness decay over time
+   - Pets start at 80/80 when first equipped
+   - Decay 1 hunger point per 2 hours, 1 happiness point per 3 hours
+   - Care quality affects income multiplier:
+     - 0-30 avg: 50% income
+     - 30-60: 100% income
+     - 60-90: 130% income
+     - 90+: 160% income
+*/
+const HUNGER_DECAY_PER_HOUR = 0.5;     // -1 every 2 hours
+const HAPPINESS_DECAY_PER_HOUR = 0.33; // -1 every ~3 hours
+
+function getPetCare(student) {
+  // Returns the live (decayed) hunger and happiness for the student's currently-equipped pet
+  if (!student?.pet) return null;
+  const data = student.petCare || {};
+  const lastFed = data.lastFedAt || data.lastUpdated || data.equippedAt || Date.now();
+  const lastUpdated = data.lastUpdated || lastFed;
+  const baseHunger = data.hunger ?? 80;
+  const baseHappiness = data.happiness ?? 80;
+  const hoursSince = (Date.now() - lastUpdated) / (1000 * 60 * 60);
+  const hunger = Math.max(0, baseHunger - hoursSince * HUNGER_DECAY_PER_HOUR);
+  const happiness = Math.max(0, baseHappiness - hoursSince * HAPPINESS_DECAY_PER_HOUR);
+  return {
+    hunger: Math.round(hunger),
+    happiness: Math.round(happiness),
+    avgCare: Math.round((hunger + happiness) / 2),
+  };
+}
+
+function getCareLabel(avgCare) {
+  if (avgCare >= 90) return { label: "Thriving!", color: "#5caa5e", emoji: "🌟" };
+  if (avgCare >= 60) return { label: "Happy",    color: "#7ac87c", emoji: "😊" };
+  if (avgCare >= 30) return { label: "Okay",     color: "#edb830", emoji: "😐" };
+  if (avgCare >= 10) return { label: "Hungry",   color: "#e08030", emoji: "😟" };
+  return                     { label: "Sad",     color: "#c94c4c", emoji: "😢" };
+}
+
+function getCareIncomeMultiplier(avgCare) {
+  if (avgCare >= 90) return 1.6;
+  if (avgCare >= 60) return 1.3;
+  if (avgCare >= 30) return 1.0;
+  return 0.5;
+}
+
 const RARITY_COLORS = {
   common: "#9aaab8", uncommon: "#5caa5e", rare: "#5a8fc7",
   epic: "#a060c0", legendary: "#edb830", mythic: "#e06060",
@@ -256,7 +334,8 @@ function rollPack(packId, ownedIds = []) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// Weekly income calculator: 1 payout per 7 days, no compounding
+// Weekly income calculator: 1 payout per 7 days, no compounding.
+// Income is multiplied by care quality (50%-160% based on hunger+happiness).
 function calculatePendingIncome(student, now = Date.now()) {
   if (!student?.pet) return 0;
   const pet = getPet(student.pet);
@@ -264,7 +343,9 @@ function calculatePendingIncome(student, now = Date.now()) {
   const lastCollected = student.lastIncomeCollected || student.petAcquiredAt || now;
   const daysSince = (now - lastCollected) / (1000 * 60 * 60 * 24);
   if (daysSince < 7) return 0;
-  return pet.weeklyIncome;
+  const care = getPetCare(student);
+  const multiplier = care ? getCareIncomeMultiplier(care.avgCare) : 1.0;
+  return Math.round(pet.weeklyIncome * multiplier);
 }
 function getNextIncomeDate(student) {
   if (!student?.pet) return null;
@@ -309,6 +390,76 @@ const ACCESSORY_CATALOG = [
   { id: "backpack",    name: "School Backpack", emoji: "🎒", slot: "back", price: 350,  rarity: "uncommon" },
   { id: "wings",       name: "Butterfly Wings", emoji: "🦋", slot: "back", price: 1800, rarity: "epic" },
   { id: "cape",        name: "Hero Cape",       emoji: "🦸", slot: "back", price: 1000, rarity: "rare" },
+
+  // ─── 50 MORE ACCESSORIES ─── mix of free + paid, all slots
+  // Free hats (head)
+  { id: "partyhat",    name: "Party Hat",       emoji: "🥳", slot: "head", price: 0,    rarity: "common" },
+  { id: "graduationcap", name: "Grad Cap",      emoji: "🎓", slot: "head", price: 0,    rarity: "common" },
+  { id: "leaf",        name: "Leaf Crown",      emoji: "🍃", slot: "head", price: 0,    rarity: "common" },
+  { id: "rainbow",     name: "Rainbow Headband",emoji: "🌈", slot: "head", price: 0,    rarity: "common" },
+  // Paid hats (head)
+  { id: "cowboyhat",   name: "Cowboy Hat",      emoji: "🤠", slot: "head", price: 300,  rarity: "uncommon" },
+  { id: "tophat",      name: "Wizard Hat",      emoji: "🧙", slot: "head", price: 450,  rarity: "uncommon" },
+  { id: "vikinghelm",  name: "Viking Helmet",   emoji: "⛑️", slot: "head", price: 550,  rarity: "rare" },
+  { id: "policehat",   name: "Police Cap",      emoji: "👮", slot: "head", price: 350,  rarity: "uncommon" },
+  { id: "chefhat",     name: "Chef's Hat",      emoji: "👨‍🍳", slot: "head", price: 350, rarity: "uncommon" },
+  { id: "santahat",    name: "Santa Hat",       emoji: "🎅", slot: "head", price: 400,  rarity: "uncommon" },
+  { id: "witchhat",    name: "Witch Hat",       emoji: "🧹", slot: "head", price: 600,  rarity: "rare" },
+  { id: "antlers",     name: "Reindeer Antlers",emoji: "🦌", slot: "head", price: 750,  rarity: "rare" },
+  { id: "starcrown",   name: "Star Crown",      emoji: "⭐", slot: "head", price: 1100, rarity: "epic" },
+  { id: "fireheadband",name: "Fire Headband",   emoji: "🔥", slot: "head", price: 900,  rarity: "rare" },
+  { id: "alien",       name: "Alien Antennae",  emoji: "👽", slot: "head", price: 1300, rarity: "epic" },
+
+  // Free face items
+  { id: "smile",       name: "Big Smile",       emoji: "😄", slot: "face", price: 0,    rarity: "common" },
+  // Paid face
+  { id: "monocle",     name: "Monocle",         emoji: "🧐", slot: "face", price: 300,  rarity: "uncommon" },
+  { id: "mustache",    name: "Mustache",        emoji: "👨", slot: "face", price: 250,  rarity: "uncommon" },
+  { id: "eyepatch",    name: "Eye Patch",       emoji: "🏴‍☠️", slot: "face", price: 400,  rarity: "uncommon" },
+  { id: "facepaint",   name: "Face Paint",      emoji: "🎨", slot: "face", price: 250,  rarity: "uncommon" },
+  { id: "ninjamask",   name: "Ninja Mask",      emoji: "🥷", slot: "face", price: 500,  rarity: "rare" },
+  { id: "starshades",  name: "Star Shades",     emoji: "🌟", slot: "face", price: 600,  rarity: "rare" },
+  { id: "diamondeyes", name: "Diamond Eyes",    emoji: "💎", slot: "face", price: 1500, rarity: "epic" },
+
+  // Free neck items
+  { id: "leafnecklace",name: "Leaf Necklace",   emoji: "🌿", slot: "neck", price: 0,    rarity: "common" },
+  // Paid neck
+  { id: "tie",         name: "Necktie",         emoji: "👔", slot: "neck", price: 200,  rarity: "common" },
+  { id: "pearls",      name: "Pearl Necklace",  emoji: "📿", slot: "neck", price: 600,  rarity: "rare" },
+  { id: "medal",       name: "Gold Medal",      emoji: "🏅", slot: "neck", price: 800,  rarity: "rare" },
+  { id: "diamond",     name: "Diamond Pendant", emoji: "💍", slot: "neck", price: 1400, rarity: "epic" },
+  { id: "amulet",      name: "Magic Amulet",    emoji: "🔮", slot: "neck", price: 1700, rarity: "epic" },
+
+  // Free held items
+  { id: "book",        name: "Book",            emoji: "📖", slot: "hold", price: 0,    rarity: "common" },
+  { id: "pencil",      name: "Pencil",          emoji: "✏️", slot: "hold", price: 0,    rarity: "common" },
+  { id: "leafhold",    name: "Maple Leaf",      emoji: "🍁", slot: "hold", price: 0,    rarity: "common" },
+  // Paid held items
+  { id: "balloon",     name: "Balloon",         emoji: "🎈", slot: "hold", price: 200,  rarity: "common" },
+  { id: "trophy",      name: "Trophy",          emoji: "🏆", slot: "hold", price: 800,  rarity: "rare" },
+  { id: "lollipop",    name: "Giant Lollipop",  emoji: "🍭", slot: "hold", price: 250,  rarity: "common" },
+  { id: "cupcake",     name: "Cupcake",         emoji: "🧁", slot: "hold", price: 220,  rarity: "common" },
+  { id: "donut",       name: "Donut",           emoji: "🍩", slot: "hold", price: 220,  rarity: "common" },
+  { id: "fishingrod",  name: "Fishing Rod",     emoji: "🎣", slot: "hold", price: 500,  rarity: "uncommon" },
+  { id: "paintbrush",  name: "Paint Brush",     emoji: "🖌️", slot: "hold", price: 350,  rarity: "uncommon" },
+  { id: "flute",       name: "Flute",           emoji: "🎶", slot: "hold", price: 550,  rarity: "rare" },
+  { id: "violin",      name: "Violin",          emoji: "🎻", slot: "hold", price: 750,  rarity: "rare" },
+  { id: "telescope",   name: "Telescope",       emoji: "🔭", slot: "hold", price: 700,  rarity: "rare" },
+  { id: "potion",      name: "Magic Potion",    emoji: "🧪", slot: "hold", price: 900,  rarity: "rare" },
+  { id: "sword",       name: "Sword",           emoji: "🗡️", slot: "hold", price: 1100, rarity: "epic" },
+  { id: "shield",      name: "Hero's Shield",   emoji: "🛡️", slot: "hold", price: 1100, rarity: "epic" },
+  { id: "phone",       name: "Smartphone",      emoji: "📱", slot: "hold", price: 850,  rarity: "rare" },
+  { id: "camera",      name: "Camera",          emoji: "📷", slot: "hold", price: 650,  rarity: "rare" },
+
+  // Free back
+  { id: "leafback",    name: "Leaf Pack",       emoji: "🌱", slot: "back", price: 0,    rarity: "common" },
+  // Paid back
+  { id: "jetpack",     name: "Jet Pack",        emoji: "🚀", slot: "back", price: 1600, rarity: "epic" },
+  { id: "angelwings",  name: "Angel Wings",     emoji: "🕊️", slot: "back", price: 2500, rarity: "legendary" },
+  { id: "demonwings",  name: "Demon Wings",     emoji: "🦇", slot: "back", price: 2500, rarity: "legendary" },
+  { id: "rainbowcape", name: "Rainbow Cape",    emoji: "🌈", slot: "back", price: 2200, rarity: "legendary" },
+  { id: "dragoncape",  name: "Dragon Wings",    emoji: "🐉", slot: "back", price: 3500, rarity: "mythic" },
+  { id: "bowarrow",    name: "Bow & Arrow",     emoji: "🏹", slot: "back", price: 1200, rarity: "epic" },
 ];
 
 const ACCESSORY_SLOTS = ["head", "face", "neck", "hold", "back"];
@@ -371,7 +522,7 @@ function getStudentReminder(student, quizzes, missions) {
   myMissions.forEach(m => {
     const c = completions[`mission:${m.id}`];
     if (!c || !c.completed) {
-      const emoji = m.type === "runner" ? "🏃" : "🧩";
+      const emoji = (m.type === "runner" ? "🏃" : m.type === "flappy" ? "❄️" : "🧩");
       reminders.push(`${emoji} ${m.name} mission awaits!`);
     }
   });
@@ -411,12 +562,62 @@ function getTeacherUpdate(students) {
     return `${c.studentName}: ${c.name} — ${c.lastScore ?? 0}/${c.total ?? "?"} (${c.attempts} attempt${c.attempts !== 1 ? "s" : ""}) 📚`;
   } else {
     const verb = c.completed ? "completed" : "tried";
-    const emoji = c.missionType === "runner" ? "🏃" : "🧩";
+    const emoji = c.missionType === "runner" ? "🏃" : c.missionType === "flappy" ? "❄️" : "🧩";
     return `${emoji} ${c.studentName} ${verb} ${c.name} (${c.attempts} attempt${c.attempts !== 1 ? "s" : ""})`;
   }
 }
 
-/* ─── SOUND SYSTEM ─── lazy Web Audio, works on iPad/iPhone/desktop */
+/* ─── EXAM COUNTDOWN HELPERS ─── */
+// Compute time remaining until an exam date.
+// Returns { passed, days, hours, minutes, seconds, totalMs }
+function getCountdown(targetTime, now = Date.now()) {
+  const diff = targetTime - now;
+  if (diff <= 0) {
+    return { passed: true, days: 0, hours: 0, minutes: 0, seconds: 0, totalMs: 0 };
+  }
+  const totalSec = Math.floor(diff / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return { passed: false, days, hours, minutes, seconds, totalMs: diff };
+}
+
+// Sort exams by ascending date, returns the nearest one first.
+function sortExams(exams) {
+  return [...(exams || [])].sort((a, b) => a.dateMs - b.dateMs);
+}
+
+// Get the currently-relevant exam (nearest in future, or one happening today)
+function getActiveExams(exams, now = Date.now()) {
+  const sorted = sortExams(exams);
+  // Keep ones that haven't fully passed (still within 6h after start = "today!")
+  return sorted.filter(e => e.dateMs + 6 * 3600 * 1000 >= now);
+}
+
+/* ─── QUOTE HELPERS ─── built-in fallback quotes used when no user/teacher quote is set */
+const DEFAULT_QUOTES = [
+  "🌱 Small steps every day add up.",
+  "✨ You're capable of more than you think.",
+  "💪 Effort over perfection.",
+  "🌟 Be the kind of student you'd be proud of.",
+  "📚 Learning is its own reward.",
+  "🌈 Mistakes are how we grow.",
+  "🦋 Slow progress is still progress.",
+  "🎯 Focus on what's in your control.",
+  "🌞 Today's struggle is tomorrow's strength.",
+  "🍀 Trust the process.",
+];
+
+// Get a quote pool for a student: combines teacher-set + student's own + defaults
+function getQuotePool(student) {
+  const tq = student?.teacherQuotes || [];
+  const pq = student?.personalQuotes || [];
+  if (tq.length === 0 && pq.length === 0) return DEFAULT_QUOTES;
+  return [...tq, ...pq];
+}
+
+
 let _audioCtx = null;
 let _soundsEnabled = true;
 const SFX_KEY = "monkeyTracker_soundsEnabled";
@@ -554,7 +755,7 @@ const SFX = {
 };
 
 /* ─── PET SVG ─── small companion that floats next to the monkey */
-function PetSVG({ petId, side = "right" }) {
+function PetSVG({ petId, side = "right", centered = false, mood = "neutral" }) {
   const [bob, setBob] = useState(0);
   const [blink, setBlink] = useState(false);
   const frameRef = useRef(0);
@@ -578,9 +779,9 @@ function PetSVG({ petId, side = "right" }) {
     return () => { running = false; cancelAnimationFrame(frameRef.current); clearTimeout(blinkTimer.current); };
   }, []);
 
-  const cx = side === "right" ? 60 : -60;
-  const cy = 5;
-  const groupTransform = `translate(${cx}, ${cy + bob}) ${side === "left" ? "scale(-1,1)" : ""}`;
+  const cx = centered ? 0 : (side === "right" ? 60 : -60);
+  const cy = centered ? 0 : 5;
+  const groupTransform = `translate(${cx}, ${cy + bob}) ${(!centered && side === "left") ? "scale(-1,1)" : ""}`;
 
   const eyes = (lx, rx, ey, size = 2.5) => blink ? (
     <>
@@ -876,6 +1077,1132 @@ function PetSVG({ petId, side = "right" }) {
 
   if (!petId) return null;
   return <>{renderPet()}</>;
+}
+
+/* ─── QUOTE INPUT ─── tiny inline input + add button used in manage panel */
+function QuoteInput({ onAdd, placeholder = "Add an inspirational quote...", color }) {
+  const [text, setText] = useState("");
+  const c = color || C.gold;
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd(text.trim());
+    setText("");
+  };
+  return (
+    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+      <input type="text" value={text} onChange={e => setText(e.target.value)}
+        placeholder={placeholder}
+        onKeyDown={e => { if (e.key === "Enter") submit(); }}
+        style={{
+          flex: 1, padding: "5px 8px", borderRadius: 6,
+          border: `1px solid ${c}40`, background: `${C.snow1}80`,
+          fontFamily: "'Patrick Hand', cursive", fontSize: 12, color: C.text,
+          outline: "none", boxSizing: "border-box",
+        }} />
+      <button onClick={submit}
+        style={{
+          padding: "4px 10px", borderRadius: 6, border: "none",
+          background: c, color: "white", cursor: "pointer",
+          fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700,
+        }}>
+        +
+      </button>
+    </div>
+  );
+}
+
+/* ─── EXAM COUNTDOWN PANEL ─── collapsible left-side widget showing nearest exam
+   with live HH:MM:SS countdown and rotating motivational quotes.
+*/
+function ExamCountdown({
+  exams,
+  quotes,
+  isOpen,
+  onToggleOpen,
+  isExpanded,
+  onToggleExpanded,
+  onAddClick,
+  onDelete,
+  canEdit, // student can edit their own; teacher can edit when viewing single student in manage panel
+  // Student-only: manage personal quotes from this panel
+  personalQuotes,
+  onAddPersonalQuote,
+  onDeletePersonalQuote,
+}) {
+  const active = getActiveExams(exams || []);
+  const nearest = active[0];
+  const others = active.slice(1);
+
+  // Cycle through quotes every 8s
+  const [quoteIdx, setQuoteIdx] = useState(0);
+  useEffect(() => {
+    if (!quotes || quotes.length === 0) return;
+    const id = setInterval(() => {
+      setQuoteIdx(i => (i + 1) % quotes.length);
+    }, 8000);
+    return () => clearInterval(id);
+  }, [quotes?.length]);
+
+  const currentQuote = quotes && quotes.length > 0 ? quotes[quoteIdx % quotes.length] : null;
+
+  // Collapsed pill state
+  if (!isOpen) {
+    return (
+      <button
+        onClick={onToggleOpen}
+        style={{
+          position: "absolute", top: 16, left: 16, zIndex: 30,
+          background: `${C.card}e8`, borderRadius: 999, padding: "10px 16px",
+          boxShadow: "0 6px 20px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+          border: `2px solid ${C.accent}40`, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 8,
+          fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
+        }}
+        title="Show exam countdown"
+      >
+        <span style={{ fontSize: 18 }}>{nearest ? nearest.emoji : "📅"}</span>
+        <span>
+          {nearest
+            ? (() => {
+                const cd = getCountdown(nearest.dateMs);
+                if (cd.passed) return "Exam day!";
+                if (cd.days > 0) return `${cd.days}d left`;
+                return `${cd.hours}h ${cd.minutes}m`;
+              })()
+            : "Exams"
+          }
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div style={{
+      position: "absolute", top: 16, left: 16, zIndex: 30,
+      background: `${C.card}f0`, borderRadius: 18, padding: "12px 14px",
+      boxShadow: "0 8px 28px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
+      border: `2px solid ${C.accent}25`, width: 260, maxWidth: "calc(100vw - 32px)",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>📅 Exam Countdown</div>
+        <button
+          onClick={onToggleOpen}
+          style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 18, color: C.textLight, padding: "0 4px", lineHeight: 1, fontWeight: 700 }}
+          title="Hide"
+        >×</button>
+      </div>
+
+      {/* Nearest exam display */}
+      {!nearest ? (
+        <div style={{ textAlign: "center", padding: "12px 8px", color: C.textLight, fontSize: 13 }}>
+          {canEdit ? "No exams yet — add one!" : "No exams scheduled"}
+        </div>
+      ) : (
+        <NearestExamCard exam={nearest} canEdit={canEdit} onDelete={onDelete} />
+      )}
+
+      {/* Inspirational quote */}
+      {currentQuote && (
+        <div style={{
+          marginTop: 10,
+          padding: "8px 10px",
+          background: `linear-gradient(135deg, ${C.gold}15, ${C.accent}10)`,
+          border: `1px dashed ${C.gold}50`,
+          borderRadius: 10,
+          fontSize: 12,
+          color: C.text,
+          textAlign: "center",
+          fontStyle: "italic",
+          minHeight: 32,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "'Patrick Hand', cursive",
+        }}>
+          {currentQuote}
+        </div>
+      )}
+
+      {/* Other exams (collapsible) */}
+      {others.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={onToggleExpanded}
+            style={{
+              width: "100%", background: "transparent", border: "none",
+              cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+              fontSize: 12, color: C.textLight, padding: "4px 0",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+            }}
+          >
+            <span>{isExpanded ? "▼" : "▶"}</span>
+            <span>{others.length} more exam{others.length !== 1 ? "s" : ""}</span>
+          </button>
+          {isExpanded && (
+            <div style={{ marginTop: 4 }}>
+              {others.map(e => {
+                const cd = getCountdown(e.dateMs);
+                return (
+                  <div key={e.id} style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "5px 8px", marginBottom: 3,
+                    background: `${C.snow1}80`, borderRadius: 8,
+                    fontSize: 12,
+                  }}>
+                    <span style={{ fontSize: 14 }}>{e.emoji}</span>
+                    <div style={{ flex: 1, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                    <div style={{ color: C.textLight, fontWeight: 700 }}>
+                      {cd.passed ? "Today" : cd.days > 0 ? `${cd.days}d` : `${cd.hours}h`}
+                    </div>
+                    {canEdit && (
+                      <button onClick={() => onDelete(e.id)}
+                        style={{ background: "transparent", border: "none", color: C.accentDark, cursor: "pointer", fontSize: 12, padding: 2 }}
+                        title="Remove">✕</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add button */}
+      {canEdit && (
+        <button onClick={onAddClick}
+          style={{
+            width: "100%", marginTop: 10, padding: "7px 10px", borderRadius: 10,
+            border: `2px dashed ${C.accent}40`, background: "transparent",
+            color: C.accent, cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+            fontSize: 13, fontWeight: 700,
+          }}>
+          + Add Exam
+        </button>
+      )}
+
+      {/* Personal quotes management (student only) */}
+      {onAddPersonalQuote && <PersonalQuotesSection
+        quotes={personalQuotes || []}
+        onAdd={onAddPersonalQuote}
+        onDelete={onDeletePersonalQuote}
+      />}
+    </div>
+  );
+}
+
+function PersonalQuotesSection({ quotes, onAdd, onDelete }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.fur2}30` }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", background: "transparent", border: "none",
+          cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+          fontSize: 12, color: C.textLight, padding: "2px 0",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+        }}
+      >
+        <span>{open ? "▼" : "▶"}</span>
+        <span>💬 My Quotes ({quotes.length})</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 6 }}>
+          {quotes.map((q, idx) => (
+            <div key={idx} style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "4px 8px", background: `${C.green}15`, borderRadius: 6,
+              marginBottom: 2, fontSize: 11,
+            }}>
+              <div style={{ flex: 1, color: C.text, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>"{q}"</div>
+              <button onClick={() => onDelete(idx)}
+                style={{ background: "transparent", border: "none", color: C.accentDark, cursor: "pointer", fontSize: 10, padding: 1 }}
+                title="Remove">✕</button>
+            </div>
+          ))}
+          <QuoteInput
+            onAdd={onAdd}
+            placeholder="My favorite quote..."
+            color={C.green}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NearestExamCard({ exam, canEdit, onDelete }) {
+  const cd = getCountdown(exam.dateMs);
+  const examDate = new Date(exam.dateMs);
+  const dateLabel = examDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+  if (cd.passed) {
+    return (
+      <div style={{
+        padding: "12px 10px",
+        background: `linear-gradient(135deg, ${C.gold}30, ${C.accent}20)`,
+        borderRadius: 12, textAlign: "center",
+        border: `2px solid ${C.gold}80`,
+      }}>
+        <div style={{ fontSize: 36, marginBottom: 4 }}>{exam.emoji}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{exam.name}</div>
+        <div style={{
+          marginTop: 6, padding: "4px 10px", borderRadius: 999,
+          background: C.gold, color: "white", fontSize: 12, fontWeight: 700,
+          display: "inline-block",
+          animation: "examPulse 1.4s ease-in-out infinite",
+        }}>
+          <style>{`@keyframes examPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }`}</style>
+          🎉 Exam day has arrived!
+        </div>
+        {canEdit && (
+          <div>
+            <button onClick={() => onDelete(exam.id)}
+              style={{ marginTop: 6, background: "transparent", border: "none", color: C.textLight, cursor: "pointer", fontSize: 11 }}>
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Color cue based on urgency
+  const urgent = cd.days < 3;
+  const soon = cd.days < 7;
+  const accent = urgent ? C.accent : soon ? C.gold : C.green;
+
+  return (
+    <div style={{
+      padding: "10px 10px",
+      background: `linear-gradient(135deg, ${accent}15, ${accent}05)`,
+      borderRadius: 12,
+      border: `2px solid ${accent}40`,
+      position: "relative",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <div style={{ fontSize: 26 }}>{exam.emoji}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exam.name}</div>
+          <div style={{ fontSize: 11, color: C.textLight }}>{dateLabel}</div>
+        </div>
+        {canEdit && (
+          <button onClick={() => onDelete(exam.id)}
+            style={{ background: "transparent", border: "none", color: C.textLight, cursor: "pointer", padding: 2, fontSize: 12 }}
+            title="Remove">✕</button>
+        )}
+      </div>
+      {/* Big day number */}
+      <div style={{
+        textAlign: "center",
+        background: `${accent}25`,
+        borderRadius: 10,
+        padding: "8px 6px",
+      }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: accent, lineHeight: 1, fontFamily: "'Patrick Hand', cursive" }}>
+          {cd.days}
+        </div>
+        <div style={{ fontSize: 11, color: C.textLight, marginTop: 2, letterSpacing: 0.5, textTransform: "uppercase" }}>
+          {cd.days === 1 ? "day left" : "days left"}
+        </div>
+        {/* HH:MM:SS counter */}
+        <div style={{
+          marginTop: 6,
+          fontSize: 13,
+          fontFamily: "monospace",
+          color: C.text,
+          fontWeight: 700,
+          letterSpacing: 1,
+        }}>
+          {String(cd.hours).padStart(2, "0")}:{String(cd.minutes).padStart(2, "0")}:{String(cd.seconds).padStart(2, "0")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── PET EATING ANIMATION ─── universal feeding overlay that works for any pet
+   Layered on top of a centered <PetSVG>. Animation timeline:
+   - 0.0–0.4s: food emoji descends from above into the pet's mouth area
+   - 0.3–0.9s: pet wiggles + a "mouth open" dark patch pulses to show eating
+   - 0.9s+:    hearts float upward, fading
+*/
+function PetEatingAnimation({ petId, feedingFood, showHearts, size = 180 }) {
+  // Render the pet plus any active feeding/heart layers, sized to fit `size`
+  // We draw inside a centered SVG with viewBox -32..32. Pet renders at scale 1.4 (matches pool default).
+  const eating = !!feedingFood;
+  // Hearts: 5 hearts at random angles, animated upward. They appear when showHearts is true.
+  const heartAngles = [-30, -12, 0, 14, 32]; // spread above pet
+  return (
+    <div style={{
+      position: "relative",
+      width: size, height: size,
+      // Wiggle the whole pet during the eating phase for a chomping feel
+      animation: eating ? "petChomp 0.4s ease-in-out 3" : "none",
+    }}>
+      <style>{`
+        @keyframes petChomp {
+          0%,100% { transform: translateY(0) rotate(0deg); }
+          25%     { transform: translateY(-2px) rotate(-1.5deg); }
+          50%     { transform: translateY(0) rotate(0deg); }
+          75%     { transform: translateY(-2px) rotate(1.5deg); }
+        }
+        @keyframes foodFly {
+          0%   { transform: translate(-50%, -120%) scale(1) rotate(-15deg); opacity: 0; }
+          15%  { transform: translate(-50%, -90%) scale(1.05) rotate(-8deg); opacity: 1; }
+          55%  { transform: translate(-50%, -10%) scale(0.85) rotate(8deg); opacity: 1; }
+          75%  { transform: translate(-50%, 5%) scale(0.45) rotate(0deg); opacity: 0.85; }
+          100% { transform: translate(-50%, 12%) scale(0.05) rotate(0deg); opacity: 0; }
+        }
+        @keyframes mouthOpen {
+          0%,100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+          30%     { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+          60%     { transform: translate(-50%, -50%) scale(1.0); opacity: 0.95; }
+          90%     { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+        }
+        @keyframes crumbBurst {
+          0%   { transform: translate(0,0) scale(0); opacity: 0; }
+          25%  { transform: translate(var(--cx,4px), var(--cy,-2px)) scale(1); opacity: 1; }
+          100% { transform: translate(calc(var(--cx,4px) * 3), calc(var(--cy,-2px) * 3)) scale(0.4); opacity: 0; }
+        }
+        @keyframes heartFloat {
+          0%   { transform: translate(var(--hx, 0), 0) scale(0.4); opacity: 0; }
+          15%  { transform: translate(var(--hx, 0), -8px) scale(1); opacity: 1; }
+          70%  { transform: translate(var(--hx, 0), -56px) scale(1); opacity: 0.95; }
+          100% { transform: translate(var(--hx, 0), -88px) scale(0.7); opacity: 0; }
+        }
+      `}</style>
+
+      {/* Pet itself - SVG with watercolor */}
+      <svg width={size} height={size} viewBox="-32 -32 64 64" style={{ overflow: "visible", position: "absolute", inset: 0 }}>
+        {/* Soft reflection underneath */}
+        <ellipse cx="0" cy="22" rx="20" ry="4" fill={C.water1} opacity="0.35" filter="url(#watercolorSoft)" />
+        <g transform="scale(1.4)">
+          <PetSVG petId={petId} centered={true} mood={eating ? "happy" : "neutral"} />
+        </g>
+
+        {/* Mouth-open dark patch — pulses during eating to show chomping.
+            Position is a generic "face center" that works across pets. */}
+        {eating && (
+          <g style={{ animation: "mouthOpen 0.6s ease-in-out 0.3s 1 forwards", transformOrigin: "0 -2px" }}>
+            <ellipse cx="0" cy="-2" rx="3" ry="2.4" fill="#3a1a1a" opacity="0.85" />
+            <ellipse cx="0" cy="-2.5" rx="2.2" ry="1.4" fill="#7a2a2a" opacity="0.7" />
+            {/* tiny tongue */}
+            <ellipse cx="0" cy="-1" rx="1.5" ry="0.7" fill="#ff6080" />
+          </g>
+        )}
+      </svg>
+
+      {/* Food emoji flying into the pet's mouth */}
+      {eating && (
+        <div style={{
+          position: "absolute",
+          left: "50%", top: "50%",
+          fontSize: Math.round(size * 0.32),
+          pointerEvents: "none",
+          animation: "foodFly 0.85s ease-in 0s 1 forwards",
+          textAlign: "center",
+          width: 1, height: 1,
+          lineHeight: 1,
+        }}>
+          {feedingFood.emoji}
+        </div>
+      )}
+
+      {/* Crumb burst — small particles when food disappears into mouth */}
+      {eating && (
+        <div style={{ position: "absolute", left: "50%", top: "50%", pointerEvents: "none" }}>
+          {[
+            { cx: -10, cy: -6, delay: 0.7 },
+            { cx:  10, cy: -6, delay: 0.72 },
+            { cx:  -4, cy: -12, delay: 0.7 },
+            { cx:   6, cy: -10, delay: 0.74 },
+            { cx: -14, cy:  2, delay: 0.78 },
+          ].map((p, i) => (
+            <span key={i} style={{
+              position: "absolute",
+              left: 0, top: 0,
+              width: 5, height: 5, borderRadius: "50%",
+              background: i % 2 ? "#ffd140" : "#ff8030",
+              "--cx": `${p.cx}px`, "--cy": `${p.cy}px`,
+              animation: `crumbBurst 0.6s ease-out ${p.delay}s 1 forwards`,
+              opacity: 0,
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* Hearts floating up after eating */}
+      {showHearts && (
+        <div style={{ position: "absolute", left: "50%", top: "30%", pointerEvents: "none" }}>
+          {heartAngles.map((angle, i) => (
+            <span key={i} style={{
+              position: "absolute",
+              left: 0, top: 0,
+              fontSize: 18 + (i === 2 ? 4 : 0),
+              "--hx": `${angle}px`,
+              animation: `heartFloat 1.4s ease-out ${i * 0.08}s 1 forwards`,
+              opacity: 0,
+              filter: "drop-shadow(0 1px 2px rgba(200,50,80,0.4))",
+            }}>💖</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── FOOD SHOP ─── modal where students buy pet food with stars */
+function FoodShop({ student, onClose, onBuy }) {
+  const care = getPetCare(student);
+  const pet = student?.pet ? getPet(student.pet) : null;
+  const canAfford = (price) => student.points >= price;
+  // Eating animation state — set to a food emoji during the ~1.6s eating sequence
+  const [feedingFood, setFeedingFood] = useState(null);
+  const [showHearts, setShowHearts] = useState(false);
+
+  // Wrapper: try to buy the food; on success, play the eating animation
+  const handleBuy = (foodId) => {
+    const food = getFood(foodId);
+    if (!food) return;
+    const success = onBuy(foodId);
+    // onBuy may return true/false (sync) or undefined — assume undefined = success unless we can tell
+    // Our feedPet returns true on success. We trigger animation regardless of return as long as caller doesn't error.
+    if (success !== false) {
+      setFeedingFood(food);
+      setShowHearts(false);
+      // After mouth-eating phase, show hearts
+      setTimeout(() => setShowHearts(true), 900);
+      setTimeout(() => { setFeedingFood(null); setShowHearts(false); }, 2200);
+    }
+  };
+
+  if (!pet) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center", width: 420 }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🍱 Pet Pantry</h2>
+          <p style={{ color: C.textLight, fontSize: 16, marginBottom: 14 }}>You need a pet first! Open a mystery pack from the Pet Mart.</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Group foods by tier
+  const tiers = [
+    { name: "Snacks", maxPrice: 30,  color: C.green, foods: FOOD_CATALOG.filter(f => f.price < 30) },
+    { name: "Meals",  maxPrice: 80,  color: C.gold,  foods: FOOD_CATALOG.filter(f => f.price >= 30 && f.price < 80) },
+    { name: "Premium",maxPrice: 200, color: "#a060c0",foods: FOOD_CATALOG.filter(f => f.price >= 80 && f.price < 200) },
+    { name: "Feasts", maxPrice: 999, color: "#e06060",foods: FOOD_CATALOG.filter(f => f.price >= 200) },
+  ];
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={{ ...modalCardStyle, width: 580, maxWidth: "95vw", maxHeight: "92vh", overflow: "auto", padding: "20px 24px" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🍱 Pet Pantry</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>Feed {pet.name} {pet.emoji} · You have <strong style={{ color: C.gold }}>{student.points} ★</strong></p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Mini pet preview - plays eating animation when food is bought */}
+        <div style={{
+          height: 100,
+          background: `linear-gradient(180deg, ${C.snow1}80 0%, ${C.water1}60 100%)`,
+          borderRadius: 12,
+          marginBottom: 12,
+          position: "relative",
+          overflow: "hidden",
+          border: `1px solid ${C.water1}40`,
+        }}>
+          <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
+            <PetEatingAnimation petId={pet.id} feedingFood={feedingFood} showHearts={showHearts} size={88} />
+          </div>
+        </div>
+
+        {/* Pet stats summary */}
+        {care && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 140, background: `${C.gold}15`, padding: "8px 12px", borderRadius: 10 }}>
+              <div style={{ fontSize: 11, color: C.textLight }}>🍽️ Hunger</div>
+              <div style={{ height: 6, background: `${C.fur2}30`, borderRadius: 3, overflow: "hidden", marginTop: 4 }}>
+                <div style={{ height: "100%", width: `${care.hunger}%`, background: care.hunger > 50 ? C.green : care.hunger > 25 ? C.gold : C.accent, transition: "width 0.4s" }} />
+              </div>
+              <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 2 }}>{care.hunger}/100</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 140, background: `${C.green}15`, padding: "8px 12px", borderRadius: 10 }}>
+              <div style={{ fontSize: 11, color: C.textLight }}>💖 Happiness</div>
+              <div style={{ height: 6, background: `${C.fur2}30`, borderRadius: 3, overflow: "hidden", marginTop: 4 }}>
+                <div style={{ height: "100%", width: `${care.happiness}%`, background: care.happiness > 50 ? C.green : care.happiness > 25 ? C.gold : C.accent, transition: "width 0.4s" }} />
+              </div>
+              <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 2 }}>{care.happiness}/100</div>
+            </div>
+          </div>
+        )}
+
+        {/* Food tiers */}
+        {tiers.map(tier => (
+          <div key={tier.name} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: tier.color }}>{tier.name}</div>
+              <div style={{ flex: 1, height: 1, background: `${tier.color}30` }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
+              {tier.foods.map(food => {
+                const affordable = canAfford(food.price);
+                return (
+                  <button
+                    key={food.id}
+                    onClick={() => affordable && handleBuy(food.id)}
+                    disabled={!affordable}
+                    style={{
+                      padding: "10px",
+                      borderRadius: 12,
+                      border: `2px solid ${tier.color}40`,
+                      background: affordable ? `${tier.color}10` : `${C.fur2}10`,
+                      cursor: affordable ? "pointer" : "not-allowed",
+                      opacity: affordable ? 1 : 0.5,
+                      textAlign: "center",
+                      transition: "transform 0.15s",
+                      fontFamily: "'Patrick Hand', cursive",
+                    }}
+                    onMouseEnter={e => affordable && (e.currentTarget.style.transform = "scale(1.04)")}
+                    onMouseLeave={e => affordable && (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    <div style={{ fontSize: 30, marginBottom: 2 }}>{food.emoji}</div>
+                    <div style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{food.name}</div>
+                    <div style={{ fontSize: 10, color: C.textLight, fontStyle: "italic", marginBottom: 4 }}>{food.flavor}</div>
+                    <div style={{ display: "flex", justifyContent: "center", gap: 4, fontSize: 11, marginBottom: 4 }}>
+                      <span style={{ color: C.gold }}>+{food.hunger}🍽️</span>
+                      <span style={{ color: C.green }}>+{food.happiness}💖</span>
+                    </div>
+                    <div style={{
+                      background: affordable ? C.gold : C.textLight,
+                      color: "white", borderRadius: 999,
+                      padding: "3px 10px", fontSize: 12, fontWeight: 700,
+                      display: "inline-block",
+                    }}>
+                      {food.price} ★
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── MY POOL ─── personal Tamagotchi-style scene where the student cares for their pet */
+function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
+  // Live tick for stat updates (decay shows in real-time as user watches)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const care = getPetCare(student);
+  const pet = student?.pet ? getPet(student.pet) : null;
+  const careLabel = care ? getCareLabel(care.avgCare) : null;
+  const incomeMul = care ? getCareIncomeMultiplier(care.avgCare) : 1.0;
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={{
+        ...modalCardStyle, width: 540, maxWidth: "95vw", padding: "20px 24px",
+        background: `linear-gradient(180deg, ${C.snow1} 0%, ${C.water2}30 60%, ${C.water1}50 100%)`,
+        position: "relative", overflow: "hidden",
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "relative", zIndex: 2 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🛁 {student.name}'s Pool</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+              {pet ? `Caring for ${pet.name} ${pet.emoji}` : "No pet yet"}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* No pet state */}
+        {!pet ? (
+          <div style={{ textAlign: "center", padding: "30px 12px" }}>
+            <div style={{ fontSize: 64, marginBottom: 12, opacity: 0.6 }}>🐣</div>
+            <h3 style={{ color: C.text, margin: "0 0 8px" }}>You don't have a pet yet</h3>
+            <p style={{ color: C.textLight, fontSize: 14, marginBottom: 14 }}>
+              Open a mystery pack from the Pet Mart to adopt your first pet!
+            </p>
+            <button onClick={() => { onClose(); onPetMart && onPetMart(); }} style={primaryBtnStyle}>
+              🎁 Open Pet Mart
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Pool scene with pet */}
+            <div style={{
+              position: "relative",
+              height: 200,
+              background: `linear-gradient(180deg, ${C.snow1}80 0%, ${C.water1}90 100%)`,
+              borderRadius: 16,
+              marginBottom: 14,
+              overflow: "hidden",
+              border: `2px solid ${C.water1}80`,
+            }}>
+              {/* Bubbles */}
+              <div style={{ position: "absolute", left: "20%", top: "70%", fontSize: 12, opacity: 0.4 }}>·</div>
+              <div style={{ position: "absolute", left: "60%", top: "75%", fontSize: 10, opacity: 0.3 }}>·</div>
+              <div style={{ position: "absolute", left: "40%", top: "80%", fontSize: 14, opacity: 0.5 }}>·</div>
+              {/* Pet display - watercolor SVG with mood animation, matches monkey style */}
+              <div style={{
+                position: "absolute", left: "50%", top: "50%",
+                transform: "translate(-50%, -50%)",
+                animation: care && care.happiness > 60 ? "petBounce 1.6s ease-in-out infinite" : care && care.happiness < 30 ? "petSad 3s ease-in-out infinite" : "petIdle 3s ease-in-out infinite",
+                filter: care && care.happiness < 25 ? "saturate(0.55) brightness(0.95)" : "none",
+                transformOrigin: "center",
+              }}>
+                <PetEatingAnimation petId={pet.id} feedingFood={null} showHearts={false} size={200} />
+              </div>
+              <style>{`
+                @keyframes petBounce { 0%,100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-12px); } }
+                @keyframes petIdle { 0%,100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-4px); } }
+                @keyframes petSad { 0%,100% { transform: translate(-50%, -50%) translateY(2px) rotate(-2deg); } 50% { transform: translate(-50%, -50%) translateY(0) rotate(2deg); } }
+              `}</style>
+              {/* Mood label */}
+              {careLabel && (
+                <div style={{
+                  position: "absolute", top: 12, right: 12,
+                  background: `${careLabel.color}e0`,
+                  color: "white",
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  fontFamily: "'Patrick Hand', cursive",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  <span>{careLabel.emoji}</span>
+                  <span>{careLabel.label}</span>
+                </div>
+              )}
+              {/* Income multiplier badge */}
+              <div style={{
+                position: "absolute", top: 12, left: 12,
+                background: `${C.card}e0`,
+                color: incomeMul >= 1.3 ? C.green : incomeMul >= 1.0 ? C.text : C.accent,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: "'Patrick Hand', cursive",
+              }}>
+                💰 {Math.round(incomeMul * 100)}% income
+              </div>
+            </div>
+
+            {/* Stats bars */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>🍽️ Hunger</span>
+                  <span style={{ fontSize: 12, color: C.textLight }}>{care?.hunger ?? 0}/100</span>
+                </div>
+                <div style={{ height: 12, background: `${C.fur2}30`, borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${care?.hunger ?? 0}%`,
+                    background: care && care.hunger > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.hunger > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
+                    transition: "width 0.6s",
+                  }} />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>💖 Happiness</span>
+                  <span style={{ fontSize: 12, color: C.textLight }}>{care?.happiness ?? 0}/100</span>
+                </div>
+                <div style={{ height: 12, background: `${C.fur2}30`, borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${care?.happiness ?? 0}%`,
+                    background: care && care.happiness > 50 ? `linear-gradient(90deg, ${C.green}, #4a8a4c)` : care && care.happiness > 25 ? `linear-gradient(90deg, ${C.gold}, #b88810)` : `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
+                    transition: "width 0.6s",
+                  }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button onClick={onShop}
+                style={{
+                  padding: "14px", borderRadius: 14, border: "none",
+                  background: `linear-gradient(135deg, ${C.gold}, #b88810)`,
+                  color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.gold}40`,
+                }}>
+                🍱 Feed
+                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 400 }}>Buy food</div>
+              </button>
+              <button onClick={onWalk}
+                style={{
+                  padding: "14px", borderRadius: 14, border: "none",
+                  background: `linear-gradient(135deg, ${C.green}, #4a8a4c)`,
+                  color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 16, fontWeight: 700, boxShadow: `0 4px 12px ${C.green}40`,
+                }}>
+                🚶 Walk
+                <div style={{ fontSize: 11, opacity: 0.9, fontWeight: 400 }}>+happiness</div>
+              </button>
+            </div>
+
+            {/* Care tip */}
+            <div style={{
+              marginTop: 12, padding: "8px 12px",
+              background: `${C.snow1}80`, borderRadius: 10,
+              fontSize: 12, color: C.textLight, textAlign: "center",
+              fontStyle: "italic",
+            }}>
+              💡 Pet stats decay over time. Better care = more weekly stars!
+              {care && care.avgCare < 30 && <div style={{ color: C.accent, marginTop: 4, fontWeight: 700 }}>Your pet needs attention!</div>}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── WALK MINI-GAME ─── student guides the pet through obstacles to boost happiness */
+function WalkGame({ student, onClose, onComplete }) {
+  const canvasRef = useRef(null);
+  const petOverlayRef = useRef(null);
+  const [size, setSize] = useState({ w: 600, h: 320 });
+  const [started, setStarted] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [score, setScore] = useState(0);
+  const [collected, setCollected] = useState(0);
+  const [hits, setHits] = useState(0);
+
+  const stateRef = useRef({
+    petY: 0,
+    petTargetY: 0,
+    obstacles: [], // { x, y, type: 'rock' | 'flower' | 'butterfly' | 'star' }
+    distance: 0,
+    speed: 4,
+    nextSpawnIn: 60,
+    frame: 0,
+  });
+
+  const pet = student?.pet ? getPet(student.pet) : null;
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    const updateSize = () => {
+      const containerW = Math.min(window.innerWidth - 40, 720);
+      const w = Math.max(320, containerW);
+      const h = Math.round(w * 0.45);
+      setSize({ w, h });
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  // Initialize pet position once size known
+  useEffect(() => {
+    stateRef.current.petY = size.h / 2;
+    stateRef.current.petTargetY = size.h / 2;
+  }, [size.h]);
+
+  // Walk lasts 30 seconds
+  useEffect(() => {
+    if (!started || finished) return;
+    const id = setTimeout(() => {
+      if (!finishedRef.current) {
+        finishedRef.current = true;
+        setFinished(true);
+      }
+    }, 30000);
+    return () => clearTimeout(id);
+  }, [started, finished]);
+
+  // Game loop
+  useEffect(() => {
+    if (!started || finished) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf;
+
+    const ITEM_TYPES = [
+      { type: "flower",    emoji: "🌸", points: 5,  good: true,  size: 32 },
+      { type: "butterfly", emoji: "🦋", points: 8,  good: true,  size: 28 },
+      { type: "star",      emoji: "⭐", points: 10, good: true,  size: 30 },
+      { type: "treat",     emoji: "🍪", points: 12, good: true,  size: 32 },
+      { type: "rock",      emoji: "🪨", points: 0,  good: false, size: 36 },
+      { type: "puddle",    emoji: "💧", points: 0,  good: false, size: 32 },
+    ];
+
+    const loop = () => {
+      const s = stateRef.current;
+      s.frame++;
+
+      // Pet smoothly follows target
+      s.petY += (s.petTargetY - s.petY) * 0.18;
+
+      // Move world
+      s.distance += s.speed;
+
+      // Move obstacles
+      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed }));
+      s.obstacles = s.obstacles.filter(o => o.x > -50);
+
+      // Spawn new
+      s.nextSpawnIn--;
+      if (s.nextSpawnIn <= 0) {
+        const item = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+        const yMin = 40, yMax = size.h - 40;
+        s.obstacles.push({
+          x: size.w + 30,
+          y: yMin + Math.random() * (yMax - yMin),
+          ...item,
+        });
+        s.nextSpawnIn = 30 + Math.floor(Math.random() * 40);
+      }
+
+      // Collision detection (around the pet)
+      const petX = 70;
+      const petRadius = 28;
+      s.obstacles.forEach(o => {
+        if (o.collected) return;
+        const dx = o.x - petX;
+        const dy = o.y - s.petY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < petRadius + o.size / 2 - 4) {
+          o.collected = true;
+          if (o.good) {
+            SFX.collect();
+            setScore(sc => sc + o.points);
+            setCollected(c => c + 1);
+          } else {
+            SFX.wrong();
+            setHits(h => h + 1);
+          }
+        }
+      });
+      // Drop collected after a short delay
+      s.obstacles = s.obstacles.filter(o => !o.collected || o.collectedAt > s.frame - 8);
+      s.obstacles.forEach(o => { if (o.collected && !o.collectedAt) o.collectedAt = s.frame; });
+
+      // Speed up gradually
+      s.speed = Math.min(7, 4 + s.distance * 0.0008);
+
+      // === RENDER ===
+      // Sky gradient (sunset path)
+      const grd = ctx.createLinearGradient(0, 0, 0, size.h);
+      grd.addColorStop(0, "#ffd8a8");
+      grd.addColorStop(0.5, "#ffb890");
+      grd.addColorStop(1, "#a8e0a0");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, size.w, size.h);
+
+      // Ground path stripes
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      for (let i = 0; i < 8; i++) {
+        const x = (i * 100 - (s.distance % 100));
+        ctx.fillRect(x, size.h - 30, 60, 6);
+      }
+
+      // Distant trees
+      ctx.fillStyle = "rgba(74, 138, 76, 0.5)";
+      for (let i = 0; i < 5; i++) {
+        const x = (i * 200 - (s.distance * 0.3) % (size.w + 200));
+        const treeY = size.h * 0.6;
+        ctx.beginPath();
+        ctx.arc(x + 30, treeY, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(x + 27, treeY, 6, 18);
+      }
+
+      // Obstacles / collectibles
+      s.obstacles.forEach(o => {
+        if (o.collected) {
+          ctx.globalAlpha = Math.max(0, 1 - (s.frame - o.collectedAt) / 8);
+        }
+        ctx.font = `${o.size}px serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(o.emoji, o.x, o.y);
+        ctx.globalAlpha = 1;
+      });
+
+      // (Pet rendered as SVG overlay outside the canvas — see below)
+      // Update pet overlay's CSS top to follow petY in canvas coords
+      const bobY = s.petY + Math.sin(s.frame * 0.15) * 2;
+      s.renderedPetY = bobY;
+      if (petOverlayRef.current) {
+        // map canvas-Y to overlay percentage of canvas height
+        petOverlayRef.current.style.top = `${(bobY / size.h) * 100}%`;
+      }
+
+      // Sparkle trail
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      for (let i = 0; i < 5; i++) {
+        const tx = petX - 20 - i * 12;
+        const ty = bobY + Math.sin(s.frame * 0.2 + i) * 4;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 2 - i * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [started, finished, size, pet]);
+
+  // Mouse / touch input — pet follows pointer Y
+  const movePet = (clientY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const y = clientY - rect.top;
+    const scaledY = (y / rect.height) * size.h;
+    stateRef.current.petTargetY = Math.max(40, Math.min(size.h - 40, scaledY));
+  };
+
+  // Keyboard fallback (arrow keys)
+  useEffect(() => {
+    if (!started) return;
+    const handleKey = (e) => {
+      if (e.code === "ArrowUp" || e.code === "KeyW") {
+        e.preventDefault();
+        stateRef.current.petTargetY = Math.max(40, stateRef.current.petTargetY - 30);
+      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+        e.preventDefault();
+        stateRef.current.petTargetY = Math.min(size.h - 40, stateRef.current.petTargetY + 30);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [started, size.h]);
+
+  // When finished, calculate happiness boost and report
+  const finishHandler = () => {
+    // Boost based on score: 5 points = 1 happiness, capped at 35
+    const happinessBoost = Math.min(35, 10 + Math.floor(score / 4));
+    const starBonus = Math.min(10, Math.floor(collected / 3));
+    onComplete(happinessBoost, starBonus);
+    onClose();
+  };
+
+  if (!pet) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center", width: 400 }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🚶 No Pet to Walk</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>You need a pet to take on a walk!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={{ ...modalCardStyle, width: Math.min(size.w + 80, window.innerWidth - 20), maxWidth: "98vw", padding: "20px 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚶 Walk with {pet.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+              Score: {score} ★ · Collected: {collected} · Hits: {hits}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        <div
+          style={{ position: "relative", borderRadius: 12, overflow: "hidden", touchAction: "none", cursor: "ns-resize" }}
+          onMouseMove={e => started && !finished && movePet(e.clientY)}
+          onTouchStart={e => { e.preventDefault(); if (!started) setStarted(true); else if (!finished) movePet(e.touches[0].clientY); }}
+          onTouchMove={e => { e.preventDefault(); if (started && !finished) movePet(e.touches[0].clientY); }}
+          onClick={() => !started && setStarted(true)}
+        >
+          <canvas
+            ref={canvasRef}
+            width={size.w}
+            height={size.h}
+            style={{ display: "block", width: "100%", height: "auto" }}
+          />
+          {/* Pet overlay - watercolor SVG positioned over the canvas, follows pet's tracked Y */}
+          {started && !finished && (
+            <div ref={petOverlayRef}
+              style={{
+                position: "absolute",
+                left: `${(70 / size.w) * 100}%`,
+                top: 0,
+                transform: "translate(-50%, 0)",
+                pointerEvents: "none",
+                width: 80, height: 80,
+                marginTop: -40,
+              }}>
+              <svg width="80" height="80" viewBox="-32 -32 64 64" style={{ overflow: "visible" }}>
+                <g transform="scale(1.15)">
+                  <PetSVG petId={pet.id} centered={true} mood="happy" />
+                </g>
+              </svg>
+            </div>
+          )}
+          {!started && !finished && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(2px)",
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 8 }}>🚶</div>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, marginBottom: 8 }}>Tap to start the walk!</div>
+              <div style={{ fontSize: 13, color: C.textLight, textAlign: "center", maxWidth: 380, padding: "0 12px" }}>
+                Move mouse / drag finger up & down to guide your pet.
+                Collect 🌸🦋⭐🍪 — avoid 🪨💧!
+                <br />30 seconds · The more you collect, the happier your pet!
+              </div>
+            </div>
+          )}
+          {finished && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: `${C.green}c0`,
+              backdropFilter: "blur(2px)",
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 6 }}>🎉</div>
+              <div style={{ fontSize: 22, color: "white", fontWeight: 700, marginBottom: 8 }}>Walk complete!</div>
+              <div style={{ background: "white", borderRadius: 12, padding: "10px 18px", marginBottom: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 13, color: C.textLight }}>Collected: {collected} · Score: {score} ★</div>
+                <div style={{ fontSize: 14, color: C.green, fontWeight: 700, marginTop: 4 }}>
+                  +{Math.min(35, 10 + Math.floor(score / 4))} 💖 happiness for {pet.name}!
+                </div>
+                {Math.min(10, Math.floor(collected / 3)) > 0 && (
+                  <div style={{ fontSize: 13, color: C.gold, fontWeight: 700, marginTop: 2 }}>
+                    +{Math.min(10, Math.floor(collected / 3))} ★ bonus stars!
+                  </div>
+                )}
+              </div>
+              <button onClick={finishHandler} style={primaryBtnStyle}>Back to Pool</button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: C.textLight }}>
+          Move pointer up & down to guide. Arrow keys also work.
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ─── IMPROVED MONKEY SVG ─── */
@@ -1477,6 +2804,793 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           </g>
         )}
 
+        {/* ─── 50+ NEW ACCESSORY RENDERS ─── hand-drawn watercolor style */}
+
+        {/* === FREE HEAD ITEMS === */}
+        {accessories.includes("partyhat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* cone */}
+            <path d="M -13 -32 L 0 -58 L 13 -32 Z" fill="#ff5c87" stroke="#c83870" strokeWidth="0.8" />
+            {/* stripes */}
+            <path d="M -7 -44 L 7 -44" stroke="#ffd140" strokeWidth="2" />
+            <path d="M -10 -38 L 10 -38" stroke="#5caa5e" strokeWidth="2" />
+            {/* pom-pom */}
+            <circle cx="0" cy="-58" r="3.5" fill="#ffd140" />
+            <circle cx="-1" cy="-59" r="1" fill="white" opacity="0.6" />
+          </g>
+        )}
+        {accessories.includes("graduationcap") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base cap */}
+            <ellipse cx="0" cy="-34" rx="14" ry="4" fill="#1a1a1a" />
+            {/* mortarboard square */}
+            <path d="M -22 -38 L 0 -42 L 22 -38 L 0 -34 Z" fill="#2a2a2a" stroke="#000" strokeWidth="0.6" />
+            {/* button */}
+            <circle cx="0" cy="-39" r="1.5" fill="#edb830" />
+            {/* tassel */}
+            <path d="M 0 -39 Q 18 -36 20 -28" stroke="#edb830" strokeWidth="1.2" fill="none" />
+            <ellipse cx="20" cy="-26" rx="1.5" ry="3" fill="#edb830" />
+          </g>
+        )}
+        {accessories.includes("leaf") && (
+          <g filter="url(#watercolorSoft)">
+            {/* leaf crown */}
+            <path d="M -18 -34 Q -22 -42 -14 -42 Q -10 -38 -10 -34" fill="#5caa5e" />
+            <path d="M -8 -36 Q -10 -46 -2 -46 Q 0 -40 0 -36" fill="#7ac87c" />
+            <path d="M 8 -36 Q 6 -46 14 -46 Q 16 -42 14 -36" fill="#5caa5e" />
+            <path d="M 18 -34 Q 22 -42 14 -42 Q 10 -38 10 -34" fill="#7ac87c" />
+            {/* stem */}
+            <path d="M -18 -34 Q 0 -36 18 -34" stroke="#3a7a3c" strokeWidth="1" fill="none" />
+            {/* dewdrop */}
+            <ellipse cx="-2" cy="-44" rx="1" ry="1.5" fill="white" opacity="0.7" />
+          </g>
+        )}
+        {accessories.includes("rainbow") && (
+          <g filter="url(#watercolorSoft)">
+            {/* headband base */}
+            <path d="M -20 -34 Q 0 -44 20 -34" stroke="#a8c8d4" strokeWidth="2.5" fill="none" />
+            {/* rainbow arches */}
+            <path d="M -14 -34 Q 0 -44 14 -34" stroke="#e06060" strokeWidth="2" fill="none" />
+            <path d="M -12 -34 Q 0 -42 12 -34" stroke="#edb830" strokeWidth="1.5" fill="none" />
+            <path d="M -10 -34 Q 0 -40 10 -34" stroke="#5caa5e" strokeWidth="1.5" fill="none" />
+            <path d="M -8 -34 Q 0 -38 8 -34" stroke="#5a8fc7" strokeWidth="1.5" fill="none" />
+            <path d="M -6 -34 Q 0 -36 6 -34" stroke="#a060c0" strokeWidth="1.5" fill="none" />
+          </g>
+        )}
+
+        {/* === PAID HEAD ITEMS === */}
+        {accessories.includes("cowboyhat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* brim - wide curved */}
+            <path d="M -28 -34 Q -14 -38 0 -38 Q 14 -38 28 -34 Q 24 -32 0 -32 Q -24 -32 -28 -34 Z"
+              fill="#8b6342" stroke="#553928" strokeWidth="0.7" />
+            {/* crown of hat */}
+            <path d="M -12 -38 Q -14 -50 0 -52 Q 14 -50 12 -38 Z" fill="#a3796a" stroke="#553928" strokeWidth="0.7" />
+            {/* dent in top */}
+            <path d="M -6 -50 Q 0 -47 6 -50" stroke="#553928" strokeWidth="0.6" fill="none" />
+            {/* band */}
+            <ellipse cx="0" cy="-40" rx="13" ry="2" fill="#3a2a1a" />
+            {/* star */}
+            <text x="0" y="-39" fontSize="4" textAnchor="middle" fill="#edb830">★</text>
+          </g>
+        )}
+        {accessories.includes("tophat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* wizard hat - tall pointed */}
+            <path d="M -14 -32 Q 0 -34 14 -32 L 4 -54 Q 0 -60 -4 -54 Z"
+              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
+            {/* tip droops a bit */}
+            <path d="M 0 -60 Q 5 -56 4 -54" fill="none" stroke="#3a1a5a" strokeWidth="0.5" />
+            {/* stars */}
+            <text x="-5" y="-40" fontSize="3" fill="#ffd140">✦</text>
+            <text x="6" y="-46" fontSize="2.5" fill="#ffd140">✦</text>
+            <text x="0" y="-52" fontSize="2" fill="white">✦</text>
+            {/* moon */}
+            <path d="M -2 -38 Q -6 -36 -2 -34 Q 0 -36 -2 -38" fill="#edb830" />
+          </g>
+        )}
+        {accessories.includes("vikinghelm") && (
+          <g filter="url(#watercolorSoft)">
+            {/* helmet body - rounded dome */}
+            <path d="M -16 -32 Q -16 -50 0 -52 Q 16 -50 16 -32 Z" fill="#888a90" stroke="#404248" strokeWidth="0.8" />
+            {/* highlight */}
+            <path d="M -10 -46 Q -8 -50 -4 -50" stroke="#c0c2c8" strokeWidth="2" fill="none" />
+            {/* nose guard */}
+            <rect x="-1.5" y="-32" width="3" height="6" fill="#666870" />
+            {/* horns */}
+            <path d="M -16 -36 Q -28 -40 -28 -32 Q -22 -34 -16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
+            <path d="M 16 -36 Q 28 -40 28 -32 Q 22 -34 16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
+          </g>
+        )}
+        {accessories.includes("policehat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base brim */}
+            <ellipse cx="0" cy="-32" rx="20" ry="3" fill="#1a2a4a" />
+            {/* main body */}
+            <path d="M -16 -34 Q -16 -48 0 -48 Q 16 -48 16 -34 Z" fill="#2a3a6a" stroke="#0a1a3a" strokeWidth="0.7" />
+            {/* center band */}
+            <rect x="-16" y="-38" width="32" height="3" fill="#1a2a4a" />
+            {/* badge */}
+            <text x="0" y="-41" fontSize="6" textAnchor="middle" fill="#edb830">★</text>
+            {/* visor strap */}
+            <ellipse cx="0" cy="-31" rx="14" ry="1.5" fill="#0a1a3a" />
+          </g>
+        )}
+        {accessories.includes("chefhat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* band */}
+            <rect x="-14" y="-36" width="28" height="4" fill="#f5f0ea" stroke="#c0b8a8" strokeWidth="0.6" />
+            {/* puff body */}
+            <path d="M -16 -36 Q -22 -56 -8 -54 Q -4 -60 4 -56 Q 8 -62 14 -54 Q 22 -54 16 -36 Z"
+              fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.6" />
+            {/* puff bumps */}
+            <circle cx="-8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+            <circle cx="0" cy="-54" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+            <circle cx="8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
+          </g>
+        )}
+        {accessories.includes("santahat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* white fur band */}
+            <ellipse cx="0" cy="-34" rx="18" ry="3.5" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+            {/* red cone */}
+            <path d="M -16 -36 Q -10 -54 14 -52 Q 18 -42 16 -36 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.6" />
+            {/* fluffy fur dots */}
+            <circle cx="-10" cy="-34" r="2" fill="#fffefa" />
+            <circle cx="0" cy="-32" r="2.5" fill="#fffefa" />
+            <circle cx="10" cy="-34" r="2" fill="#fffefa" />
+            {/* white ball at tip */}
+            <circle cx="14" cy="-52" r="3" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+          </g>
+        )}
+        {accessories.includes("witchhat") && (
+          <g filter="url(#watercolorSoft)">
+            {/* wide brim */}
+            <ellipse cx="0" cy="-32" rx="24" ry="4" fill="#2a1a3a" stroke="#0a0a1a" strokeWidth="0.6" />
+            {/* tall pointed cone, slightly tilted */}
+            <path d="M -12 -34 Q 0 -36 12 -34 L 18 -56 Q 14 -60 8 -54 Z"
+              fill="#3a1a5a" stroke="#1a0a2a" strokeWidth="0.7" />
+            {/* purple band */}
+            <ellipse cx="0" cy="-36" rx="13" ry="2" fill="#5a3a8a" />
+            {/* gold buckle */}
+            <rect x="-3" y="-37.5" width="6" height="3" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+            {/* tip curl + star */}
+            <text x="20" y="-54" fontSize="3" fill="#edb830">✦</text>
+          </g>
+        )}
+        {accessories.includes("antlers") && (
+          <g filter="url(#watercolorSoft)">
+            {/* left antler */}
+            <path d="M -10 -32 Q -14 -42 -18 -50 M -16 -46 Q -22 -48 -24 -42 M -16 -50 Q -22 -52 -22 -46"
+              stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+            {/* right antler */}
+            <path d="M 10 -32 Q 14 -42 18 -50 M 16 -46 Q 22 -48 24 -42 M 16 -50 Q 22 -52 22 -46"
+              stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+            {/* bows on antlers (festive) */}
+            <path d="M -12 -36 Q -14 -38 -16 -36 Q -14 -34 -12 -36" fill="#c94c4c" />
+            <path d="M 12 -36 Q 14 -38 16 -36 Q 14 -34 12 -36" fill="#c94c4c" />
+          </g>
+        )}
+        {accessories.includes("starcrown") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base */}
+            <rect x="-22" y="-38" width="44" height="4" fill="#edb830" stroke="#b88810" strokeWidth="0.7" />
+            {/* star points */}
+            <path d="M -20 -40 L -18 -50 L -16 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+            <path d="M -8 -40 L -6 -54 L -4 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+            <path d="M -2 -40 L 0 -58 L 2 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+            <path d="M 4 -40 L 6 -54 L 8 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+            <path d="M 16 -40 L 18 -50 L 20 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
+            {/* star tips with sparkles */}
+            <circle cx="-6" cy="-54" r="1.2" fill="white" />
+            <circle cx="0" cy="-58" r="1.5" fill="white" />
+            <circle cx="6" cy="-54" r="1.2" fill="white" />
+          </g>
+        )}
+        {accessories.includes("fireheadband") && (
+          <g filter="url(#watercolorSoft)">
+            {/* headband */}
+            <path d="M -22 -32 Q 0 -38 22 -32 L 22 -28 Q 0 -34 -22 -28 Z"
+              fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+            {/* flames */}
+            <path d="M -16 -34 Q -14 -42 -10 -38 Q -8 -44 -4 -38 Q -2 -46 2 -40 Q 4 -46 8 -40 Q 10 -44 14 -38 Q 16 -42 18 -36"
+              fill="#ff5500" stroke="#aa3300" strokeWidth="0.5" />
+            {/* yellow flame core */}
+            <path d="M -10 -40 Q -8 -42 -6 -40 M 0 -42 Q 2 -44 4 -42 M 8 -40 Q 10 -42 12 -40"
+              stroke="#ffd140" strokeWidth="1.5" fill="none" />
+          </g>
+        )}
+        {accessories.includes("alien") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base band */}
+            <ellipse cx="0" cy="-32" rx="13" ry="2.5" fill="#3a3a5a" />
+            {/* left antenna */}
+            <path d="M -10 -34 Q -16 -44 -14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
+            <circle cx="-14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
+            {/* right antenna */}
+            <path d="M 10 -34 Q 16 -44 14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
+            <circle cx="14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
+            {/* glow on balls */}
+            <circle cx="-15" cy="-55" r="1" fill="white" opacity="0.7" />
+            <circle cx="13" cy="-55" r="1" fill="white" opacity="0.7" />
+          </g>
+        )}
+
+        {/* === FACE ITEMS === */}
+        {accessories.includes("smile") && (
+          <g>
+            {/* extra-big curved smile drawn over normal mouth */}
+            <path d="M -10 -2 Q 0 8 10 -2" fill="none" stroke="#3a2a1a" strokeWidth="2" strokeLinecap="round" />
+            {/* tooth highlight */}
+            <path d="M -3 2 L -3 5 M 0 2 L 0 5 M 3 2 L 3 5" stroke="white" strokeWidth="1.5" />
+          </g>
+        )}
+        {accessories.includes("monocle") && (
+          <g filter="url(#watercolorSoft)">
+            {/* monocle ring (right eye) */}
+            <circle cx="8" cy="-15" r="6" fill="rgba(180,210,230,0.3)" stroke="#444" strokeWidth="1.2" />
+            <circle cx="8" cy="-15" r="6" fill="none" stroke="#edb830" strokeWidth="0.6" />
+            {/* chain */}
+            <path d="M 14 -13 Q 18 -8 18 -2" stroke="#edb830" strokeWidth="0.7" fill="none" strokeDasharray="1,1" />
+            {/* shine */}
+            <path d="M 5 -18 Q 7 -19 9 -18" stroke="white" strokeWidth="0.8" fill="none" opacity="0.7" />
+          </g>
+        )}
+        {accessories.includes("mustache") && (
+          <g filter="url(#watercolorSoft)">
+            {/* curly mustache below nose */}
+            <path d="M -10 -4 Q -14 -2 -12 2 Q -8 0 -4 -2 Q 0 -4 4 -2 Q 8 0 12 2 Q 14 -2 10 -4 Q 6 -2 0 -3 Q -6 -2 -10 -4 Z"
+              fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.5" />
+            {/* curly tips */}
+            <path d="M -12 -2 Q -16 -4 -14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
+            <path d="M 12 -2 Q 16 -4 14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
+          </g>
+        )}
+        {accessories.includes("eyepatch") && (
+          <g filter="url(#watercolorSoft)">
+            {/* patch over right eye */}
+            <ellipse cx="8" cy="-16" rx="6" ry="5" fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+            {/* strap going around head */}
+            <path d="M 14 -14 Q 24 -12 22 -22 Q 12 -22 4 -20" stroke="#1a1a1a" strokeWidth="1.2" fill="none" />
+            {/* skull */}
+            <text x="8" y="-14" fontSize="4" textAnchor="middle" fill="white">☠</text>
+          </g>
+        )}
+        {accessories.includes("facepaint") && (
+          <g filter="url(#watercolorSoft)">
+            {/* warrior stripes under each eye */}
+            <path d="M -12 -10 L -4 -8" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 4 -8 L 12 -10" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
+            {/* zigzag on cheeks */}
+            <path d="M -10 -6 L -8 -4 L -6 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
+            <path d="M 6 -6 L 8 -4 L 10 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
+            {/* dot on forehead */}
+            <circle cx="0" cy="-22" r="2" fill="#edb830" />
+          </g>
+        )}
+        {accessories.includes("ninjamask") && (
+          <g filter="url(#watercolorSoft)">
+            {/* wide black band across eyes */}
+            <path d="M -22 -18 Q 0 -16 22 -18 L 22 -12 Q 0 -10 -22 -12 Z"
+              fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
+            {/* tied tails on the side */}
+            <path d="M -22 -16 Q -28 -14 -30 -8 Q -28 -10 -22 -12" fill="#1a1a1a" />
+            <path d="M -28 -10 L -32 -2" stroke="#1a1a1a" strokeWidth="1.5" />
+            {/* eye holes */}
+            <ellipse cx="-8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
+            <ellipse cx="8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
+            <circle cx="-7.5" cy="-15" r="1.8" fill="#1a1a1a" />
+            <circle cx="8.5" cy="-15" r="1.8" fill="#1a1a1a" />
+          </g>
+        )}
+        {accessories.includes("starshades") && (
+          <g filter="url(#watercolorSoft)">
+            {/* star-shaped sunglasses (5-pointed star outline x2) */}
+            <path d="M -8 -19 L -6 -14 L -1 -14 L -5 -11 L -3 -16 L -8 -13 L -8 -19 Z"
+              fill="#edb830" stroke="#b88810" strokeWidth="0.5" />
+            <path d="M -14 -16 L -8 -16 L -3 -13 L -8 -10 L -14 -13 Z"
+              fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
+            <path d="M 3 -13 L 8 -16 L 14 -16 L 14 -13 L 8 -10 Z"
+              fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
+            {/* star sparkles */}
+            <text x="-9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
+            <text x="9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
+            {/* bridge */}
+            <path d="M -3 -13 L 3 -13" stroke="#1a1a3a" strokeWidth="1" />
+          </g>
+        )}
+        {accessories.includes("diamondeyes") && (
+          <g filter="url(#watercolorSoft)">
+            {/* sparkly diamond eyes */}
+            <path d="M -8 -19 L -5 -16 L -8 -12 L -11 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
+            <path d="M 8 -19 L 11 -16 L 8 -12 L 5 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
+            {/* shines */}
+            <path d="M -9 -17 L -7 -15" stroke="white" strokeWidth="0.8" />
+            <path d="M 7 -17 L 9 -15" stroke="white" strokeWidth="0.8" />
+            {/* sparkle around */}
+            <text x="-14" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
+            <text x="13" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
+          </g>
+        )}
+
+        {/* === NECK ITEMS === */}
+        {accessories.includes("leafnecklace") && (
+          <g filter="url(#watercolorSoft)">
+            {/* string */}
+            <path d="M -16 4 Q 0 12 16 4" stroke="#7a5a3a" strokeWidth="0.8" fill="none" />
+            {/* leaves */}
+            <ellipse cx="-12" cy="6" rx="2.5" ry="3.5" fill="#5caa5e" transform="rotate(-30 -12 6)" />
+            <ellipse cx="-4" cy="9" rx="2.5" ry="3.5" fill="#7ac87c" />
+            <ellipse cx="4" cy="9" rx="2.5" ry="3.5" fill="#5caa5e" />
+            <ellipse cx="12" cy="6" rx="2.5" ry="3.5" fill="#7ac87c" transform="rotate(30 12 6)" />
+            {/* center leaf - bigger */}
+            <ellipse cx="0" cy="11" rx="3" ry="4" fill="#3a7a3c" />
+            <path d="M 0 8 L 0 14" stroke="#1a4a1c" strokeWidth="0.4" />
+          </g>
+        )}
+        {accessories.includes("tie") && (
+          <g filter="url(#watercolorSoft)">
+            {/* knot */}
+            <path d="M -3 4 L 3 4 L 4 8 L -4 8 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
+            {/* tie body */}
+            <path d="M -4 8 L 4 8 L 6 22 L 0 28 L -6 22 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
+            {/* stripes */}
+            <path d="M -4 12 L 4 12 M -5 18 L 5 18" stroke="#7a2828" strokeWidth="0.6" />
+          </g>
+        )}
+        {accessories.includes("pearls") && (
+          <g filter="url(#watercolorSoft)">
+            {/* string */}
+            <path d="M -16 4 Q 0 14 16 4" stroke="#c0b8a8" strokeWidth="0.4" fill="none" />
+            {/* pearls */}
+            {[-14,-10,-6,-2,2,6,10,14].map((x, i) => (
+              <g key={i}>
+                <circle cx={x} cy={4 + Math.abs(x) * 0.3} r="2" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.3" />
+                <circle cx={x - 0.5} cy={3.5 + Math.abs(x) * 0.3} r="0.6" fill="white" opacity="0.8" />
+              </g>
+            ))}
+            {/* center pearl - bigger */}
+            <circle cx="0" cy="12" r="2.8" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+            <circle cx="-0.8" cy="11" r="0.9" fill="white" opacity="0.9" />
+          </g>
+        )}
+        {accessories.includes("medal") && (
+          <g filter="url(#watercolorSoft)">
+            {/* ribbon */}
+            <path d="M -8 -2 L -4 8 L 0 8 L -4 -2 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.4" />
+            <path d="M 8 -2 L 4 8 L 0 8 L 4 -2 Z" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
+            {/* medal disc */}
+            <circle cx="0" cy="14" r="6" fill="#edb830" stroke="#a87810" strokeWidth="0.8" />
+            {/* engraved star */}
+            <text x="0" y="16" fontSize="6" textAnchor="middle" fill="#a87810">★</text>
+            {/* shine */}
+            <path d="M -3 11 Q -2 9 0 9" stroke="white" strokeWidth="0.7" fill="none" opacity="0.7" />
+          </g>
+        )}
+        {accessories.includes("diamond") && (
+          <g filter="url(#watercolorSoft)">
+            {/* chain */}
+            <path d="M -14 4 Q 0 10 14 4" stroke="#c0c0c0" strokeWidth="0.5" fill="none" />
+            {/* pendant diamond */}
+            <path d="M 0 8 L 5 12 L 0 22 L -5 12 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.7" />
+            {/* facet lines */}
+            <path d="M -5 12 L 5 12 M 0 8 L 0 22" stroke="#4080a0" strokeWidth="0.4" opacity="0.6" />
+            {/* shine */}
+            <path d="M -3 11 L -1 13" stroke="white" strokeWidth="1.2" />
+            {/* sparkles */}
+            <text x="-8" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
+            <text x="6" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
+          </g>
+        )}
+        {accessories.includes("amulet") && (
+          <g filter="url(#watercolorSoft)">
+            {/* chain */}
+            <path d="M -14 4 Q 0 10 14 4" stroke="#a85ac0" strokeWidth="0.6" fill="none" />
+            {/* gem holder - circle frame */}
+            <circle cx="0" cy="14" r="6" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
+            {/* purple gem center */}
+            <circle cx="0" cy="14" r="3.5" fill="#a060c0" stroke="#5a30b8" strokeWidth="0.4" />
+            {/* magical glow */}
+            <circle cx="0" cy="14" r="1.5" fill="#e0a8ff" />
+            <circle cx="-1" cy="13" r="0.6" fill="white" opacity="0.9" />
+            {/* runes around frame */}
+            <text x="-5" y="9" fontSize="2.5" fill="#edb830">✦</text>
+            <text x="3" y="9" fontSize="2.5" fill="#edb830">✦</text>
+          </g>
+        )}
+
+        {/* === HOLD ITEMS === (right hand at ~28, 22) */}
+        {accessories.includes("book") && (
+          <g filter="url(#watercolorSoft)">
+            {/* book back cover */}
+            <rect x="22" y="14" width="14" height="16" fill="#5a3a2a" stroke="#3a1a1a" strokeWidth="0.6" />
+            {/* pages */}
+            <rect x="23" y="15" width="13" height="14" fill="#fffafa" stroke="#c0b8a8" strokeWidth="0.4" />
+            {/* page lines */}
+            <path d="M 25 18 L 34 18 M 25 21 L 34 21 M 25 24 L 34 24 M 25 27 L 32 27" stroke="#c0b8a8" strokeWidth="0.3" />
+            {/* spine details */}
+            <rect x="22" y="14" width="2" height="16" fill="#3a1a1a" />
+            <text x="23" y="22" fontSize="3" fill="#edb830">★</text>
+          </g>
+        )}
+        {accessories.includes("pencil") && (
+          <g filter="url(#watercolorSoft)">
+            {/* pencil body */}
+            <path d="M 22 26 L 36 12 L 38 14 L 24 28 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+            {/* tip */}
+            <path d="M 36 12 L 38 14 L 40 12 L 38 10 Z" fill="#3a2a1a" />
+            <path d="M 38 12 L 39 12.5" stroke="#1a1a1a" strokeWidth="1.2" />
+            {/* eraser */}
+            <path d="M 22 26 L 24 28 L 22 30 L 20 28 Z" fill="#ff8090" stroke="#aa4050" strokeWidth="0.4" />
+            {/* metal band */}
+            <path d="M 23 27 L 25 29" stroke="#888" strokeWidth="1.5" />
+            {/* shading */}
+            <path d="M 25 25 L 35 15" stroke="#a87810" strokeWidth="0.4" />
+          </g>
+        )}
+        {accessories.includes("leafhold") && (
+          <g filter="url(#watercolorSoft)">
+            {/* maple leaf */}
+            <path d="M 30 12 L 32 16 L 36 14 L 34 18 L 38 20 L 33 22 L 36 26 L 30 24 L 28 30 L 26 24 L 20 26 L 23 22 L 18 20 L 22 18 L 20 14 L 24 16 L 26 12 L 28 14 Z"
+              fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
+            {/* veins */}
+            <path d="M 28 16 L 28 26" stroke="#a82828" strokeWidth="0.4" />
+            <path d="M 28 18 L 32 16 M 28 20 L 34 22 M 28 18 L 24 16 M 28 20 L 22 22"
+              stroke="#a82828" strokeWidth="0.3" />
+            {/* stem */}
+            <path d="M 28 26 L 28 32" stroke="#5a3a1a" strokeWidth="1.5" />
+          </g>
+        )}
+        {accessories.includes("balloon") && (
+          <g filter="url(#watercolorSoft)">
+            {/* balloon */}
+            <ellipse cx="32" cy="6" rx="6" ry="7" fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
+            {/* knot */}
+            <path d="M 30 12 L 32 14 L 34 12 Z" fill="#a82828" />
+            {/* string going to hand */}
+            <path d="M 32 14 Q 30 18 28 22" stroke="#1a1a1a" strokeWidth="0.5" fill="none" />
+            {/* shine */}
+            <ellipse cx="29" cy="3" rx="1.5" ry="2.5" fill="white" opacity="0.6" />
+          </g>
+        )}
+        {accessories.includes("trophy") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base */}
+            <rect x="22" y="26" width="12" height="3" fill="#a87810" />
+            <rect x="24" y="22" width="8" height="4" fill="#c89018" />
+            {/* cup */}
+            <path d="M 22 22 Q 22 12 28 12 Q 34 12 34 22 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.6" />
+            {/* handles */}
+            <path d="M 22 16 Q 18 14 20 18 Q 22 18 22 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+            <path d="M 34 16 Q 38 14 36 18 Q 34 18 34 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
+            {/* shine */}
+            <path d="M 24 14 Q 26 12 28 14" stroke="white" strokeWidth="1" opacity="0.7" />
+            {/* star */}
+            <text x="28" y="20" fontSize="5" textAnchor="middle" fill="#a87810">★</text>
+          </g>
+        )}
+        {accessories.includes("lollipop") && (
+          <g filter="url(#watercolorSoft)">
+            {/* stick */}
+            <rect x="27" y="14" width="2" height="14" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
+            {/* candy circle */}
+            <circle cx="28" cy="10" r="6" fill="#ff5c87" stroke="#c83870" strokeWidth="0.6" />
+            {/* swirl */}
+            <path d="M 28 10 Q 30 8 32 10 Q 30 12 28 12 Q 26 10 28 8 Q 30 8 32 10"
+              fill="none" stroke="white" strokeWidth="0.8" />
+            <path d="M 24 10 Q 26 6 30 6" stroke="white" strokeWidth="0.6" fill="none" />
+            {/* shine */}
+            <ellipse cx="26" cy="7" rx="1.5" ry="2" fill="white" opacity="0.6" />
+          </g>
+        )}
+        {accessories.includes("cupcake") && (
+          <g filter="url(#watercolorSoft)">
+            {/* base wrapper */}
+            <path d="M 22 18 L 26 28 L 32 28 L 36 18 Z" fill="#c83870" stroke="#7a2050" strokeWidth="0.5" />
+            <path d="M 24 22 L 24 28 M 28 22 L 28 28 M 32 22 L 32 28" stroke="#7a2050" strokeWidth="0.4" />
+            {/* frosting swirl */}
+            <path d="M 22 18 Q 22 10 28 10 Q 34 10 34 18 Q 30 14 28 16 Q 26 14 22 18 Z"
+              fill="#fffafa" stroke="#c0a8b8" strokeWidth="0.5" />
+            {/* sprinkles */}
+            <rect x="25" y="13" width="0.8" height="2" fill="#ff5c87" transform="rotate(20 25 13)" />
+            <rect x="29" y="11" width="0.8" height="2" fill="#7ac87c" />
+            <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-20 32 14)" />
+            {/* cherry */}
+            <circle cx="28" cy="9" r="1.5" fill="#c94c4c" />
+          </g>
+        )}
+        {accessories.includes("donut") && (
+          <g filter="url(#watercolorSoft)">
+            {/* donut */}
+            <circle cx="28" cy="18" r="7" fill="#d8a060" stroke="#8a5028" strokeWidth="0.6" />
+            <circle cx="28" cy="18" r="2.5" fill={C.face} />
+            {/* pink frosting on top */}
+            <path d="M 21 18 Q 21 12 28 11 Q 35 12 35 18 Q 32 14 28 16 Q 24 14 21 18 Z"
+              fill="#ff9bb8" stroke="#c83870" strokeWidth="0.4" />
+            {/* sprinkles */}
+            <rect x="24" y="14" width="0.8" height="2" fill="#5caa5e" transform="rotate(15 24 14)" />
+            <rect x="28" y="12" width="0.8" height="2" fill="#edb830" />
+            <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-15 32 14)" />
+            <rect x="26" y="16" width="0.8" height="2" fill="#a060c0" transform="rotate(30 26 16)" />
+          </g>
+        )}
+        {accessories.includes("fishingrod") && (
+          <g filter="url(#watercolorSoft)">
+            {/* rod */}
+            <path d="M 22 26 L 40 -8" stroke="#5a3a1a" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M 22 26 L 40 -8" stroke="#8b6342" strokeWidth="0.8" strokeLinecap="round" />
+            {/* reel */}
+            <circle cx="24" cy="22" r="2" fill="#888" stroke="#444" strokeWidth="0.4" />
+            {/* line */}
+            <path d="M 40 -8 Q 42 4 38 16" stroke="#fff" strokeWidth="0.4" fill="none" opacity="0.8" />
+            {/* hook + fish */}
+            <path d="M 38 16 Q 40 18 38 19" stroke="#666" strokeWidth="0.5" fill="none" />
+            <ellipse cx="40" cy="22" rx="3" ry="1.8" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
+            <path d="M 43 22 L 45 20 L 45 24 Z" fill="#5a8fc7" />
+          </g>
+        )}
+        {accessories.includes("paintbrush") && (
+          <g filter="url(#watercolorSoft)">
+            {/* handle */}
+            <path d="M 22 26 L 36 12" stroke="#5a3a1a" strokeWidth="2" strokeLinecap="round" />
+            {/* metal ferrule */}
+            <path d="M 35 11 L 39 15" stroke="#888" strokeWidth="2.5" />
+            {/* bristles */}
+            <path d="M 38 8 L 42 12 L 39 16 L 35 12 Z" fill="#c0a080" stroke="#7a5a3a" strokeWidth="0.4" />
+            <path d="M 38 8 L 42 12" stroke="#5a3a1a" strokeWidth="0.4" />
+            {/* paint drip */}
+            <ellipse cx="42" cy="14" rx="2" ry="3" fill="#c94c4c" opacity="0.85" />
+            <ellipse cx="42" cy="18" rx="0.8" ry="1.5" fill="#c94c4c" opacity="0.7" />
+          </g>
+        )}
+        {accessories.includes("flute") && (
+          <g filter="url(#watercolorSoft)">
+            {/* flute */}
+            <rect x="22" y="22" width="22" height="3" fill="#c0b090" stroke="#5a4a2a" strokeWidth="0.4" rx="1.5" />
+            {/* metal bands */}
+            <rect x="26" y="22" width="0.6" height="3" fill="#5a4a2a" />
+            <rect x="32" y="22" width="0.6" height="3" fill="#5a4a2a" />
+            <rect x="38" y="22" width="0.6" height="3" fill="#5a4a2a" />
+            {/* finger holes */}
+            <circle cx="29" cy="23.5" r="0.5" fill="#3a2a0a" />
+            <circle cx="35" cy="23.5" r="0.5" fill="#3a2a0a" />
+            {/* music notes floating */}
+            <text x="40" y="14" fontSize="6" fill={C.text}>♪</text>
+            <text x="34" y="10" fontSize="5" fill={C.textLight}>♫</text>
+          </g>
+        )}
+        {accessories.includes("violin") && (
+          <g filter="url(#watercolorSoft)">
+            {/* body */}
+            <path d="M 22 26 Q 18 22 22 18 Q 26 14 30 18 Q 34 14 38 18 Q 42 22 38 26 Q 34 30 30 26 Q 26 30 22 26 Z"
+              fill="#a85a2a" stroke="#5a2a0a" strokeWidth="0.7" />
+            {/* center waist */}
+            <path d="M 26 22 L 34 22" stroke="#5a2a0a" strokeWidth="0.5" />
+            {/* neck */}
+            <rect x="23" y="8" width="2" height="12" fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.3" transform="rotate(20 24 14)" />
+            {/* strings */}
+            <path d="M 22 26 L 27 8" stroke="#fff" strokeWidth="0.3" />
+            <path d="M 24 26 L 29 8" stroke="#fff" strokeWidth="0.3" />
+            <path d="M 26 26 L 31 8" stroke="#fff" strokeWidth="0.3" />
+            {/* f-holes */}
+            <path d="M 27 20 Q 28 22 27 24 M 33 20 Q 32 22 33 24" stroke="#3a1a0a" strokeWidth="0.5" fill="none" />
+          </g>
+        )}
+        {accessories.includes("telescope") && (
+          <g filter="url(#watercolorSoft)">
+            {/* tube */}
+            <rect x="20" y="14" width="20" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" rx="1" transform="rotate(-20 30 16.5)" />
+            {/* far end (bigger) */}
+            <ellipse cx="42" cy="9" rx="3" ry="4" fill="#3a1a5a" stroke="#1a0a3a" strokeWidth="0.5" />
+            {/* near end (smaller) */}
+            <ellipse cx="20" cy="22" rx="2.5" ry="3" fill="#1a0a3a" stroke="#000" strokeWidth="0.4" />
+            {/* gold rings */}
+            <rect x="26" y="14" width="0.8" height="5" fill="#edb830" transform="rotate(-20 26 16.5)" />
+            <rect x="34" y="11" width="0.8" height="5" fill="#edb830" transform="rotate(-20 34 13.5)" />
+            {/* star at end */}
+            <text x="48" y="6" fontSize="3" fill="#edb830">✦</text>
+          </g>
+        )}
+        {accessories.includes("potion") && (
+          <g filter="url(#watercolorSoft)">
+            {/* bottle body */}
+            <path d="M 24 14 L 24 18 Q 22 22 24 26 L 32 26 Q 34 22 32 18 L 32 14 Z"
+              fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" opacity="0.85" />
+            {/* neck */}
+            <rect x="26" y="10" width="4" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" />
+            {/* cork */}
+            <rect x="25" y="8" width="6" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" />
+            {/* bubble inside */}
+            <circle cx="27" cy="20" r="1" fill="white" opacity="0.6" />
+            <circle cx="29" cy="22" r="1.3" fill="white" opacity="0.5" />
+            {/* shine */}
+            <path d="M 25 17 Q 25 21 26 23" stroke="white" strokeWidth="0.5" fill="none" opacity="0.7" />
+            {/* sparkles */}
+            <text x="34" y="14" fontSize="3" fill="#a060c0">✦</text>
+          </g>
+        )}
+        {accessories.includes("sword") && (
+          <g filter="url(#watercolorSoft)">
+            {/* blade */}
+            <path d="M 24 26 L 42 4 L 40 2 L 22 24 Z" fill="#d0d8e0" stroke="#5a6878" strokeWidth="0.5" />
+            {/* center groove */}
+            <path d="M 23 25 L 41 3" stroke="#888" strokeWidth="0.4" />
+            {/* shine */}
+            <path d="M 35 9 L 39 5" stroke="white" strokeWidth="1.2" opacity="0.7" />
+            {/* crossguard */}
+            <rect x="20" y="22" width="8" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" transform="rotate(45 24 23.5)" />
+            {/* handle */}
+            <rect x="20" y="26" width="3" height="6" fill="#5a3a1a" stroke="#3a1a0a" strokeWidth="0.4" />
+            {/* pommel */}
+            <circle cx="21.5" cy="33" r="1.5" fill="#edb830" stroke="#a87810" strokeWidth="0.4" />
+          </g>
+        )}
+        {accessories.includes("shield") && (
+          <g filter="url(#watercolorSoft)">
+            {/* shield shape */}
+            <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
+              fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.8" />
+            {/* metal rim */}
+            <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
+              fill="none" stroke="#888" strokeWidth="0.6" />
+            {/* cross emblem */}
+            <rect x="29" y="15" width="2.5" height="14" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+            <rect x="24" y="20" width="13" height="2.5" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
+            {/* shine */}
+            <path d="M 26 14 Q 24 18 24 22" stroke="white" strokeWidth="0.8" fill="none" opacity="0.6" />
+          </g>
+        )}
+        {accessories.includes("phone") && (
+          <g filter="url(#watercolorSoft)">
+            {/* phone body */}
+            <rect x="23" y="10" width="10" height="18" rx="2" fill="#1a1a2a" stroke="#000" strokeWidth="0.5" />
+            {/* screen */}
+            <rect x="24.5" y="12" width="7" height="13" fill="#5a8fc7" />
+            {/* gradient app blocks */}
+            <rect x="25" y="13" width="2" height="2" fill="#edb830" rx="0.4" />
+            <rect x="28" y="13" width="2" height="2" fill="#5caa5e" rx="0.4" />
+            <rect x="25" y="16" width="2" height="2" fill="#c94c4c" rx="0.4" />
+            <rect x="28" y="16" width="2" height="2" fill="#a060c0" rx="0.4" />
+            {/* home button */}
+            <circle cx="28" cy="26.5" r="0.8" fill="#3a3a4a" stroke="#888" strokeWidth="0.3" />
+            {/* shine */}
+            <path d="M 24.5 12 L 26 14" stroke="white" strokeWidth="0.5" opacity="0.4" />
+          </g>
+        )}
+        {accessories.includes("camera") && (
+          <g filter="url(#watercolorSoft)">
+            {/* body */}
+            <rect x="20" y="14" width="18" height="12" rx="2" fill="#2a2a3a" stroke="#000" strokeWidth="0.5" />
+            {/* top viewfinder bump */}
+            <rect x="26" y="11" width="6" height="3" fill="#1a1a2a" />
+            {/* lens */}
+            <circle cx="29" cy="20" r="4.5" fill="#1a1a2a" stroke="#444" strokeWidth="0.6" />
+            <circle cx="29" cy="20" r="3" fill="#5a8fc7" stroke="#222" strokeWidth="0.4" />
+            <circle cx="29" cy="20" r="1.5" fill="#1a1a2a" />
+            {/* shine on lens */}
+            <circle cx="27.5" cy="18.5" r="0.8" fill="white" opacity="0.7" />
+            {/* flash */}
+            <rect x="22" y="15" width="2" height="2" fill="#edb830" />
+            {/* shutter button */}
+            <circle cx="36" cy="13" r="0.8" fill="#c94c4c" />
+          </g>
+        )}
+
+        {/* === BACK ITEMS === (anchored on back, behind monkey approximately) */}
+        {accessories.includes("leafback") && (
+          <g filter="url(#watercolorSoft)">
+            {/* leaves bundled */}
+            <ellipse cx="-22" cy="6" rx="5" ry="8" fill="#5caa5e" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-30 -22 6)" />
+            <ellipse cx="-26" cy="10" rx="5" ry="8" fill="#7ac87c" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-50 -26 10)" />
+            <ellipse cx="-20" cy="14" rx="5" ry="8" fill="#3a7a3c" stroke="#1a4a1c" strokeWidth="0.5" transform="rotate(-10 -20 14)" />
+            {/* veins */}
+            <path d="M -22 0 L -22 12" stroke="#1a4a1c" strokeWidth="0.4" transform="rotate(-30 -22 6)" />
+          </g>
+        )}
+        {accessories.includes("jetpack") && (
+          <g filter="url(#watercolorSoft)">
+            {/* tank */}
+            <rect x="-30" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
+            {/* second tank */}
+            <rect x="-20" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
+            {/* connector */}
+            <rect x="-24" y="6" width="4" height="3" fill="#444" />
+            {/* nozzles */}
+            <rect x="-29" y="18" width="4" height="2" fill="#444" />
+            <rect x="-19" y="18" width="4" height="2" fill="#444" />
+            {/* flames */}
+            <path d="M -27 20 Q -28 26 -25 24 Q -23 28 -22 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
+            <path d="M -17 20 Q -18 26 -15 24 Q -13 28 -12 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
+            <path d="M -25 22 Q -23 26 -22 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
+            <path d="M -15 22 Q -13 26 -12 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
+          </g>
+        )}
+        {accessories.includes("angelwings") && (
+          <g filter="url(#watercolorSoft)">
+            {/* left wing */}
+            <path d="M -16 0 Q -32 -10 -36 6 Q -32 18 -22 14 Q -18 8 -16 0 Z"
+              fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
+            {/* feather lines */}
+            <path d="M -32 -4 Q -28 4 -22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            <path d="M -32 4 Q -28 8 -22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            <path d="M -30 10 Q -26 12 -22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            {/* right wing */}
+            <path d="M 16 0 Q 32 -10 36 6 Q 32 18 22 14 Q 18 8 16 0 Z"
+              fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
+            <path d="M 32 -4 Q 28 4 22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            <path d="M 32 4 Q 28 8 22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            <path d="M 30 10 Q 26 12 22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
+            {/* glow shimmer */}
+            <ellipse cx="-26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
+            <ellipse cx="26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
+          </g>
+        )}
+        {accessories.includes("demonwings") && (
+          <g filter="url(#watercolorSoft)">
+            {/* left bat wing */}
+            <path d="M -16 0 Q -34 -8 -38 6 L -34 6 L -36 12 L -30 10 L -32 16 L -26 12 L -22 14 Q -18 8 -16 0 Z"
+              fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
+            {/* membrane lines */}
+            <path d="M -16 0 Q -22 4 -26 12 M -16 0 Q -28 4 -32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
+            {/* right bat wing */}
+            <path d="M 16 0 Q 34 -8 38 6 L 34 6 L 36 12 L 30 10 L 32 16 L 26 12 L 22 14 Q 18 8 16 0 Z"
+              fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
+            <path d="M 16 0 Q 22 4 26 12 M 16 0 Q 28 4 32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
+          </g>
+        )}
+        {accessories.includes("rainbowcape") && (
+          <g filter="url(#watercolorSoft)">
+            {/* rainbow stripes */}
+            <path d="M -20 0 Q -34 12 -34 30 L -28 28 Q -28 14 -16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
+            <path d="M -16 4 Q -28 14 -28 28 L -22 26 Q -22 16 -12 8 Z" fill="#ff8030" />
+            <path d="M -12 8 Q -22 16 -22 26 L -16 24 Q -16 18 -8 12 Z" fill="#edb830" />
+            <path d="M -8 12 Q -16 18 -16 24 L -10 22 Q -10 18 -4 14 Z" fill="#5caa5e" />
+            <path d="M -4 14 Q -10 18 -10 22 L -2 18 Z" fill="#5a8fc7" />
+            {/* right side mirror */}
+            <path d="M 20 0 Q 34 12 34 30 L 28 28 Q 28 14 16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
+            <path d="M 16 4 Q 28 14 28 28 L 22 26 Q 22 16 12 8 Z" fill="#ff8030" />
+            <path d="M 12 8 Q 22 16 22 26 L 16 24 Q 16 18 8 12 Z" fill="#edb830" />
+            <path d="M 8 12 Q 16 18 16 24 L 10 22 Q 10 18 4 14 Z" fill="#5caa5e" />
+            <path d="M 4 14 Q 10 18 10 22 L 2 18 Z" fill="#5a8fc7" />
+          </g>
+        )}
+        {accessories.includes("dragoncape") && (
+          <g filter="url(#watercolorSoft)">
+            {/* left dragon wing - membranous */}
+            <path d="M -14 -2 Q -36 -4 -40 12 L -36 14 L -38 20 L -32 18 L -34 24 L -28 22 Q -22 16 -14 -2 Z"
+              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
+            {/* wing bones */}
+            <path d="M -14 -2 Q -28 4 -38 14 M -14 -2 Q -24 6 -34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
+            {/* spikes on top edge */}
+            <path d="M -28 0 L -26 -4 L -24 0 Z M -34 4 L -32 0 L -30 4 Z" fill="#3a1a5a" />
+            {/* right wing */}
+            <path d="M 14 -2 Q 36 -4 40 12 L 36 14 L 38 20 L 32 18 L 34 24 L 28 22 Q 22 16 14 -2 Z"
+              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
+            <path d="M 14 -2 Q 28 4 38 14 M 14 -2 Q 24 6 34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
+            <path d="M 28 0 L 26 -4 L 24 0 Z M 34 4 L 32 0 L 30 4 Z" fill="#3a1a5a" />
+            {/* glow */}
+            <ellipse cx="-30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
+            <ellipse cx="30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
+          </g>
+        )}
+        {accessories.includes("bowarrow") && (
+          <g filter="url(#watercolorSoft)">
+            {/* bow arc on the back */}
+            <path d="M -32 -4 Q -38 12 -32 28" stroke="#8b6342" strokeWidth="2.5" fill="none" />
+            {/* string */}
+            <path d="M -32 -4 L -32 28" stroke="#fff" strokeWidth="0.4" />
+            {/* arrow */}
+            <path d="M -34 12 L -22 12" stroke="#5a3a1a" strokeWidth="1.2" />
+            {/* arrowhead */}
+            <path d="M -22 12 L -18 9 L -18 15 Z" fill="#888" stroke="#444" strokeWidth="0.4" />
+            {/* fletching */}
+            <path d="M -34 12 L -36 9 L -36 15 Z" fill="#c94c4c" />
+            {/* bow tips */}
+            <circle cx="-32" cy="-4" r="1" fill="#5a3a1a" />
+            <circle cx="-32" cy="28" r="1" fill="#5a3a1a" />
+          </g>
+        )}
+
         {/* Arms */}
         <ellipse cx="-28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
         <ellipse cx="28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
@@ -1857,11 +3971,13 @@ function SpeechBubble({ text }) {
 function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused, message }) {
   const [pos, setPos] = useState({ x: startX, y: startY });
   const [waddle, setWaddle] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = right, -1 = left
+  const [direction, setDirection] = useState(variant % 2 === 0 ? 1 : -1); // 1 = right, -1 = left
   const frameRef = useRef(0);
   const pausedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
-  const stateRef = useRef({ x: startX, y: startY, dir: 1, t: variant * 100 });
+  // baseY is the current "lane" — changes when the penguin wraps off-screen so they
+  // don't always traverse on the same horizontal line (more natural variation)
+  const stateRef = useRef({ x: startX, y: startY, baseY: startY, dir: variant % 2 === 0 ? 1 : -1, t: variant * 100 });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
@@ -1876,13 +3992,19 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
         s.t += dt;
         // Move horizontally
         s.x += s.dir * speed * 12 * dt;
-        // Bounce off horizontal edges (in % units)
-        if (s.x > 95) { s.dir = -1; setDirection(-1); }
-        else if (s.x < 2) { s.dir = 1; setDirection(1); }
-        // Slight random direction change occasionally
-        if (Math.random() < 0.002) { s.dir = -s.dir; setDirection(s.dir); }
-        // Slight vertical drift
-        const newY = startY + Math.sin(s.t * 0.4 + variant) * 1.5;
+        // Wrap around the screen — fly fully off-screen, then re-enter from the opposite side.
+        // Pick a fresh vertical "lane" each time they wrap so flights look varied, not on rails.
+        if (s.x > 112) {
+          s.x = -12;
+          s.baseY = 8 + Math.random() * 18; // 8-26% from top (sky/upper area)
+        } else if (s.x < -12) {
+          s.x = 112;
+          s.baseY = 8 + Math.random() * 18;
+        }
+        // Occasional random direction reversal (mid-flight) so they're not too predictable
+        if (Math.random() < 0.001) { s.dir = -s.dir; setDirection(s.dir); }
+        // Slight vertical drift around the current lane
+        const newY = s.baseY + Math.sin(s.t * 0.4 + variant) * 1.5;
         setPos({ x: s.x, y: newY });
         // Waddle (side-to-side wobble)
         setWaddle(Math.sin(s.t * 6) * 6);
@@ -1893,9 +4015,12 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
     return () => { running = false; cancelAnimationFrame(frameRef.current); };
   }, [startY, speed, variant]);
 
+  // Hide bubble while off-screen (would float in the void otherwise)
+  const onScreen = pos.x > -2 && pos.x < 102;
+
   return (
     <>
-      {message && (
+      {message && onScreen && (
         <div style={{
           position: "absolute",
           left: `${pos.x}%`,
@@ -1959,11 +4084,12 @@ const DRAGON_PALETTES = [
 function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused, message }) {
   const [pos, setPos] = useState({ x: startX, y: startY });
   const [flap, setFlap] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [direction, setDirection] = useState(variant % 2 === 0 ? 1 : -1);
   const frameRef = useRef(0);
   const pausedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
-  const stateRef = useRef({ x: startX, y: startY, dir: 1, t: variant * 100 });
+  // baseY changes when the dragon wraps off-screen (fresh "altitude" each pass)
+  const stateRef = useRef({ x: startX, y: startY, baseY: startY, dir: variant % 2 === 0 ? 1 : -1, t: variant * 100 });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
@@ -1977,11 +4103,19 @@ function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused,
         const s = stateRef.current;
         s.t += dt;
         s.x += s.dir * speed * 14 * dt; // slightly faster than penguins
-        if (s.x > 95) { s.dir = -1; setDirection(-1); }
-        else if (s.x < 2) { s.dir = 1; setDirection(1); }
-        if (Math.random() < 0.002) { s.dir = -s.dir; setDirection(s.dir); }
-        // Float-like vertical drift (more wavy than penguin waddle)
-        const newY = startY + Math.sin(s.t * 0.6 + variant) * 2.5;
+        // Wrap around the screen — fly fully off-screen, then re-enter from the other side
+        // with a new vertical lane so each pass looks different
+        if (s.x > 112) {
+          s.x = -12;
+          s.baseY = 6 + Math.random() * 22; // 6-28% from top
+        } else if (s.x < -12) {
+          s.x = 112;
+          s.baseY = 6 + Math.random() * 22;
+        }
+        // Occasional mid-flight reversal for variety
+        if (Math.random() < 0.001) { s.dir = -s.dir; setDirection(s.dir); }
+        // Float-like vertical drift around the current lane
+        const newY = s.baseY + Math.sin(s.t * 0.6 + variant) * 2.5;
         setPos({ x: s.x, y: newY });
         // Wing flap
         setFlap(Math.sin(s.t * 7) * 1);
@@ -1995,10 +4129,11 @@ function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused,
   const palette = DRAGON_PALETTES[variant % DRAGON_PALETTES.length];
   // Wing rotation based on flap
   const wingRot = flap * 25;
+  const onScreen = pos.x > -2 && pos.x < 102;
 
   return (
     <>
-      {message && (
+      {message && onScreen && (
         <div style={{
           position: "absolute",
           left: `${pos.x}%`,
@@ -2737,7 +4872,7 @@ function FoodReward({ onComplete }) {
 }
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
-function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
+function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
@@ -2748,6 +4883,8 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
   const [monkeyHappy, setMonkeyHappy] = useState(false);
   const [finished, setFinished] = useState(false);
   const [rewarded, setRewarded] = useState(false);
+  // Track which questions were answered wrong, with the chosen answer
+  const [wrongAnswers, setWrongAnswers] = useState([]);
 
   const questions = quiz?.questions || [];
   const totalReward = quiz?.points || 1;
@@ -2782,6 +4919,15 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
       setMonkeyShake(true);
       setShowHawk(true);
       setTimeout(() => setMonkeyShake(false), 4200);
+      // Record this wrong answer for the summary
+      setWrongAnswers(w => [...w, {
+        questionIdx: currentIdx,
+        question: currentQ.q,
+        chosen: idx,
+        chosenText: currentQ.options[idx],
+        correct: currentQ.correct,
+        correctText: currentQ.options[currentQ.correct],
+      }]);
     }
   };
 
@@ -2809,18 +4955,69 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete }) {
     const earned = Math.round(totalReward * (score / questions.length));
     return (
       <div style={modalBackdropStyle} onClick={onClose}>
-        <div style={{ ...modalCardStyle, textAlign: "center", width: 460 }} onClick={e => e.stopPropagation()}>
-          <h2 style={{ color: C.text, margin: "0 0 8px", fontSize: 28 }}>🎉 Quiz Complete!</h2>
-          <p style={{ color: C.textLight, fontSize: 18, margin: "0 0 20px" }}>{studentName}, you finished {quiz?.name}!</p>
-          <div style={{ fontSize: 64, color: C.gold, fontWeight: 700, marginBottom: 8 }}>{score} / {questions.length}</div>
-          <div style={{ fontSize: 22, color: pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent, fontWeight: 700, marginBottom: 16 }}>
-            {pct >= 80 ? "Amazing!" : pct >= 50 ? "Good job!" : "Keep practicing!"}
+        <div style={{ ...modalCardStyle, textAlign: "center", width: 540, maxHeight: "92vh", overflow: "auto", padding: "24px 28px" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 4px", fontSize: 28 }}>🎉 Quiz Complete!</h2>
+          <p style={{ color: C.textLight, fontSize: 16, margin: "0 0 14px" }}>{studentName} · {quiz?.name}</p>
+
+          {/* Score row */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ background: `${C.gold}15`, borderRadius: 12, padding: "10px 16px", minWidth: 100 }}>
+              <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: 0.5 }}>Score</div>
+              <div style={{ fontSize: 22, color: C.gold, fontWeight: 700 }}>{score} / {questions.length}</div>
+            </div>
+            <div style={{ background: `${pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent}15`, borderRadius: 12, padding: "10px 16px", minWidth: 100 }}>
+              <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: 0.5 }}>Accuracy</div>
+              <div style={{ fontSize: 22, color: pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent, fontWeight: 700 }}>{pct}%</div>
+            </div>
+            <div style={{ background: `${C.accent}15`, borderRadius: 12, padding: "10px 16px", minWidth: 100 }}>
+              <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: 0.5 }}>Earned</div>
+              <div style={{ fontSize: 22, color: C.accent, fontWeight: 700 }}>+{earned} ★</div>
+            </div>
           </div>
-          <div style={{ background: `${C.gold}20`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, display: "inline-block" }}>
-            <div style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{earned} ★</strong></div>
-            <div style={{ fontSize: 12, color: C.textLight }}>(out of {totalReward} possible)</div>
+
+          <div style={{ fontSize: 18, color: pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent, fontWeight: 700, marginBottom: 14 }}>
+            {pct === 100 ? "Perfect score! 🌟" : pct >= 80 ? "Amazing!" : pct >= 50 ? "Good job!" : "Keep practicing!"}
           </div>
-          <button onClick={onClose} style={{ ...primaryBtnStyle, marginTop: 4 }}>Back to the Hot Spring</button>
+
+          {/* Wrong answers review */}
+          {wrongAnswers.length > 0 && (
+            <div style={{ textAlign: "left", marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, color: C.text, margin: "0 0 8px" }}>📝 Review ({wrongAnswers.length} wrong)</h3>
+              <div style={{ maxHeight: 220, overflow: "auto", padding: "0 4px" }}>
+                {wrongAnswers.map((w, i) => (
+                  <div key={i} style={{
+                    background: `${C.accent}10`, border: `1px solid ${C.accent}30`,
+                    borderRadius: 10, padding: "10px 12px", marginBottom: 8,
+                  }}>
+                    <div style={{ fontSize: 13, color: C.textLight, marginBottom: 4 }}>Q{w.questionIdx + 1}</div>
+                    <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>{w.question}</div>
+                    <div style={{ fontSize: 13, color: C.accentDark, marginBottom: 2 }}>
+                      ❌ You chose: <strong>{w.chosenText}</strong>
+                    </div>
+                    <div style={{ fontSize: 13, color: C.green }}>
+                      ✅ Correct: <strong>{w.correctText}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {wrongAnswers.length === 0 && pct === 100 && (
+            <div style={{ background: `${C.green}15`, padding: "12px", borderRadius: 12, marginBottom: 16, color: C.green, fontWeight: 700 }}>
+              🌟 You aced every question!
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            {earned > 0 && onShop && (
+              <button onClick={() => { onShop(); onClose(); }}
+                style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)` }}>
+                🍱 Buy Pet Food
+              </button>
+            )}
+            <button onClick={onClose} style={primaryBtnStyle}>Back to Hot Spring</button>
+          </div>
         </div>
       </div>
     );
@@ -3290,7 +5487,7 @@ function drawObstacle(ctx, x, y, obs, frame) {
   ctx.restore();
 }
 
-function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete }) {
+function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const stateRef = useRef({
@@ -3329,6 +5526,8 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete }
   // Refs that always have the latest values for use inside game-loop callbacks
   const questionsAnsweredRef = useRef(initial.questionsAnswered || 0);
   const scoreRef = useRef(initial.score || 0);
+  // Track wrong checkpoint answers for the post-mission summary
+  const [wrongAnswers, setWrongAnswers] = useState([]);
 
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
@@ -3590,6 +5789,17 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete }
     if (isCorrect) SFX.correct();
     else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
+    if (!isCorrect) {
+      const q = questions[questionIdx];
+      setWrongAnswers(w => [...w, {
+        questionIdx,
+        question: q.q,
+        chosen: idx,
+        chosenText: q.options[idx],
+        correct: q.correct,
+        correctText: q.options[q.correct],
+      }]);
+    }
     setTimeout(() => {
       if (isCorrect) {
         setQuestionsAnswered(q => {
@@ -3739,28 +5949,69 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete }
             <div style={{
               position: "absolute", inset: 0, display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center",
-              background: won ? "rgba(255,250,200,0.92)" : "rgba(255,200,200,0.85)",
-              backdropFilter: "blur(2px)",
+              background: won ? "rgba(255,250,200,0.96)" : "rgba(255,200,200,0.92)",
+              backdropFilter: "blur(2px)", padding: "12px 16px", overflow: "auto",
             }}>
-              <div style={{ fontSize: 56, marginBottom: 8 }}>{won ? "🎉" : "💔"}</div>
-              <div style={{ fontSize: 24, color: C.text, fontWeight: 700, marginBottom: 6 }}>
+              <div style={{ fontSize: 48, marginBottom: 4 }}>{won ? "🎉" : "💔"}</div>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, marginBottom: 8 }}>
                 {won ? "Mission Complete!" : "Game Over"}
               </div>
               {won ? (
-                <div style={{ background: `${C.gold}30`, padding: "8px 16px", borderRadius: 12, marginBottom: 12 }}>
-                  <span style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{totalReward} ★</strong></span>
-                </div>
+                <>
+                  {/* Stats row */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <div style={{ background: `${C.gold}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>EARNED</div>
+                      <div style={{ fontSize: 18, color: C.gold, fontWeight: 700 }}>+{totalReward} ★</div>
+                    </div>
+                    <div style={{ background: `${C.green}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>ACCURACY</div>
+                      <div style={{ fontSize: 18, color: C.green, fontWeight: 700 }}>
+                        {targetQuestions > 0 ? Math.round(((targetQuestions - wrongAnswers.length) / targetQuestions) * 100) : 100}%
+                      </div>
+                    </div>
+                    <div style={{ background: `${C.accent}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>FRUITS</div>
+                      <div style={{ fontSize: 18, color: C.accent, fontWeight: 700 }}>{score}</div>
+                    </div>
+                  </div>
+                  {/* Wrong answers review */}
+                  {wrongAnswers.length > 0 && (
+                    <div style={{ width: "100%", maxWidth: 460, textAlign: "left", marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>📝 Review ({wrongAnswers.length} missed)</div>
+                      <div style={{ maxHeight: 120, overflow: "auto" }}>
+                        {wrongAnswers.map((w, i) => (
+                          <div key={i} style={{ background: `${C.accent}10`, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: "6px 10px", marginBottom: 4, fontSize: 12 }}>
+                            <div style={{ color: C.text, fontWeight: 600 }}>{w.question}</div>
+                            <div style={{ color: C.accentDark }}>❌ {w.chosenText}</div>
+                            <div style={{ color: C.green }}>✅ {w.correctText}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {wrongAnswers.length === 0 && (
+                    <div style={{ background: `${C.green}20`, padding: "6px 14px", borderRadius: 10, marginBottom: 8, fontSize: 13, color: C.green, fontWeight: 700 }}>
+                      🌟 Perfect! No wrong answers!
+                    </div>
+                  )}
+                </>
               ) : (
-                <div style={{ fontSize: 14, color: C.textLight, marginBottom: 12 }}>
+                <div style={{ fontSize: 14, color: C.textLight, marginBottom: 8, textAlign: "center" }}>
                   You answered {questionsAnsweredRef.current} of {targetQuestions} checkpoints.
                   <div style={{ fontSize: 13, color: C.green, marginTop: 4 }}>
                     💾 Your progress is saved! Come back anytime to continue.
                   </div>
                 </div>
               )}
-              <div style={{ display: "flex", gap: 8 }}>
-                {!won && <button onClick={restart} style={primaryBtnStyle}>🔄 Try Again</button>}
-                <button onClick={onClose} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)` }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                {!won && <button onClick={restart} style={{ ...primaryBtnStyle, padding: "8px 16px", fontSize: 14 }}>🔄 Try Again</button>}
+                {won && onShop && (
+                  <button onClick={() => { onShop(); onClose(); }} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)`, padding: "8px 16px", fontSize: 14 }}>
+                    🍱 Buy Pet Food
+                  </button>
+                )}
+                <button onClick={onClose} style={{ ...primaryBtnStyle, padding: "8px 16px", fontSize: 14 }}>
                   Back to Hot Spring
                 </button>
               </div>
@@ -3837,6 +6088,686 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete }
   );
 }
 
+/* ─── FLAPPY MISSION ─── Flappy-bird style, monkey navigates through icicles. Every few
+   icicles passed = checkpoint question. Answer wrong = lose a life. */
+function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const initial = savedProgress || {};
+
+  const stateRef = useRef({
+    monkeyY: 0, // px from canvas top
+    velY: 0,
+    pipes: [], // {x, gapY, gapH, scored}
+    speed: 3,
+    distance: 0,
+    pipesPassed: (savedProgress?.questionsAnswered || 0) * 4,
+    cloudOffset: 0,
+    iceShelfOffset: 0,
+    nextSpawnIn: 80,
+    frame: 0,
+    paused: false,
+    hurt: 0,
+    flapAnim: 0,
+  });
+
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [questionsAnswered, setQuestionsAnswered] = useState(initial.questionsAnswered || 0);
+  const [selectedAns, setSelectedAns] = useState(null);
+  const [questionResult, setQuestionResult] = useState(null);
+  const [lives, setLives] = useState(3);
+  const [score, setScore] = useState(initial.score || 0);
+  const [gameOver, setGameOver] = useState(false);
+  const [won, setWon] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+  const rewardedRef = useRef(false);
+  const [size, setSize] = useState({ w: 600, h: 360 });
+  const isResuming = !!savedProgress && (savedProgress.questionsAnswered > 0 || savedProgress.score > 0);
+  const questionsAnsweredRef = useRef(initial.questionsAnswered || 0);
+  const scoreRef = useRef(initial.score || 0);
+  const [wrongAnswers, setWrongAnswers] = useState([]);
+
+  const questions = mission?.questions || [];
+  const totalReward = mission?.points || 5;
+  const targetQuestions = questions.length;
+  const pipesPerCheckpoint = 4;
+
+  // Responsive canvas size
+  useEffect(() => {
+    const updateSize = () => {
+      const containerW = Math.min(window.innerWidth - 40, 720);
+      const w = Math.max(320, containerW);
+      const h = Math.round(w * 0.6); // taller than runner for vertical play
+      setSize({ w, h });
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  // Initialize monkey Y position once size is known
+  useEffect(() => {
+    stateRef.current.monkeyY = size.h * 0.4;
+  }, [size.h]);
+
+  // Game loop
+  useEffect(() => {
+    if (!started || gameOver || showQuestion) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf;
+    let lastTime = performance.now();
+
+    const monkeySize = Math.min(56, size.h * 0.22);
+    const monkeyX = size.w * 0.22;
+    const gravity = 0.45;
+    const flapV = -7.5;
+    const maxVy = 9;
+
+    const loop = (now) => {
+      const dt = Math.min(50, now - lastTime);
+      lastTime = now;
+      const s = stateRef.current;
+      s.frame++;
+
+      // Physics
+      s.velY = Math.min(maxVy, s.velY + gravity);
+      s.monkeyY += s.velY;
+      if (s.flapAnim > 0) s.flapAnim--;
+
+      // Boundaries
+      const groundY = size.h - 24;
+      const ceilingY = 12;
+      let outOfBounds = false;
+      if (s.monkeyY > groundY - monkeySize / 2) {
+        s.monkeyY = groundY - monkeySize / 2;
+        outOfBounds = true;
+      }
+      if (s.monkeyY < ceilingY + monkeySize / 2) {
+        s.monkeyY = ceilingY + monkeySize / 2;
+        s.velY = Math.max(s.velY, 0);
+      }
+
+      // Move world
+      s.distance += s.speed;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.15) % size.w;
+      s.iceShelfOffset = (s.iceShelfOffset + s.speed) % 40;
+
+      // Move pipes
+      s.pipes = s.pipes.map(p => ({ ...p, x: p.x - s.speed }));
+
+      // Check passed pipes
+      s.pipes.forEach(p => {
+        if (!p.scored && p.x + p.w < monkeyX - monkeySize / 2) {
+          p.scored = true;
+          s.pipesPassed++;
+          SFX.collect();
+          scoreRef.current += 1;
+          setScore(sc => sc + 1);
+          if (s.pipesPassed % pipesPerCheckpoint === 0) {
+            s.paused = true;
+          }
+        }
+      });
+
+      // Remove off-screen pipes
+      s.pipes = s.pipes.filter(p => p.x + p.w > -10);
+
+      // Spawn new pipes
+      s.nextSpawnIn--;
+      if (s.nextSpawnIn <= 0) {
+        const gapH = Math.max(110, size.h * 0.34);
+        const minGapY = 30;
+        const maxGapY = size.h - gapH - 50;
+        const gapY = minGapY + Math.random() * (maxGapY - minGapY);
+        s.pipes.push({
+          x: size.w + 20,
+          w: 50,
+          gapY,
+          gapH,
+          scored: false,
+          id: Math.random(),
+        });
+        // Spawn distance scales with speed
+        s.nextSpawnIn = Math.max(70, 130 - Math.floor(s.speed * 6));
+      }
+
+      // Speed up gradually
+      s.speed = Math.min(6, 3 + s.distance * 0.0006);
+
+      if (s.hurt > 0) s.hurt--;
+
+      // Collision detection
+      const monkeyBox = {
+        x: monkeyX - monkeySize * 0.4,
+        y: s.monkeyY - monkeySize * 0.4,
+        w: monkeySize * 0.8,
+        h: monkeySize * 0.8,
+      };
+      let collided = outOfBounds && s.monkeyY >= groundY - monkeySize / 2;
+      s.pipes.forEach(p => {
+        if (p.hit) return;
+        // Top icicle: from 0 to gapY
+        // Bottom icicle: from gapY+gapH to groundY
+        const inXRange = monkeyBox.x < p.x + p.w - 4 && monkeyBox.x + monkeyBox.w > p.x + 4;
+        if (inXRange) {
+          const hitTop = monkeyBox.y < p.gapY - 2;
+          const hitBottom = monkeyBox.y + monkeyBox.h > p.gapY + p.gapH + 2;
+          if (hitTop || hitBottom) {
+            p.hit = true;
+            collided = true;
+          }
+        }
+      });
+
+      if (collided && s.hurt <= 0) {
+        s.hurt = 30;
+        SFX.wrong();
+        setLives(l => {
+          const next = l - 1;
+          if (next <= 0 && !rewardedRef.current) {
+            rewardedRef.current = true;
+            setGameOver(true);
+            SFX.gameOver();
+            onComplete({
+              pointsEarned: 0,
+              won: false,
+              questionsAnswered: questionsAnsweredRef.current,
+              progress: { questionsAnswered: questionsAnsweredRef.current, score: scoreRef.current },
+            });
+          }
+          return next;
+        });
+        // Bounce monkey down a bit on hit (gives a moment of recovery)
+        s.velY = Math.max(s.velY, -3);
+      }
+
+      // === RENDER ===
+      // Sky gradient (icy)
+      const grd = ctx.createLinearGradient(0, 0, 0, size.h);
+      grd.addColorStop(0, "#a8d4e0");
+      grd.addColorStop(0.5, "#c8e4ee");
+      grd.addColorStop(1, "#e0f0f4");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, size.w, size.h);
+
+      // Distant clouds
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      for (let i = 0; i < 4; i++) {
+        const cx = (i * 200 - s.cloudOffset) % (size.w + 200) - 80;
+        const cy = 20 + i * 24;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+        ctx.arc(cx + 14, cy - 4, 16, 0, Math.PI * 2);
+        ctx.arc(cx + 28, cy, 13, 0, Math.PI * 2);
+        ctx.arc(cx + 14, cy + 4, 12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Top ice shelf line
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, size.w, 12);
+      ctx.strokeStyle = "#a8c8d4";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 12);
+      ctx.lineTo(size.w, 12);
+      ctx.stroke();
+
+      // Pipes (icicles)
+      s.pipes.forEach(p => {
+        // TOP icicle - hangs down from ceiling
+        const topGrd = ctx.createLinearGradient(p.x, 0, p.x + p.w, 0);
+        topGrd.addColorStop(0, "#e0f0f8");
+        topGrd.addColorStop(0.4, "#b8d8e8");
+        topGrd.addColorStop(0.7, "#88b8d0");
+        topGrd.addColorStop(1, "#6090b0");
+        ctx.fillStyle = topGrd;
+        // Main body trapezoid that tapers to point
+        ctx.beginPath();
+        ctx.moveTo(p.x, 0);
+        ctx.lineTo(p.x + p.w, 0);
+        ctx.lineTo(p.x + p.w * 0.85, p.gapY - 12);
+        ctx.lineTo(p.x + p.w / 2, p.gapY); // pointy tip
+        ctx.lineTo(p.x + p.w * 0.15, p.gapY - 12);
+        ctx.closePath();
+        ctx.fill();
+        // Highlight strip
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.beginPath();
+        ctx.moveTo(p.x + 4, 0);
+        ctx.lineTo(p.x + 11, 0);
+        ctx.lineTo(p.x + p.w * 0.42, p.gapY - 12);
+        ctx.lineTo(p.x + p.w * 0.45, p.gapY - 4);
+        ctx.closePath();
+        ctx.fill();
+        // Subtle cracks
+        ctx.strokeStyle = "rgba(96,144,176,0.5)";
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(p.x + p.w * 0.7, 8);
+        ctx.lineTo(p.x + p.w * 0.55, p.gapY - 16);
+        ctx.stroke();
+
+        // BOTTOM icicle - rises from ground
+        const bottomY = p.gapY + p.gapH;
+        const groundFloor = size.h - 24;
+        const bottomGrd = ctx.createLinearGradient(p.x, 0, p.x + p.w, 0);
+        bottomGrd.addColorStop(0, "#e0f0f8");
+        bottomGrd.addColorStop(0.4, "#b8d8e8");
+        bottomGrd.addColorStop(0.7, "#88b8d0");
+        bottomGrd.addColorStop(1, "#6090b0");
+        ctx.fillStyle = bottomGrd;
+        ctx.beginPath();
+        ctx.moveTo(p.x + p.w / 2, bottomY); // pointy tip
+        ctx.lineTo(p.x + p.w * 0.85, bottomY + 12);
+        ctx.lineTo(p.x + p.w, groundFloor);
+        ctx.lineTo(p.x, groundFloor);
+        ctx.lineTo(p.x + p.w * 0.15, bottomY + 12);
+        ctx.closePath();
+        ctx.fill();
+        // Highlight
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.beginPath();
+        ctx.moveTo(p.x + p.w * 0.42, bottomY + 4);
+        ctx.lineTo(p.x + p.w * 0.45, bottomY + 12);
+        ctx.lineTo(p.x + 11, groundFloor);
+        ctx.lineTo(p.x + 4, groundFloor);
+        ctx.closePath();
+        ctx.fill();
+        // Subtle cracks
+        ctx.strokeStyle = "rgba(96,144,176,0.5)";
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(p.x + p.w * 0.55, bottomY + 16);
+        ctx.lineTo(p.x + p.w * 0.7, groundFloor - 8);
+        ctx.stroke();
+      });
+
+      // Snow ground
+      ctx.fillStyle = "#f5f8fc";
+      ctx.fillRect(0, size.h - 24, size.w, 24);
+      ctx.strokeStyle = "#c8d8e0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, size.h - 24);
+      ctx.lineTo(size.w, size.h - 24);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(180,200,212,0.5)";
+      for (let x = -s.iceShelfOffset; x < size.w; x += 40) {
+        ctx.beginPath();
+        ctx.arc(x, size.h - 22, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Monkey - reuse canvas drawer with rotation based on velocity
+      const tilt = Math.max(-0.4, Math.min(0.7, s.velY * 0.06));
+      ctx.save();
+      ctx.translate(monkeyX, s.monkeyY);
+      ctx.rotate(tilt);
+      // Draw "wings" — flap arms at sides for flappy feel
+      const wingPhase = s.flapAnim > 0 ? Math.sin((30 - s.flapAnim) * 0.3) * 0.6 : Math.sin(s.frame * 0.2) * 0.15;
+      // Use draw helper centered at 0,0 — shift so it sits at 0,0 anchor
+      drawMonkeyOnCanvas(ctx, 0, -monkeySize / 2, monkeySize, s.frame, false, s.hurt > 0);
+      // Add little wing strokes either side to communicate "flapping"
+      ctx.strokeStyle = s.hurt > 0 ? "#ff8080" : "#a3796a";
+      ctx.lineWidth = monkeySize * 0.07;
+      ctx.lineCap = "round";
+      const wingY = monkeySize * 0.05;
+      const wingLen = monkeySize * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-monkeySize * 0.28, wingY);
+      ctx.lineTo(-monkeySize * 0.28 - wingLen * Math.cos(wingPhase), wingY - wingLen * Math.sin(wingPhase));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(monkeySize * 0.28, wingY);
+      ctx.lineTo(monkeySize * 0.28 + wingLen * Math.cos(wingPhase), wingY - wingLen * Math.sin(wingPhase));
+      ctx.stroke();
+      ctx.restore();
+
+      if (s.paused && !showQuestion) {
+        s.paused = false;
+        const qIdx = (questionsAnsweredRef.current) % questions.length;
+        setQuestionIdx(qIdx);
+        setSelectedAns(null);
+        setQuestionResult(null);
+        setShowQuestion(true);
+      }
+
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [started, gameOver, showQuestion, size, questions.length]);
+
+  // Flap handler
+  const flap = useCallback(() => {
+    const s = stateRef.current;
+    if (started && !gameOver && !showQuestion) {
+      s.velY = -7.5;
+      s.flapAnim = 30;
+      SFX.jump();
+    }
+  }, [started, gameOver, showQuestion]);
+
+  // Input handlers
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+        e.preventDefault();
+        if (!started) setStarted(true);
+        else flap();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [flap, started]);
+
+  const answerQuestion = (idx) => {
+    if (selectedAns !== null) return;
+    setSelectedAns(idx);
+    const isCorrect = idx === questions[questionIdx].correct;
+    if (isCorrect) SFX.correct();
+    else SFX.wrong();
+    setQuestionResult(isCorrect ? "correct" : "wrong");
+    if (!isCorrect) {
+      const q = questions[questionIdx];
+      setWrongAnswers(w => [...w, {
+        questionIdx,
+        question: q.q,
+        chosen: idx,
+        chosenText: q.options[idx],
+        correct: q.correct,
+        correctText: q.options[q.correct],
+      }]);
+    }
+    setTimeout(() => {
+      if (isCorrect) {
+        setQuestionsAnswered(q => {
+          const newCount = q + 1;
+          questionsAnsweredRef.current = newCount;
+          if (newCount >= targetQuestions && !rewardedRef.current) {
+            rewardedRef.current = true;
+            setWon(true);
+            setGameOver(true);
+            setRewarded(true);
+            SFX.levelUp();
+            onComplete({ pointsEarned: totalReward, won: true, questionsAnswered: newCount });
+          }
+          return newCount;
+        });
+      } else {
+        setLives(l => {
+          const next = l - 1;
+          if (next <= 0 && !rewardedRef.current) {
+            rewardedRef.current = true;
+            setGameOver(true);
+            SFX.gameOver();
+            onComplete({
+              pointsEarned: 0,
+              won: false,
+              questionsAnswered: questionsAnsweredRef.current,
+              progress: { questionsAnswered: questionsAnsweredRef.current, score: scoreRef.current },
+            });
+          }
+          return next;
+        });
+      }
+      setShowQuestion(false);
+      setSelectedAns(null);
+      setQuestionResult(null);
+    }, isCorrect ? 800 : 1500);
+  };
+
+  const restart = () => {
+    const resumedQs = questionsAnsweredRef.current;
+    const resumedScore = scoreRef.current;
+    stateRef.current = {
+      monkeyY: size.h * 0.4, velY: 0,
+      pipes: [], speed: 3, distance: 0,
+      pipesPassed: resumedQs * pipesPerCheckpoint,
+      cloudOffset: 0, iceShelfOffset: 0,
+      nextSpawnIn: 80, frame: 0, paused: false, hurt: 0, flapAnim: 0,
+    };
+    setLives(3);
+    setScore(resumedScore);
+    setQuestionsAnswered(resumedQs);
+    setGameOver(false);
+    setWon(false);
+    setRewarded(false);
+    rewardedRef.current = false;
+    setStarted(true);
+  };
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>❄️ No Mission Yet</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>Your teacher hasn't assigned a mission yet!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentQ = questions[questionIdx];
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={{
+        ...modalCardStyle, width: Math.min(size.w + 80, window.innerWidth - 20),
+        maxWidth: "98vw", padding: "20px 24px", position: "relative",
+      }} ref={containerRef}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>❄️ {mission.name}</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 13 }}>
+              Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Game canvas */}
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#a8d4e0", boxShadow: "inset 0 0 0 2px " + C.fur2 + "30", touchAction: "none" }}
+          onMouseDown={(e) => { e.preventDefault(); if (!started) setStarted(true); else flap(); }}
+          onTouchStart={(e) => { e.preventDefault(); if (!started) setStarted(true); else flap(); }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={size.w}
+            height={size.h}
+            style={{ display: "block", width: "100%", height: "auto", cursor: "pointer" }}
+          />
+
+          {/* Start overlay */}
+          {!started && !gameOver && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(2px)",
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 8 }}>{isResuming ? "🚀" : "❄️"}</div>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, marginBottom: 6 }}>
+                {isResuming ? "Resume Flight!" : "Tap or Press Space to Start!"}
+              </div>
+              {isResuming ? (
+                <>
+                  <div style={{
+                    background: `${C.green}20`, border: `2px solid ${C.green}50`,
+                    borderRadius: 12, padding: "8px 14px", marginBottom: 10, textAlign: "center", maxWidth: 340,
+                  }}>
+                    <div style={{ fontSize: 14, color: C.text, fontWeight: 700 }}>
+                      💾 Picking up where you left off!
+                    </div>
+                    <div style={{ fontSize: 13, color: C.textLight, marginTop: 2 }}>
+                      Checkpoint {questionsAnswered} of {targetQuestions} · Score: {score}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textLight, textAlign: "center", padding: "0 16px" }}>
+                    Tap, click, or press <strong>Space</strong> to flap
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, color: C.textLight, marginBottom: 12, textAlign: "center", maxWidth: 360, padding: "0 16px" }}>
+                    Help the monkey fly between the icicles! Every {pipesPerCheckpoint} icicles passed = a question. Answer all {targetQuestions} questions correctly to win!
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textLight }}>
+                    Tap, click, or press <strong>Space</strong> to flap
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Game over overlay */}
+          {gameOver && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              background: won ? "rgba(255,250,200,0.96)" : "rgba(255,200,200,0.92)",
+              backdropFilter: "blur(2px)", padding: "12px 16px", overflow: "auto",
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 4 }}>{won ? "🎉" : "❄️"}</div>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, marginBottom: 8 }}>
+                {won ? "Mission Complete!" : "Crashed!"}
+              </div>
+              {won ? (
+                <>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <div style={{ background: `${C.gold}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>EARNED</div>
+                      <div style={{ fontSize: 18, color: C.gold, fontWeight: 700 }}>+{totalReward} ★</div>
+                    </div>
+                    <div style={{ background: `${C.green}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>ACCURACY</div>
+                      <div style={{ fontSize: 18, color: C.green, fontWeight: 700 }}>
+                        {targetQuestions > 0 ? Math.round(((targetQuestions - wrongAnswers.length) / targetQuestions) * 100) : 100}%
+                      </div>
+                    </div>
+                    <div style={{ background: `${C.accent}25`, padding: "6px 12px", borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: C.textLight }}>ICICLES</div>
+                      <div style={{ fontSize: 18, color: C.accent, fontWeight: 700 }}>{score}</div>
+                    </div>
+                  </div>
+                  {wrongAnswers.length > 0 && (
+                    <div style={{ width: "100%", maxWidth: 460, textAlign: "left", marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>📝 Review ({wrongAnswers.length} missed)</div>
+                      <div style={{ maxHeight: 120, overflow: "auto" }}>
+                        {wrongAnswers.map((w, i) => (
+                          <div key={i} style={{ background: `${C.accent}10`, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: "6px 10px", marginBottom: 4, fontSize: 12 }}>
+                            <div style={{ color: C.text, fontWeight: 600 }}>{w.question}</div>
+                            <div style={{ color: C.accentDark }}>❌ {w.chosenText}</div>
+                            <div style={{ color: C.green }}>✅ {w.correctText}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {wrongAnswers.length === 0 && (
+                    <div style={{ background: `${C.green}20`, padding: "6px 14px", borderRadius: 10, marginBottom: 8, fontSize: 13, color: C.green, fontWeight: 700 }}>
+                      🌟 Perfect! No wrong answers!
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontSize: 14, color: C.textLight, marginBottom: 8, textAlign: "center" }}>
+                  You answered {questionsAnsweredRef.current} of {targetQuestions} checkpoints.
+                  <div style={{ fontSize: 13, color: C.green, marginTop: 4 }}>
+                    💾 Your progress is saved! Come back anytime to continue.
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                {!won && <button onClick={restart} style={{ ...primaryBtnStyle, padding: "8px 16px", fontSize: 14 }}>🔄 Try Again</button>}
+                {won && onShop && (
+                  <button onClick={() => { onShop(); onClose(); }} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)`, padding: "8px 16px", fontSize: 14 }}>
+                    🍱 Buy Pet Food
+                  </button>
+                )}
+                <button onClick={onClose} style={{ ...primaryBtnStyle, padding: "8px 16px", fontSize: 14 }}>
+                  Back to Hot Spring
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: C.textLight }}>
+          🦋 Tap the game / click / press Space to flap. Don't hit the icicles!
+        </div>
+
+        {/* Question modal */}
+        {showQuestion && currentQ && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 24, padding: 16, zIndex: 50,
+          }}>
+            <div style={{
+              background: C.card, borderRadius: 18, padding: "20px 24px", width: "100%", maxWidth: 440,
+              boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 14, color: C.textLight }}>🚩 Checkpoint #{questionsAnswered + 1}</div>
+                <div style={{ fontSize: 13, color: C.textLight }}>{questionsAnswered + 1} / {targetQuestions}</div>
+              </div>
+              <div style={{
+                background: `${C.snow1}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14,
+                fontSize: 18, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 50,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {currentQ.q}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct;
+                  const isSelected = idx === selectedAns;
+                  const colors = [C.accent, C.gold, "#5a8fc7", C.green];
+                  let bg = colors[idx], textColor = "white";
+                  if (selectedAns !== null) {
+                    if (isCorrect) bg = C.green;
+                    else if (isSelected) bg = "#a85050";
+                    else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
+                  }
+                  return (
+                    <button key={idx} onClick={() => answerQuestion(idx)} disabled={selectedAns !== null}
+                      style={{
+                        padding: "12px 10px", borderRadius: 10, border: "none",
+                        background: bg, color: textColor,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, fontWeight: 700,
+                        cursor: selectedAns !== null ? "default" : "pointer", textAlign: "left",
+                        minHeight: 50,
+                      }}>
+                      <strong>{["A","B","C","D"][idx]}.</strong> {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              {questionResult === "wrong" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.accent}20`, borderRadius: 8, color: C.accentDark, fontSize: 14, textAlign: "center" }}>
+                  ❌ Wrong! You lost a life.
+                </div>
+              )}
+              {questionResult === "correct" && (
+                <div style={{ marginTop: 10, padding: "8px 12px", background: `${C.green}20`, borderRadius: 8, color: C.green, fontSize: 14, textAlign: "center" }}>
+                  ✅ Correct! Keep flying!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── BLOCK BLAST MISSION ─── 8x8 grid where each block placement requires a quiz answer */
 const BB_SIZE = 8;
 const BB_SHAPES = [
@@ -3858,7 +6789,7 @@ function generateShape() {
   return { cells: shape, color, id: Math.random() };
 }
 
-function MissionGame({ studentName, mission, onClose, onComplete }) {
+function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
   const [grid, setGrid] = useState(() => Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
   const [tray, setTray] = useState(() => [generateShape(), generateShape(), generateShape()]);
   const [selectedShapeIdx, setSelectedShapeIdx] = useState(null);
@@ -3872,6 +6803,7 @@ function MissionGame({ studentName, mission, onClose, onComplete }) {
   const [questionsCompleted, setQuestionsCompleted] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [rewarded, setRewarded] = useState(false);
+  const [wrongAnswers, setWrongAnswers] = useState([]);
 
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
@@ -3961,6 +6893,17 @@ function MissionGame({ studentName, mission, onClose, onComplete }) {
     if (isCorrect) SFX.correct();
     else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
+    if (!isCorrect) {
+      const q = questions[questionIdx];
+      setWrongAnswers(w => [...w, {
+        questionIdx,
+        question: q.q,
+        chosen: idx,
+        chosenText: q.options[idx],
+        correct: q.correct,
+        correctText: q.options[q.correct],
+      }]);
+    }
     setTimeout(() => {
       setShowQuestion(false);
       if (isCorrect) {
@@ -4008,14 +6951,53 @@ function MissionGame({ studentName, mission, onClose, onComplete }) {
         </div>
 
         {gameOver ? (
-          <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <div style={{ fontSize: 64, marginBottom: 8 }}>🎉</div>
+          <div style={{ textAlign: "center", padding: "12px 0", maxHeight: "70vh", overflow: "auto" }}>
+            <div style={{ fontSize: 56, marginBottom: 4 }}>🎉</div>
             <h2 style={{ color: C.text, margin: "0 0 8px", fontSize: 26 }}>Mission Complete!</h2>
-            <p style={{ color: C.textLight, fontSize: 16 }}>{studentName}, you answered all {targetQuestions} questions!</p>
-            <div style={{ background: `${C.gold}20`, borderRadius: 14, padding: "12px 16px", margin: "16px auto", display: "inline-block" }}>
-              <div style={{ fontSize: 16, color: C.text }}>You earned <strong style={{ color: C.gold, fontSize: 22 }}>+{totalReward} ★</strong></div>
+            <p style={{ color: C.textLight, fontSize: 14, margin: "0 0 12px" }}>{studentName} · {mission?.name}</p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 12, flexWrap: "wrap" }}>
+              <div style={{ background: `${C.gold}25`, padding: "8px 14px", borderRadius: 12 }}>
+                <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase" }}>Earned</div>
+                <div style={{ fontSize: 20, color: C.gold, fontWeight: 700 }}>+{totalReward} ★</div>
+              </div>
+              <div style={{ background: `${C.green}25`, padding: "8px 14px", borderRadius: 12 }}>
+                <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase" }}>Accuracy</div>
+                <div style={{ fontSize: 20, color: C.green, fontWeight: 700 }}>
+                  {targetQuestions > 0 ? Math.round((targetQuestions / (targetQuestions + wrongAnswers.length)) * 100) : 100}%
+                </div>
+              </div>
+              <div style={{ background: `${C.accent}25`, padding: "8px 14px", borderRadius: 12 }}>
+                <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase" }}>Blocks</div>
+                <div style={{ fontSize: 20, color: C.accent, fontWeight: 700 }}>{score}</div>
+              </div>
             </div>
-            <div><button onClick={onClose} style={primaryBtnStyle}>Back to the Hot Spring</button></div>
+            {wrongAnswers.length > 0 && (
+              <div style={{ textAlign: "left", marginBottom: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>📝 Review ({wrongAnswers.length} missed)</div>
+                <div style={{ maxHeight: 200, overflow: "auto" }}>
+                  {wrongAnswers.map((w, i) => (
+                    <div key={i} style={{ background: `${C.accent}10`, border: `1px solid ${C.accent}30`, borderRadius: 10, padding: "8px 12px", marginBottom: 6 }}>
+                      <div style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4 }}>{w.question}</div>
+                      <div style={{ fontSize: 12, color: C.accentDark }}>❌ {w.chosenText}</div>
+                      <div style={{ fontSize: 12, color: C.green }}>✅ {w.correctText}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {wrongAnswers.length === 0 && (
+              <div style={{ background: `${C.green}20`, padding: "8px 14px", borderRadius: 10, marginBottom: 12, fontSize: 14, color: C.green, fontWeight: 700 }}>
+                🌟 Perfect mission! No wrong answers!
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              {onShop && (
+                <button onClick={() => { onShop(); onClose(); }} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.green}, #4a8a4c)` }}>
+                  🍱 Buy Pet Food
+                </button>
+              )}
+              <button onClick={onClose} style={primaryBtnStyle}>Back to Hot Spring</button>
+            </div>
           </div>
         ) : (
           <>
@@ -4188,6 +7170,9 @@ function SnowMonkeyTrackerInner() {
   const [activeQuizId, setActiveQuizId] = useState(null);
   const [activeMissionId, setActiveMissionId] = useState(null);
   const [showPetMart, setShowPetMart] = useState(false);
+  const [showFoodShop, setShowFoodShop] = useState(false);
+  const [showMyPool, setShowMyPool] = useState(false);
+  const [showWalk, setShowWalk] = useState(false);
   const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
   const [showCustomize, setShowCustomize] = useState(false);
@@ -4207,6 +7192,20 @@ function SnowMonkeyTrackerInner() {
   const [csvMissionType, setCsvMissionType] = useState("blockblast");
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [streakOpen, setStreakOpen] = useState(false);
+  const [examsOpen, setExamsOpen] = useState(true);
+  const [examsListExpanded, setExamsListExpanded] = useState(false);
+  const [showAddExam, setShowAddExam] = useState(false);
+  const [examTargetStudentId, setExamTargetStudentId] = useState(null);
+  const [examName, setExamName] = useState("");
+  const [examDate, setExamDate] = useState("");
+  const [examTime, setExamTime] = useState("09:00");
+  const [examEmoji, setExamEmoji] = useState("📝");
+  // Real-time tick for countdown — updates every second
+  const [, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
   const [soundOn, setSoundOn] = useState(getSoundsEnabled());
   const toggleSound = () => {
     const next = !soundOn;
@@ -4306,6 +7305,67 @@ function SnowMonkeyTrackerInner() {
       }
     }
   }, [students, quizzes, missions]);
+
+  // Exams
+  const addExam = (studentId, exam) => {
+    const newS = students.map(s => {
+      if (s.id !== studentId) return s;
+      const exams = [...(s.exams || []), exam];
+      return { ...s, exams };
+    });
+    persist(null, newS);
+  };
+  const deleteExam = (studentId, examId) => {
+    const newS = students.map(s => {
+      if (s.id !== studentId) return s;
+      const exams = (s.exams || []).filter(e => e.id !== examId);
+      return { ...s, exams };
+    });
+    persist(null, newS);
+  };
+
+  // Quotes (teacher-set per student, and student's own personal quotes)
+  const addTeacherQuote = (studentId, text) => {
+    const t = text?.trim(); if (!t) return;
+    const newS = students.map(s => s.id === studentId
+      ? { ...s, teacherQuotes: [...(s.teacherQuotes || []), t] }
+      : s);
+    persist(null, newS);
+  };
+  const deleteTeacherQuote = (studentId, idx) => {
+    const newS = students.map(s => s.id === studentId
+      ? { ...s, teacherQuotes: (s.teacherQuotes || []).filter((_, i) => i !== idx) }
+      : s);
+    persist(null, newS);
+  };
+  const addPersonalQuote = (studentId, text) => {
+    const t = text?.trim(); if (!t) return;
+    const newS = students.map(s => s.id === studentId
+      ? { ...s, personalQuotes: [...(s.personalQuotes || []), t] }
+      : s);
+    persist(null, newS);
+  };
+  const deletePersonalQuote = (studentId, idx) => {
+    const newS = students.map(s => s.id === studentId
+      ? { ...s, personalQuotes: (s.personalQuotes || []).filter((_, i) => i !== idx) }
+      : s);
+    persist(null, newS);
+  };
+
+  const submitExam = (studentId) => {
+    if (!examName.trim() || !examDate) return;
+    const dateMs = new Date(examDate + "T" + (examTime || "09:00")).getTime();
+    if (isNaN(dateMs)) return;
+    addExam(studentId, {
+      id: "exam_" + Date.now(),
+      name: examName.trim(),
+      emoji: examEmoji || "📝",
+      dateMs,
+    });
+    setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝");
+    setShowAddExam(false);
+    SFX.click();
+  };
 
   const addQuizForStudent = (studentId, csvData, subject, name, points) => {
     const parsed = parseCSV(csvData);
@@ -4580,16 +7640,68 @@ function SnowMonkeyTrackerInner() {
       notify(`${pet.name} sent home for now`);
       return;
     }
-    // Equip - reset the income timer so they wait a fresh week
+    // Equip - reset the income timer so they wait a fresh week, init care stats
     const newS = students.map(s => s.id === studentId ? {
       ...s,
       pet: petId,
       petAcquiredAt: Date.now(),
       lastIncomeCollected: Date.now(),
+      petCare: { hunger: 80, happiness: 80, lastFedAt: Date.now(), lastUpdated: Date.now() },
     } : s);
     persist(null, newS);
     SFX.collect();
     notify(`${pet.emoji} ${pet.name} is by your side!`);
+  };
+
+  // Feed the student's pet — buys food and applies hunger/happiness boost
+  const feedPet = (studentId, foodId) => {
+    const food = getFood(foodId);
+    const st = students.find(s => s.id === studentId);
+    if (!food || !st || !st.pet) return false;
+    if (st.points < food.price) {
+      SFX.wrong();
+      notify(`Not enough stars! Need ${food.price - st.points} more ★`, "error");
+      return false;
+    }
+    // Get current decayed values, then apply boost
+    const cur = getPetCare(st) || { hunger: 80, happiness: 80 };
+    const newHunger = Math.min(100, cur.hunger + food.hunger);
+    const newHappiness = Math.min(100, cur.happiness + food.happiness);
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points - food.price,
+      petCare: {
+        ...(s.petCare || {}),
+        hunger: newHunger,
+        happiness: newHappiness,
+        lastFedAt: Date.now(),
+        lastUpdated: Date.now(),
+      },
+    } : s);
+    persist(null, newS);
+    SFX.collect();
+    notify(`${food.emoji} ${food.name} fed! +${food.hunger} hunger, +${food.happiness} happiness`);
+    return true;
+  };
+
+  // Walk completion — boosts happiness, awards a tiny star bonus
+  const walkPet = (studentId, happinessBoost = 25, starBonus = 0) => {
+    const st = students.find(s => s.id === studentId);
+    if (!st || !st.pet) return;
+    const cur = getPetCare(st) || { hunger: 80, happiness: 80 };
+    const newHappiness = Math.min(100, cur.happiness + happinessBoost);
+    const newS = students.map(s => s.id === studentId ? {
+      ...s,
+      points: s.points + starBonus,
+      petCare: {
+        ...(s.petCare || {}),
+        hunger: cur.hunger, // hunger doesn't change on walk
+        happiness: newHappiness,
+        lastUpdated: Date.now(),
+      },
+    } : s);
+    persist(null, newS);
+    SFX.levelUp();
   };
 
   // Open a mystery pack
@@ -4639,7 +7751,7 @@ function SnowMonkeyTrackerInner() {
     return pending;
   };
 
-  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); };
+  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); setShowAddExam(false); setExamTargetStudentId(null); setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝"); setShowFoodShop(false); setShowMyPool(false); setShowWalk(false); };
 
   const todayKey = getTodayKey();
   const hasCompletedChallenge = (studentId) => {
@@ -4985,7 +8097,7 @@ function SnowMonkeyTrackerInner() {
                     {studentMissions.map(m => (
                       <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.green}15`, borderRadius: 6, marginBottom: 2 }}>
                         <div style={{ flex: 1, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {m.type === "runner" ? "🏃" : "🧩"} {m.name} · {m.questions.length}Q · {m.points}★
+                          {(m.type === "runner" ? "🏃" : m.type === "flappy" ? "❄️" : "🧩")} {m.name} · {m.questions.length}Q · {m.points}★
                         </div>
                         <button onClick={() => { if (confirm(`Remove "${m.name}"?`)) removeMissionFromStudent(s.id, m.id); }}
                           style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
@@ -4993,6 +8105,48 @@ function SnowMonkeyTrackerInner() {
                         </button>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Inspirational quotes section */}
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>💬 Quotes for {s.name} ({(s.teacherQuotes || []).length})</div>
+                    {(s.teacherQuotes || []).map((q, idx) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.gold}15`, borderRadius: 6, marginBottom: 2 }}>
+                        <div style={{ flex: 1, fontSize: 12, color: C.text, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>"{q}"</div>
+                        <button onClick={() => deleteTeacherQuote(s.id, idx)}
+                          style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <QuoteInput onAdd={(text) => addTeacherQuote(s.id, text)} />
+                  </div>
+
+                  {/* Exams section */}
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>📅 Exams ({(s.exams || []).length})</div>
+                      <button onClick={() => { setExamTargetStudentId(s.id); setShowAddExam(true); }}
+                        style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: `${C.accent}25`, color: C.accent, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700 }}>
+                        + Add
+                      </button>
+                    </div>
+                    {(s.exams || []).length === 0 && <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic", paddingLeft: 4 }}>No exams scheduled</div>}
+                    {sortExams(s.exams || []).map(e => {
+                      const cd = getCountdown(e.dateMs);
+                      return (
+                        <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", background: `${C.accent}10`, borderRadius: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 14 }}>{e.emoji}</span>
+                          <div style={{ flex: 1, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {e.name} · {cd.passed ? "today!" : cd.days > 0 ? `${cd.days}d` : `${cd.hours}h`}
+                          </div>
+                          <button onClick={() => deleteExam(s.id, e.id)}
+                            style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: C.accentDark, cursor: "pointer", fontSize: 11 }}>
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -5095,22 +8249,23 @@ function SnowMonkeyTrackerInner() {
                 {/* Mission type selector */}
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 6, fontWeight: 700 }}>Mission Type</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                     {[
-                      { id: "blockblast", emoji: "🧩", title: "Block Blast", desc: "Tetris-style puzzle. Place each block by answering a question." },
-                      { id: "runner", emoji: "🏃", title: "Fruit Runner", desc: "Dino-style runner! Jump fruits, answer questions at checkpoints." },
+                      { id: "blockblast", emoji: "🧩", title: "Block Blast", desc: "Tetris-style puzzle." },
+                      { id: "runner", emoji: "🏃", title: "Fruit Runner", desc: "Jump over fruits." },
+                      { id: "flappy", emoji: "❄️", title: "Icicle Flap", desc: "Fly between icicles." },
                     ].map(m => {
                       const active = csvMissionType === m.id;
                       return (
                         <button key={m.id} onClick={() => setCsvMissionType(m.id)}
                           style={{
-                            padding: "10px 12px", borderRadius: 12, cursor: "pointer",
+                            padding: "10px 8px", borderRadius: 12, cursor: "pointer",
                             border: active ? `2px solid ${C.green}` : `2px solid ${C.fur2}40`,
                             background: active ? `${C.green}15` : `${C.snow1}80`,
                             fontFamily: "'Patrick Hand', cursive", textAlign: "left",
                             transition: "all 0.2s",
                           }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 2 }}>{m.emoji} {m.title}</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 2 }}>{m.emoji} {m.title}</div>
                           <div style={{ fontSize: 11, color: C.textLight, lineHeight: 1.3 }}>{m.desc}</div>
                         </button>
                       );
@@ -5121,6 +8276,8 @@ function SnowMonkeyTrackerInner() {
                 <div style={{ background: `${C.green}15`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13, color: C.text, border: `1px solid ${C.green}30` }}>
                   {csvMissionType === "runner" ? (
                     <><strong>🏃 Fruit Runner:</strong> The monkey runs and jumps over fruits like 🍌🍎🍍🍉. Every 5 fruits passed, a question pops up. Wrong answer = lose a life (3 lives). Mission complete when all questions are answered correctly!</>
+                  ) : csvMissionType === "flappy" ? (
+                    <><strong>❄️ Icicle Flap:</strong> Flappy-bird style! The monkey flies between dangling and rising icicles. Every 4 icicles passed, a question pops up. Wrong answer = lose a life (3 lives). Mission complete when all questions are answered correctly! Progress saves between attempts.</>
                   ) : (
                     <><strong>🧩 Block Blast:</strong> The student plays a Tetris-like puzzle. Every time they place a block, they must answer one of these questions correctly. Mission completes when they answer all questions correctly.</>
                   )}
@@ -5129,7 +8286,7 @@ function SnowMonkeyTrackerInner() {
                   <div>
                     <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4 }}>Mission name</label>
                     <input type="text" value={csvName} onChange={e => setCsvName(e.target.value)}
-                      placeholder={csvMissionType === "runner" ? "e.g. Math Sprint" : "e.g. Math Mission Week 1"}
+                      placeholder={csvMissionType === "runner" ? "e.g. Math Sprint" : csvMissionType === "flappy" ? "e.g. Math Flap" : "e.g. Math Mission Week 1"}
                       style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text, boxSizing: "border-box" }} />
                   </div>
                   <div>
@@ -5168,6 +8325,20 @@ function SnowMonkeyTrackerInner() {
           </div>
           <SteamParticles count={18} />
           <BirdFlock getMessage={getFlockMessage} />
+          {/* Exam countdown: shows selected student's exams; hidden otherwise so it doesn't clutter */}
+          {sel && (
+            <ExamCountdown
+              exams={sel.exams || []}
+              quotes={getQuotePool(sel)}
+              isOpen={examsOpen}
+              onToggleOpen={() => setExamsOpen(o => !o)}
+              isExpanded={examsListExpanded}
+              onToggleExpanded={() => setExamsListExpanded(e => !e)}
+              onAddClick={() => { setExamTargetStudentId(sel.id); setShowAddExam(true); }}
+              onDelete={(eid) => deleteExam(sel.id, eid)}
+              canEdit={true}
+            />
+          )}
           <div style={{ position: "absolute", top: "28%", left: "5%", right: "5%", bottom: "5%", zIndex: 10 }}>
             {students.length === 0 && (
               <div style={{ position: "absolute", top: "38%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", color: C.text, opacity: 0.7 }}>
@@ -5397,6 +8568,63 @@ function SnowMonkeyTrackerInner() {
             </div>
           );
         })()}
+
+        {/* Add Exam modal (also rendered in teacher scene so 'Add Exam' button works) */}
+        {showAddExam && examTargetStudentId && (
+          <div style={modalBackdropStyle} onClick={() => setShowAddExam(false)}>
+            <div style={{ ...modalCardStyle, width: 460, maxWidth: "95vw" }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ margin: "0 0 14px", color: C.text, fontSize: 24 }}>📅 Add Exam</h2>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Exam name</label>
+                <input type="text" value={examName} onChange={e => setExamName(e.target.value)}
+                  placeholder="e.g. Math Final, Spelling Test"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Date</label>
+                  <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Time</label>
+                  <input type="time" value={examTime} onChange={e => setExamTime(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Choose an emoji</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {["📝","📚","🧪","🔬","📖","🎓","✏️","📐","🌍","🎨","🎵","⚽","🏀","🇫🇷","🇪🇸","🇨🇳","🇯🇵","💻","⚛️","🧬"].map(emo => (
+                    <button key={emo} onClick={() => setExamEmoji(emo)}
+                      style={{
+                        padding: "6px 8px", fontSize: 22, lineHeight: 1, cursor: "pointer",
+                        border: examEmoji === emo ? `2px solid ${C.accent}` : `2px solid transparent`,
+                        background: examEmoji === emo ? `${C.accent}15` : "transparent",
+                        borderRadius: 10,
+                      }}>{emo}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => { setShowAddExam(false); setExamName(""); setExamDate(""); }}
+                  style={{ padding: "10px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: "transparent", color: C.textLight, fontFamily: "'Patrick Hand', cursive", fontSize: 16, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={() => submitExam(examTargetStudentId)}
+                  disabled={!examName.trim() || !examDate}
+                  style={{
+                    ...primaryBtnStyle,
+                    opacity: !examName.trim() || !examDate ? 0.5 : 1,
+                    cursor: !examName.trim() || !examDate ? "not-allowed" : "pointer",
+                  }}>
+                  ✓ Add Exam
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -5447,6 +8675,63 @@ function SnowMonkeyTrackerInner() {
 
         {/* Wordle modal */}
         {showWordle && <WordleGame onWin={handleWordleWin} onLose={handleWordleLose} onClose={() => setShowWordle(false)} />}
+
+        {/* Add Exam modal */}
+        {showAddExam && examTargetStudentId && (
+          <div style={modalBackdropStyle} onClick={() => setShowAddExam(false)}>
+            <div style={{ ...modalCardStyle, width: 460, maxWidth: "95vw" }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ margin: "0 0 14px", color: C.text, fontSize: 24 }}>📅 Add Exam</h2>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Exam name</label>
+                <input type="text" value={examName} onChange={e => setExamName(e.target.value)}
+                  placeholder="e.g. Math Final, Spelling Test"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Date</label>
+                  <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Time</label>
+                  <input type="time" value={examTime} onChange={e => setExamTime(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.snow1}90`, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text, boxSizing: "border-box" }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, color: C.textLight, display: "block", marginBottom: 4, fontWeight: 700 }}>Choose an emoji</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {["📝","📚","🧪","🔬","📖","🎓","✏️","📐","🌍","🎨","🎵","⚽","🏀","🇫🇷","🇪🇸","🇨🇳","🇯🇵","💻","⚛️","🧬"].map(emo => (
+                    <button key={emo} onClick={() => setExamEmoji(emo)}
+                      style={{
+                        padding: "6px 8px", fontSize: 22, lineHeight: 1, cursor: "pointer",
+                        border: examEmoji === emo ? `2px solid ${C.accent}` : `2px solid transparent`,
+                        background: examEmoji === emo ? `${C.accent}15` : "transparent",
+                        borderRadius: 10,
+                      }}>{emo}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => { setShowAddExam(false); setExamName(""); setExamDate(""); }}
+                  style={{ padding: "10px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: "transparent", color: C.textLight, fontFamily: "'Patrick Hand', cursive", fontSize: 16, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={() => submitExam(examTargetStudentId)}
+                  disabled={!examName.trim() || !examDate}
+                  style={{
+                    ...primaryBtnStyle,
+                    opacity: !examName.trim() || !examDate ? 0.5 : 1,
+                    cursor: !examName.trim() || !examDate ? "not-allowed" : "pointer",
+                  }}>
+                  ✓ Add Exam
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Quiz Picker modal - choose which quiz to play */}
         {showQuizPicker && me && (() => {
@@ -5529,8 +8814,8 @@ function SnowMonkeyTrackerInner() {
                       onMouseLeave={e => e.currentTarget.style.background = `${C.green}15`}
                     >
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 17 }}>{m.type === "runner" ? "🏃" : "🧩"} {m.name}</div>
-                        <div style={{ fontSize: 12, color: C.textLight }}>{m.type === "runner" ? "Fruit Runner" : "Block Blast"} · {m.questions.length} questions</div>
+                        <div style={{ fontWeight: 700, fontSize: 17 }}>{(m.type === "runner" ? "🏃" : m.type === "flappy" ? "❄️" : "🧩")} {m.name}</div>
+                        <div style={{ fontSize: 12, color: C.textLight }}>{m.type === "runner" ? "Fruit Runner" : m.type === "flappy" ? "Icicle Flap" : "Block Blast"} · {m.questions.length} questions</div>
                       </div>
                       <div style={{ background: C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700 }}>
                         ★ {m.points}
@@ -5554,6 +8839,7 @@ function SnowMonkeyTrackerInner() {
               quiz={activeQuiz}
               onClose={() => { setShowQuiz(false); setActiveQuizId(null); }}
               onComplete={handleQuizComplete}
+              onShop={() => setShowFoodShop(true)}
             />
           );
         })()}
@@ -5572,6 +8858,20 @@ function SnowMonkeyTrackerInner() {
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={handleMissionComplete}
+                onShop={() => setShowFoodShop(true)}
+              />
+            );
+          }
+          if (activeMission.type === "flappy") {
+            const savedProgress = me.completions?.[`mission:${activeMission.id}`]?.progress || null;
+            return (
+              <FlappyGame
+                studentName={me.name}
+                mission={activeMission}
+                savedProgress={savedProgress}
+                onClose={closeFn}
+                onComplete={handleMissionComplete}
+                onShop={() => setShowFoodShop(true)}
               />
             );
           }
@@ -5581,6 +8881,7 @@ function SnowMonkeyTrackerInner() {
               mission={activeMission}
               onClose={closeFn}
               onComplete={handleMissionComplete}
+              onShop={() => setShowFoodShop(true)}
             />
           );
         })()}
@@ -5663,6 +8964,40 @@ function SnowMonkeyTrackerInner() {
                   </span>
                 )}
               </button>
+              {/* My Pool button - opens Tamagotchi-style personal pool */}
+              {(() => {
+                const myCare = getPetCare(me);
+                const careLbl = myCare ? getCareLabel(myCare.avgCare) : null;
+                const accent = careLbl ? careLbl.color : C.water1;
+                const needsAttention = me.pet && myCare && myCare.avgCare < 30;
+                return (
+                  <button onClick={() => { SFX.click(); setShowMyPool(true); }}
+                    style={{
+                      padding: "10px 22px", borderRadius: 16,
+                      border: `2px solid ${accent}80`,
+                      background: `${C.card}ee`,
+                      color: C.text,
+                      fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: `0 4px 14px ${accent}40`,
+                      transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
+                      backdropFilter: "blur(8px)",
+                      position: "relative",
+                    }}>
+                    🛁 My Pool
+                    {careLbl && me.pet && <span style={{ fontSize: 14 }}>{careLbl.emoji}</span>}
+                    {needsAttention && (
+                      <span style={{
+                        position: "absolute", top: -6, right: -6,
+                        background: C.accent, color: "white", fontSize: 11, fontWeight: 700,
+                        padding: "2px 7px", borderRadius: 999,
+                        boxShadow: `0 2px 8px ${C.accent}80`,
+                        animation: "incomeBadgePulse 1.4s ease-in-out infinite",
+                      }}>!</span>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           );
         })()}
@@ -5801,6 +9136,39 @@ function SnowMonkeyTrackerInner() {
             </div>
           );
         })()}
+
+        {/* Food Shop modal - feed your pet */}
+        {showFoodShop && me && (
+          <FoodShop
+            student={me}
+            onClose={() => setShowFoodShop(false)}
+            onBuy={(foodId) => feedPet(me.id, foodId)}
+          />
+        )}
+
+        {/* My Pool modal - personal pet care scene */}
+        {showMyPool && me && (
+          <MyPool
+            student={me}
+            onClose={() => setShowMyPool(false)}
+            onShop={() => { setShowMyPool(false); setShowFoodShop(true); }}
+            onWalk={() => { setShowMyPool(false); setShowWalk(true); }}
+            onPetMart={() => { setPetMartTab("packs"); setShowPetMart(true); }}
+          />
+        )}
+
+        {/* Walk mini-game */}
+        {showWalk && me && (
+          <WalkGame
+            student={me}
+            onClose={() => setShowWalk(false)}
+            onComplete={(happinessBoost, starBonus) => {
+              walkPet(me.id, happinessBoost, starBonus);
+              if (starBonus > 0) notify(`🚶 Walk complete! +${happinessBoost}💖 +${starBonus}★`);
+              else notify(`🚶 Walk complete! +${happinessBoost} happiness for your pet!`);
+            }}
+          />
+        )}
 
         {/* Pet Mart modal - Mystery Packs + Pet Collection */}
         {showPetMart && me && (() => {
@@ -6121,6 +9489,20 @@ function SnowMonkeyTrackerInner() {
           </div>
           <SteamParticles count={18} />
           <BirdFlock getMessage={getFlockMessage} />
+          <ExamCountdown
+            exams={me?.exams || []}
+            quotes={getQuotePool(me)}
+            isOpen={examsOpen}
+            onToggleOpen={() => setExamsOpen(o => !o)}
+            isExpanded={examsListExpanded}
+            onToggleExpanded={() => setExamsListExpanded(e => !e)}
+            onAddClick={() => { setExamTargetStudentId(me?.id); setShowAddExam(true); }}
+            onDelete={(eid) => deleteExam(me?.id, eid)}
+            canEdit={true}
+            personalQuotes={me?.personalQuotes || []}
+            onAddPersonalQuote={(text) => addPersonalQuote(me?.id, text)}
+            onDeletePersonalQuote={(idx) => deletePersonalQuote(me?.id, idx)}
+          />
 
           {/* All monkeys in the scene (view only, student's own monkey glows) */}
           <div style={{ position: "absolute", top: "28%", left: "5%", right: "5%", bottom: "5%", zIndex: 10 }}>
@@ -6185,12 +9567,13 @@ function SnowMonkeyTrackerInner() {
               <button
                 onClick={() => setStreakOpen(true)}
                 style={{
-                  position: "absolute", top: 16, left: 16, zIndex: 30,
+                  position: "absolute", top: examsOpen ? 280 : 70, left: 16, zIndex: 30,
                   background: `${C.card}e8`, borderRadius: 999, padding: "8px 16px",
                   boxShadow: `0 6px 20px ${myLevel.color}40`, backdropFilter: "blur(10px)",
                   border: `2px solid ${myLevel.color}80`, cursor: "pointer",
                   display: "flex", alignItems: "center", gap: 8,
                   fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
+                  transition: "top 0.3s ease",
                 }}
                 title="Show streak progress"
               >
@@ -6200,10 +9583,11 @@ function SnowMonkeyTrackerInner() {
               </button>
             ) : (
               <div style={{
-                position: "absolute", top: 16, left: 16, zIndex: 30,
+                position: "absolute", top: examsOpen ? 280 : 70, left: 16, zIndex: 30,
                 background: `${C.card}f0`, borderRadius: 18, padding: "14px 18px",
                 boxShadow: `0 8px 28px ${myLevel.color}30`, backdropFilter: "blur(10px)",
                 border: `2px solid ${myLevel.color}60`, width: 260,
+                transition: "top 0.3s ease",
               }}>
                 {/* Header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
