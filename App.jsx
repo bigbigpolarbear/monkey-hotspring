@@ -5466,7 +5466,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     velY: 0,
     onGround: true,
     obstacles: [], // {x, type, w, h, ...}
-    speed: 9,
+    speed: 7,
     distance: 0,
     obstaclesPassed: (savedProgress?.questionsAnswered || 0) * 5,
     cloudOffset: 0,
@@ -5533,16 +5533,13 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const loop = (now) => {
       const dt = Math.min(50, now - lastTime);
       lastTime = now;
-      // Frame-rate independent: scale all per-frame motion by dt relative to a 60fps baseline (~16.67ms).
-      // Capped at 3x to prevent giant leaps after tab-switching or stalls.
-      const dtMul = Math.min(3, dt / 16.67);
       const s = stateRef.current;
       s.frame++;
 
       // Physics
       if (!s.onGround) {
-        s.velY += gravity * dtMul;
-        s.monkeyY += s.velY * dtMul;
+        s.velY += gravity;
+        s.monkeyY += s.velY;
         if (s.monkeyY >= 0) {
           s.monkeyY = 0;
           s.velY = 0;
@@ -5552,13 +5549,13 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
       }
 
       // Move world
-      s.distance += s.speed * dtMul;
-      s.cloudOffset = (s.cloudOffset + s.speed * 0.1 * dtMul) % size.w;
-      s.mountainOffset = (s.mountainOffset + s.speed * 0.3 * dtMul) % size.w;
-      s.groundOffset = (s.groundOffset + s.speed * dtMul) % 30;
+      s.distance += s.speed;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.1) % size.w;
+      s.mountainOffset = (s.mountainOffset + s.speed * 0.3) % size.w;
+      s.groundOffset = (s.groundOffset + s.speed) % 30;
 
       // Move obstacles
-      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed * dtMul }));
+      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed }));
 
       // Check passed obstacles
       s.obstacles.forEach(o => {
@@ -5580,7 +5577,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
       s.obstacles = s.obstacles.filter(o => o.x + o.w > -10);
 
       // Spawn obstacles
-      s.nextSpawnIn -= dtMul;
+      s.nextSpawnIn--;
       if (s.nextSpawnIn <= 0) {
         const obs = RUNNER_OBSTACLES[Math.floor(Math.random() * RUNNER_OBSTACLES.length)];
         s.obstacles.push({
@@ -5593,8 +5590,8 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
         s.nextSpawnIn = 60 + Math.floor(Math.random() * 60) - Math.min(20, s.speed * 2);
       }
 
-      // Speed up gradually — starts brisk (9), caps at 18
-      s.speed = Math.min(18, 9 + s.distance * 0.0012);
+      // Speed up gradually — starts fast (7), caps at 16
+      s.speed = Math.min(16, 7 + s.distance * 0.0012);
 
       // Decrease hurt
       if (s.hurt > 0) s.hurt--;
@@ -5814,7 +5811,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const resumedScore = scoreRef.current;
     stateRef.current = {
       monkeyY: 0, velY: 0, onGround: true,
-      obstacles: [], speed: 9, distance: 0,
+      obstacles: [], speed: 7, distance: 0,
       obstaclesPassed: resumedQs * 5,
       cloudOffset: 0, mountainOffset: 0, groundOffset: 0,
       nextSpawnIn: 60, frame: 0, paused: false, hurt: 0,
@@ -6066,7 +6063,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     monkeyY: 0, // px from canvas top
     velY: 0,
     pipes: [], // {x, gapY, gapH, scored}
-    speed: 4.5,
+    speed: 3,
     distance: 0,
     pipesPassed: (savedProgress?.questionsAnswered || 0) * 4,
     cloudOffset: 0,
@@ -6137,16 +6134,13 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const loop = (now) => {
       const dt = Math.min(50, now - lastTime);
       lastTime = now;
-      // Frame-rate independent: scale all per-frame motion by dt relative to a 60fps baseline (~16.67ms).
-      // Capped at 3x to prevent giant leaps after tab-switching or stalls.
-      const dtMul = Math.min(3, dt / 16.67);
       const s = stateRef.current;
       s.frame++;
 
       // Physics
-      s.velY = Math.min(maxVy, s.velY + gravity * dtMul);
-      s.monkeyY += s.velY * dtMul;
-      if (s.flapAnim > 0) s.flapAnim -= dtMul;
+      s.velY = Math.min(maxVy, s.velY + gravity);
+      s.monkeyY += s.velY;
+      if (s.flapAnim > 0) s.flapAnim--;
 
       // Boundaries
       const groundY = size.h - 24;
@@ -6162,12 +6156,12 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
       }
 
       // Move world
-      s.distance += s.speed * dtMul;
-      s.cloudOffset = (s.cloudOffset + s.speed * 0.15 * dtMul) % size.w;
-      s.iceShelfOffset = (s.iceShelfOffset + s.speed * dtMul) % 40;
+      s.distance += s.speed;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.15) % size.w;
+      s.iceShelfOffset = (s.iceShelfOffset + s.speed) % 40;
 
       // Move pipes
-      s.pipes = s.pipes.map(p => ({ ...p, x: p.x - s.speed * dtMul }));
+      s.pipes = s.pipes.map(p => ({ ...p, x: p.x - s.speed }));
 
       // Check passed pipes
       s.pipes.forEach(p => {
@@ -6187,7 +6181,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
       s.pipes = s.pipes.filter(p => p.x + p.w > -10);
 
       // Spawn new pipes
-      s.nextSpawnIn -= dtMul;
+      s.nextSpawnIn--;
       if (s.nextSpawnIn <= 0) {
         const gapH = Math.max(110, size.h * 0.34);
         const minGapY = 30;
@@ -6205,10 +6199,10 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
         s.nextSpawnIn = Math.max(70, 130 - Math.floor(s.speed * 6));
       }
 
-      // Speed up gradually — starts brisker (4.5), caps at 8.5
-      s.speed = Math.min(8.5, 4.5 + s.distance * 0.0006);
+      // Speed up gradually
+      s.speed = Math.min(6, 3 + s.distance * 0.0006);
 
-      if (s.hurt > 0) s.hurt -= dtMul;
+      if (s.hurt > 0) s.hurt--;
 
       // Collision detection
       const monkeyBox = {
@@ -6497,7 +6491,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const resumedScore = scoreRef.current;
     stateRef.current = {
       monkeyY: size.h * 0.4, velY: 0,
-      pipes: [], speed: 4.5, distance: 0,
+      pipes: [], speed: 3, distance: 0,
       pipesPassed: resumedQs * pipesPerCheckpoint,
       cloudOffset: 0, iceShelfOffset: 0,
       nextSpawnIn: 80, frame: 0, paused: false, hurt: 0, flapAnim: 0,
