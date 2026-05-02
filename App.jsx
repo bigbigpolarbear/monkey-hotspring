@@ -517,13 +517,13 @@ function getPetAccessoryBySlot(equippedIds, slot) {
 
 /* ─── STREAK LEVELS ─── each level gives the monkey visual upgrades */
 const STREAK_LEVELS = [
-  { days: 0,   id: "sprout",    name: "Sprout",    icon: "🌱", color: "#7cc080", desc: "Just getting started!" },
-  { days: 3,   id: "bronze",    name: "Bronze",    icon: "🥉", color: "#cd7f32", desc: "Three days strong!" },
-  { days: 7,   id: "silver",    name: "Silver",    icon: "🥈", color: "#c0c0c0", desc: "A whole week!" },
-  { days: 14,  id: "gold",      name: "Gold",      icon: "🥇", color: "#edb830", desc: "Two weeks of glory!" },
-  { days: 30,  id: "crystal",   name: "Crystal",   icon: "💎", color: "#7adcdc", desc: "A full month!" },
-  { days: 60,  id: "rainbow",   name: "Rainbow",   icon: "🌈", color: "#ff80c0", desc: "Two months — incredible!" },
-  { days: 100, id: "legendary", name: "Legendary", icon: "⭐", color: "#ff6020", desc: "100 days! A legend!" },
+  { days: 0,   id: "sprout",    name: "Sprout",    icon: "🌱", color: "#7cc080", glow: "#a8e8b8", desc: "Just getting started!" },
+  { days: 3,   id: "bronze",    name: "Bronze",    icon: "🥉", color: "#ff9050", glow: "#ffc890", desc: "Three days strong!" },
+  { days: 7,   id: "silver",    name: "Silver",    icon: "🥈", color: "#b8d4e8", glow: "#e0eef8", desc: "A whole week!" },
+  { days: 14,  id: "gold",      name: "Gold",      icon: "🥇", color: "#ffc430", glow: "#fff080", desc: "Two weeks of glory!" },
+  { days: 30,  id: "crystal",   name: "Crystal",   icon: "💎", color: "#5ac8e8", glow: "#a0e8f0", desc: "A full month!" },
+  { days: 60,  id: "rainbow",   name: "Rainbow",   icon: "🌈", color: "#ff80c0", glow: "#ffb0d8", desc: "Two months — incredible!" },
+  { days: 100, id: "legendary", name: "Legendary", icon: "⭐", color: "#ff6020", glow: "#ffd080", desc: "100 days! A legend!" },
 ];
 
 function getStreakLevel(streak) {
@@ -2654,12 +2654,18 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         {streakLevel !== "sprout" && (() => {
           const lvl = STREAK_LEVELS.find(l => l.id === streakLevel);
           if (!lvl) return null;
+          const gradId = `streakGrad-${streakLevel}-${variant}`;
+          const haloId = `streakHalo-${streakLevel}-${variant}`;
           return (
             <g style={{ pointerEvents: "none" }}>
               <style>{`
                 @keyframes streakPulse-${streakLevel} {
-                  0%, 100% { opacity: 0.35; transform: scale(1); }
-                  50% { opacity: 0.55; transform: scale(1.08); }
+                  0%, 100% { opacity: 0.45; transform: scale(1); }
+                  50% { opacity: 0.75; transform: scale(1.06); }
+                }
+                @keyframes streakBreathe-${streakLevel} {
+                  0%, 100% { opacity: 0.25; }
+                  50% { opacity: 0.55; }
                 }
                 @keyframes streakRotate-${streakLevel} {
                   0% { transform: rotate(0deg); }
@@ -2669,84 +2675,124 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
                   0%, 100% { opacity: 0; transform: scale(0.5); }
                   50% { opacity: 1; transform: scale(1.2); }
                 }
+                @keyframes streakDrift-${streakLevel} {
+                  0% { transform: translateY(0px); opacity: 0; }
+                  20% { opacity: 1; }
+                  80% { opacity: 1; }
+                  100% { transform: translateY(-14px); opacity: 0; }
+                }
               `}</style>
-              {/* Outer aura glow */}
-              <ellipse cx="0" cy="-10" rx="48" ry="55" fill={lvl.color} opacity="0.18"
-                style={{ animation: `streakPulse-${streakLevel} 2.5s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
-              {/* Inner aura */}
-              <ellipse cx="0" cy="-10" rx="38" ry="44" fill={lvl.color} opacity="0.12" />
 
-              {/* Bronze: subtle warm shimmer */}
+              {/* Radial gradient definitions — bright glow at center, fades outward */}
+              <defs>
+                <radialGradient id={gradId} cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor={lvl.glow} stopOpacity="0.85" />
+                  <stop offset="40%" stopColor={lvl.color} stopOpacity="0.55" />
+                  <stop offset="75%" stopColor={lvl.color} stopOpacity="0.18" />
+                  <stop offset="100%" stopColor={lvl.color} stopOpacity="0" />
+                </radialGradient>
+                <radialGradient id={haloId} cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="white" stopOpacity="0" />
+                  <stop offset="60%" stopColor={lvl.glow} stopOpacity="0.0" />
+                  <stop offset="80%" stopColor={lvl.color} stopOpacity="0.5" />
+                  <stop offset="92%" stopColor={lvl.glow} stopOpacity="0.85" />
+                  <stop offset="100%" stopColor={lvl.color} stopOpacity="0" />
+                </radialGradient>
+              </defs>
+
+              {/* Outer soft cloud — gentle breathing glow */}
+              <ellipse cx="0" cy="-8" rx="58" ry="68" fill={`url(#${gradId})`}
+                style={{ animation: `streakBreathe-${streakLevel} 3s ease-in-out infinite`, transformOrigin: "0px -8px" }} />
+
+              {/* Halo ring — bright edge glow */}
+              <ellipse cx="0" cy="-8" rx="48" ry="56" fill={`url(#${haloId})`}
+                style={{ animation: `streakPulse-${streakLevel} 2.5s ease-in-out infinite`, transformOrigin: "0px -8px" }} />
+
+              {/* Bronze: warm copper sparkles + drifting embers */}
               {streakLevel === "bronze" && (
                 <>
-                  <circle cx="-30" cy="-25" r="1.5" fill="#d4a060" opacity="0.8"
-                    style={{ animation: `streakSparkle-bronze 2s ease-in-out infinite` }} />
-                  <circle cx="32" cy="-15" r="1.5" fill="#d4a060" opacity="0.8"
-                    style={{ animation: `streakSparkle-bronze 2s ease-in-out 0.7s infinite` }} />
-                </>
-              )}
-
-              {/* Silver: floating sparkles */}
-              {streakLevel === "silver" && [
-                {x: -34, y: -20, d: 0}, {x: 32, y: -28, d: 0.5}, {x: -28, y: 8, d: 1}, {x: 30, y: 5, d: 1.5}
-              ].map((s, i) => (
-                <g key={i} style={{ animation: `streakSparkle-silver 1.8s ease-in-out ${s.d}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
-                  <path d={`M ${s.x} ${s.y - 3} L ${s.x + 1} ${s.y} L ${s.x + 3} ${s.y + 1} L ${s.x + 1} ${s.y + 2} L ${s.x} ${s.y + 5} L ${s.x - 1} ${s.y + 2} L ${s.x - 3} ${s.y + 1} L ${s.x - 1} ${s.y} Z`} fill="#e8e8e8" />
-                </g>
-              ))}
-
-              {/* Gold: golden sparkles + crown circle */}
-              {streakLevel === "gold" && (
-                <>
-                  <circle cx="0" cy="-50" r="32" fill="none" stroke="#edb830" strokeWidth="0.8" strokeDasharray="3 4" opacity="0.6"
-                    style={{ animation: `streakRotate-gold 12s linear infinite`, transformOrigin: "0 -10px" }} />
-                  {[{x: -38, y: -28}, {x: 38, y: -28}, {x: -42, y: 5}, {x: 42, y: 5}, {x: 0, y: -55}].map((s, i) => (
-                    <text key={i} x={s.x} y={s.y} fontSize="11" fill="#edb830" textAnchor="middle"
-                      style={{ animation: `streakSparkle-gold 2s ease-in-out ${i * 0.3}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>✦</text>
+                  {[{x: -34, y: -22, d: 0}, {x: 36, y: -18, d: 0.5}, {x: -30, y: 8, d: 1.0}, {x: 32, y: 12, d: 1.4}].map((s, i) => (
+                    <g key={i} style={{ animation: `streakSparkle-bronze 2s ease-in-out ${s.d}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                      <circle cx={s.x} cy={s.y} r="2" fill={lvl.glow} />
+                      <circle cx={s.x} cy={s.y} r="1" fill="#ffe4c0" />
+                    </g>
+                  ))}
+                  {/* Drifting embers */}
+                  {[{x: -24, d: 0}, {x: 26, d: 1.2}].map((e, i) => (
+                    <circle key={`e${i}`} cx={e.x} cy="20" r="1.2" fill="#ffb070"
+                      style={{ animation: `streakDrift-bronze 2.4s ease-out ${e.d}s infinite`, transformOrigin: `${e.x}px 20px` }} />
                   ))}
                 </>
               )}
 
-              {/* Crystal: ethereal blue glow + ice crystals */}
-              {streakLevel === "crystal" && (
+              {/* Silver: shimmering moonlit sparkles */}
+              {streakLevel === "silver" && (
                 <>
-                  <ellipse cx="0" cy="-10" rx="55" ry="62" fill="none" stroke="#7adcdc" strokeWidth="1" opacity="0.5"
-                    style={{ animation: `streakPulse-crystal 2s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
-                  {[{x: -40, y: -30, r: 0}, {x: 42, y: -32, r: 30}, {x: -45, y: 10, r: 60}, {x: 45, y: 8, r: 90}, {x: 0, y: -58, r: 45}].map((s, i) => (
-                    <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.r})`}
-                      style={{ animation: `streakSparkle-crystal 2.5s ease-in-out ${i * 0.4}s infinite` }}>
-                      <path d="M 0 -5 L 1 0 L 0 5 L -1 0 Z M -5 0 L 0 1 L 5 0 L 0 -1 Z" fill="#7adcdc" stroke="#a0e8e8" strokeWidth="0.4" />
+                  {[{x: -34, y: -20, d: 0}, {x: 32, y: -28, d: 0.5}, {x: -28, y: 8, d: 1}, {x: 30, y: 5, d: 1.5}, {x: 0, y: -52, d: 0.8}].map((s, i) => (
+                    <g key={i} style={{ animation: `streakSparkle-silver 1.8s ease-in-out ${s.d}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                      <path d={`M ${s.x} ${s.y - 4} L ${s.x + 1.2} ${s.y - 0.5} L ${s.x + 4} ${s.y} L ${s.x + 1.2} ${s.y + 0.5} L ${s.x} ${s.y + 4} L ${s.x - 1.2} ${s.y + 0.5} L ${s.x - 4} ${s.y} L ${s.x - 1.2} ${s.y - 0.5} Z`} fill="#fcfcff" stroke="#d8e8f5" strokeWidth="0.3" />
                     </g>
                   ))}
                 </>
               )}
 
-              {/* Rainbow: colorful aura + rainbow sparkles */}
-              {streakLevel === "rainbow" && (
+              {/* Gold: warm golden sparkles + orbiting ring */}
+              {streakLevel === "gold" && (
                 <>
-                  {["#ff6080", "#ffa040", "#edb830", "#5caa5e", "#5a8fc7", "#a060c0"].map((color, i) => (
-                    <ellipse key={i} cx="0" cy="-10" rx={50 - i * 4} ry={56 - i * 4} fill="none" stroke={color} strokeWidth="0.8" opacity="0.4"
-                      style={{ animation: `streakRotate-rainbow ${15 + i * 2}s linear ${i % 2 ? "reverse" : "normal"} infinite`, transformOrigin: "0 -10px" }} />
-                  ))}
-                  {[{x: -38, y: -25, c: "#ff6080"}, {x: 40, y: -30, c: "#5caa5e"}, {x: -42, y: 8, c: "#5a8fc7"}, {x: 42, y: 5, c: "#a060c0"}, {x: 0, y: -58, c: "#edb830"}].map((s, i) => (
-                    <text key={i} x={s.x} y={s.y} fontSize="12" fill={s.c} textAnchor="middle"
-                      style={{ animation: `streakSparkle-rainbow 1.6s ease-in-out ${i * 0.25}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>✦</text>
+                  <ellipse cx="0" cy="-10" rx="42" ry="48" fill="none" stroke="#ffd860" strokeWidth="1" strokeDasharray="3 5" opacity="0.7"
+                    style={{ animation: `streakRotate-gold 14s linear infinite`, transformOrigin: "0 -10px" }} />
+                  {[{x: -38, y: -28}, {x: 38, y: -28}, {x: -42, y: 5}, {x: 42, y: 5}, {x: 0, y: -55}].map((s, i) => (
+                    <g key={i} style={{ animation: `streakSparkle-gold 2s ease-in-out ${i * 0.3}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                      <text x={s.x} y={s.y} fontSize="13" fill="#ffd040" textAnchor="middle" stroke="#a07810" strokeWidth="0.2">✦</text>
+                    </g>
                   ))}
                 </>
               )}
 
-              {/* Legendary: cosmic halo + stars */}
+              {/* Crystal: ice-blue ethereal halo + crystal shards */}
+              {streakLevel === "crystal" && (
+                <>
+                  <ellipse cx="0" cy="-10" rx="55" ry="62" fill="none" stroke="#a8e8f0" strokeWidth="1" opacity="0.6"
+                    style={{ animation: `streakPulse-crystal 2.4s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
+                  <ellipse cx="0" cy="-10" rx="48" ry="55" fill="none" stroke="#5ac8e8" strokeWidth="0.5" strokeDasharray="2 4" opacity="0.6"
+                    style={{ animation: `streakRotate-crystal 18s linear infinite`, transformOrigin: "0 -10px" }} />
+                  {[{x: -40, y: -30, r: 0}, {x: 42, y: -32, r: 30}, {x: -45, y: 10, r: 60}, {x: 45, y: 8, r: 90}, {x: 0, y: -58, r: 45}].map((s, i) => (
+                    <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.r})`}
+                      style={{ animation: `streakSparkle-crystal 2.5s ease-in-out ${i * 0.4}s infinite` }}>
+                      <path d="M 0 -5 L 1 0 L 0 5 L -1 0 Z M -5 0 L 0 1 L 5 0 L 0 -1 Z" fill="#bfeff5" stroke="#5ac8e8" strokeWidth="0.4" />
+                    </g>
+                  ))}
+                </>
+              )}
+
+              {/* Rainbow: gentle color rings + rainbow sparkles */}
+              {streakLevel === "rainbow" && (
+                <>
+                  {["#ff6080", "#ffa040", "#ffd040", "#5caa5e", "#5a8fc7", "#a060c0"].map((color, i) => (
+                    <ellipse key={i} cx="0" cy="-10" rx={50 - i * 4} ry={56 - i * 4} fill="none" stroke={color} strokeWidth="0.9" opacity="0.45"
+                      style={{ animation: `streakRotate-rainbow ${15 + i * 2}s linear ${i % 2 ? "reverse" : "normal"} infinite`, transformOrigin: "0 -10px" }} />
+                  ))}
+                  {[{x: -38, y: -25, c: "#ff6080"}, {x: 40, y: -30, c: "#5caa5e"}, {x: -42, y: 8, c: "#5a8fc7"}, {x: 42, y: 5, c: "#a060c0"}, {x: 0, y: -58, c: "#ffd040"}].map((s, i) => (
+                    <g key={i} style={{ animation: `streakSparkle-rainbow 1.6s ease-in-out ${i * 0.25}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                      <text x={s.x} y={s.y} fontSize="13" fill={s.c} textAnchor="middle">✦</text>
+                    </g>
+                  ))}
+                </>
+              )}
+
+              {/* Legendary: cosmic stars + dual-color halo */}
               {streakLevel === "legendary" && (
                 <>
-                  <ellipse cx="0" cy="-10" rx="60" ry="68" fill="none" stroke="#ff6020" strokeWidth="1.5" opacity="0.5"
-                    style={{ animation: `streakPulse-legendary 1.5s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
-                  <ellipse cx="0" cy="-10" rx="52" ry="58" fill="none" stroke="#edb830" strokeWidth="1" opacity="0.6"
-                    style={{ animation: `streakRotate-legendary 8s linear infinite`, transformOrigin: "0 -10px" }} strokeDasharray="6 8" />
-                  <ellipse cx="0" cy="-10" rx="44" ry="50" fill="none" stroke="#fff" strokeWidth="0.6" opacity="0.5"
-                    style={{ animation: `streakRotate-legendary 6s linear reverse infinite`, transformOrigin: "0 -10px" }} strokeDasharray="2 6" />
+                  <ellipse cx="0" cy="-10" rx="62" ry="70" fill="none" stroke="#ff8030" strokeWidth="1.5" opacity="0.55"
+                    style={{ animation: `streakPulse-legendary 1.8s ease-in-out infinite`, transformOrigin: "0px -10px" }} />
+                  <ellipse cx="0" cy="-10" rx="52" ry="58" fill="none" stroke="#ffd060" strokeWidth="1" opacity="0.7" strokeDasharray="6 8"
+                    style={{ animation: `streakRotate-legendary 8s linear infinite`, transformOrigin: "0 -10px" }} />
+                  <ellipse cx="0" cy="-10" rx="44" ry="50" fill="none" stroke="#ffffff" strokeWidth="0.6" opacity="0.55" strokeDasharray="2 6"
+                    style={{ animation: `streakRotate-legendary 6s linear reverse infinite`, transformOrigin: "0 -10px" }} />
                   {[{x: -45, y: -28}, {x: 47, y: -32}, {x: -48, y: 8}, {x: 48, y: 6}, {x: 0, y: -62}, {x: -25, y: -55}, {x: 25, y: -55}].map((s, i) => (
-                    <text key={i} x={s.x} y={s.y} fontSize="14" fill={i % 2 ? "#ff6020" : "#edb830"} textAnchor="middle" fontWeight="bold"
-                      style={{ animation: `streakSparkle-legendary 1.8s ease-in-out ${i * 0.2}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>⭐</text>
+                    <g key={i} style={{ animation: `streakSparkle-legendary 1.8s ease-in-out ${i * 0.2}s infinite`, transformOrigin: `${s.x}px ${s.y}px` }}>
+                      <text x={s.x} y={s.y} fontSize="14" fill={i % 2 ? "#ff8030" : "#ffd060"} textAnchor="middle" fontWeight="bold">⭐</text>
+                    </g>
                   ))}
                 </>
               )}
@@ -7622,6 +7668,19 @@ function SnowMonkeyTrackerInner() {
   };
   const themeIcon = themeMode === "dark" ? "🌈" : themeMode === "rainbow" ? "☀️" : "🌙";
   const themeTitle = themeMode === "dark" ? "Switch to rainbow mode" : themeMode === "rainbow" ? "Switch to light mode" : "Switch to dark mode";
+  // Show/hide student names on the main scene — persisted across sessions
+  const [showNames, setShowNamesState] = useState(() => {
+    try {
+      const stored = localStorage.getItem("monkeyTracker_showNames");
+      return stored === null ? true : stored === "true";
+    } catch { return true; }
+  });
+  const toggleShowNames = () => {
+    const next = !showNames;
+    setShowNamesState(next);
+    try { localStorage.setItem("monkeyTracker_showNames", String(next)); } catch {}
+    SFX.click();
+  };
 
   useEffect(() => {
     (async () => {
@@ -8512,6 +8571,15 @@ function SnowMonkeyTrackerInner() {
               }}>
               {soundOn ? "🔊" : "🔇"}
             </button>
+            <button onClick={toggleShowNames}
+              title={showNames ? "Hide names" : "Show names"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {showNames ? "🏷️" : "🚫"}
+            </button>
             {[
               { label: "📋 Manage", active: showManage, fn: () => { SFX.click(); setShowManage(!showManage); setShowAddStudent(false); }, c: C.accent },
               { label: "➕ Add", active: showAddStudent, fn: () => { SFX.click(); setShowAddStudent(!showAddStudent); setShowManage(false); }, c: C.green },
@@ -8821,7 +8889,7 @@ function SnowMonkeyTrackerInner() {
               const pos = monkeyPositions[i % monkeyPositions.length];
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: 15 }}>
-                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={s.name} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} petAccessories={s.petAccessories || []} ownedPets={s.ownedPets || []} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
+                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={showNames ? s.name : null} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} petAccessories={s.petAccessories || []} ownedPets={s.ownedPets || []} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
                 </div>
               );
             })}
@@ -9140,6 +9208,15 @@ function SnowMonkeyTrackerInner() {
                 fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
               }}>
               {soundOn ? "🔊" : "🔇"}
+            </button>
+            <button onClick={toggleShowNames}
+              title={showNames ? "Hide names" : "Show names"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {showNames ? "🏷️" : "🚫"}
             </button>
             <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
           </div>
@@ -10161,7 +10238,7 @@ function SnowMonkeyTrackerInner() {
                   <MonkeySVG
                     size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110}
                     mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
-                    label={s.name} points={s.points}
+                    label={showNames ? s.name : null} points={s.points}
                     delay={i * 0.4} variant={i}
                     accessories={s.accessories || []}
                     pet={s.pet}
