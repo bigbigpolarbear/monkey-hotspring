@@ -1,9 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
-import {
-  getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent, addTeacherToDB,
-  setQuizzesForStudent, deleteQuizzesForStudent, getQuizzes,
-  setMissionsForStudent, deleteMissionsForStudent, getMissions
-} from "./firebase";
 
 /* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
 const HoverContext = createContext({ anyHovering: false, setAnyHovering: () => {} });
@@ -83,10 +78,14 @@ function setTheme(mode) {
   try { if (typeof localStorage !== "undefined") localStorage.setItem("monkeyTracker_theme", _themeMode); } catch {}
 }
 
-/* ─── Firebase helpers ─── */
-// Firebase functions are imported from ./firebase.js
-// Teachers and Students are stored in Firestore, Quizzes are in collections
-const DEFAULT_TEACHERS = [];
+/* ─── storage ─── */
+async function loadData(key, fb) {
+  try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : fb; } catch { return fb; }
+}
+async function saveData(key, v) {
+  try { await window.storage.set(key, JSON.stringify(v)); } catch (e) { console.error(e); }
+}
+const DEFAULT_TEACHERS = [{ id: "t1", username: "teacher", password: "1234", name: "Teacher" }];
 
 /* ─── daily wordle words (kid-friendly 5-letter) ─── */
 const WORDS = [
@@ -146,6 +145,7 @@ function WatercolorFilters() {
     </svg>
   );
 }
+
 
 // Global keyframes for rainbow mode animation - lives once in the document
 function GlobalKeyframes() {
@@ -354,7 +354,6 @@ function getNextIncomeDate(student) {
   return new Date(last + 7 * 24 * 60 * 60 * 1000);
 }
 
-
 /* ─── ACCESSORIES ─── catalog of items students can equip
    slot: "head" (only one) | "face" | "neck" | "hold" (held in hand) | "back" | "body"
    Free items have price 0. Paid items cost stars.
@@ -488,13 +487,6 @@ function getStreakLevel(streak) {
   return level;
 }
 
-function getNextStreakLevel(streak) {
-  for (const lvl of STREAK_LEVELS) {
-    if (streak < lvl.days) return lvl;
-  }
-  return null; // Max level
-}
-
 /* ─── COMPLETIONS / MESSAGE GENERATION ───
    student.completions = {
      "quiz:abc": { type, name, attempts, lastScore, total, bestScore, lastAttempt, totalEarned, completed }
@@ -567,6 +559,13 @@ function getTeacherUpdate(students) {
   }
 }
 
+function getNextStreakLevel(streak) {
+  for (const lvl of STREAK_LEVELS) {
+    if (streak < lvl.days) return lvl;
+  }
+  return null; // Max level
+}
+
 /* ─── EXAM COUNTDOWN HELPERS ─── */
 // Compute time remaining until an exam date.
 // Returns { passed, days, hours, minutes, seconds, totalMs }
@@ -617,7 +616,7 @@ function getQuotePool(student) {
   return [...tq, ...pq];
 }
 
-
+/* ─── SOUND SYSTEM ─── lazy Web Audio, works on iPad/iPhone/desktop */
 let _audioCtx = null;
 let _soundsEnabled = true;
 const SFX_KEY = "monkeyTracker_soundsEnabled";
@@ -1110,7 +1109,6 @@ function QuoteInput({ onAdd, placeholder = "Add an inspirational quote...", colo
     </div>
   );
 }
-
 /* ─── EXAM COUNTDOWN PANEL ─── collapsible left-side widget showing nearest exam
    with live HH:MM:SS countdown and rotating motivational quotes.
 */
@@ -2046,7 +2044,6 @@ function WalkGame({ student, onClose, onComplete }) {
       const bobY = s.petY + Math.sin(s.frame * 0.15) * 2;
       s.renderedPetY = bobY;
       if (petOverlayRef.current) {
-        // map canvas-Y to overlay percentage of canvas height
         petOverlayRef.current.style.top = `${(bobY / size.h) * 100}%`;
       }
 
@@ -2804,7 +2801,7 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           </g>
         )}
 
-        {/* ─── 50+ NEW ACCESSORY RENDERS ─── hand-drawn watercolor style */}
+{/* ─── 50+ NEW ACCESSORY RENDERS ─── hand-drawn watercolor style */}
 
         {/* === FREE HEAD ITEMS === */}
         {accessories.includes("partyhat") && (
@@ -3975,8 +3972,6 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
   const frameRef = useRef(0);
   const pausedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
-  // baseY is the current "lane" — changes when the penguin wraps off-screen so they
-  // don't always traverse on the same horizontal line (more natural variation)
   const stateRef = useRef({ x: startX, y: startY, baseY: startY, dir: variant % 2 === 0 ? 1 : -1, t: variant * 100 });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
@@ -3990,23 +3985,18 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
       if (!pausedRef.current) {
         const s = stateRef.current;
         s.t += dt;
-        // Move horizontally
         s.x += s.dir * speed * 12 * dt;
-        // Wrap around the screen — fly fully off-screen, then re-enter from the opposite side.
-        // Pick a fresh vertical "lane" each time they wrap so flights look varied, not on rails.
+        // Wrap fully off-screen, re-enter from the other side with a fresh vertical lane
         if (s.x > 112) {
           s.x = -12;
-          s.baseY = 8 + Math.random() * 18; // 8-26% from top (sky/upper area)
+          s.baseY = 8 + Math.random() * 18;
         } else if (s.x < -12) {
           s.x = 112;
           s.baseY = 8 + Math.random() * 18;
         }
-        // Occasional random direction reversal (mid-flight) so they're not too predictable
         if (Math.random() < 0.001) { s.dir = -s.dir; setDirection(s.dir); }
-        // Slight vertical drift around the current lane
         const newY = s.baseY + Math.sin(s.t * 0.4 + variant) * 1.5;
         setPos({ x: s.x, y: newY });
-        // Waddle (side-to-side wobble)
         setWaddle(Math.sin(s.t * 6) * 6);
       }
       frameRef.current = requestAnimationFrame(animate);
@@ -4015,7 +4005,6 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
     return () => { running = false; cancelAnimationFrame(frameRef.current); };
   }, [startY, speed, variant]);
 
-  // Hide bubble while off-screen (would float in the void otherwise)
   const onScreen = pos.x > -2 && pos.x < 102;
 
   return (
@@ -4040,34 +4029,70 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
         pointerEvents: "none", zIndex: 6,
       }}>
         <svg width={baseSize} height={baseSize * 1.3} viewBox="-25 -30 50 65" style={{ overflow: "visible" }}>
-          {/* Feet */}
-          <ellipse cx={-6 + waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
-          <ellipse cx={6 - waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
-          {/* Body - black back */}
-          <ellipse cx="0" cy="6" rx="14" ry="20" fill="#2a2a2a" filter="url(#watercolorSoft)" />
-          {/* White belly */}
-          <ellipse cx="0" cy="8" rx="10" ry="16" fill="#f5f0ea" filter="url(#watercolorSoft)" />
-          {/* Wings */}
-          <ellipse cx={-13 + waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
-            transform={`rotate(${waddle * 0.5} -13 6)`} />
-          <ellipse cx={13 - waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
-            transform={`rotate(${-waddle * 0.5} 13 6)`} />
-          {/* Head */}
-          <ellipse cx="0" cy="-12" rx="11" ry="11" fill="#2a2a2a" filter="url(#watercolorSoft)" />
-          {/* Face - white area */}
-          <ellipse cx="0" cy="-10" rx="7" ry="6" fill="#f5f0ea" />
-          {/* Eyes */}
-          <circle cx="-3" cy="-13" r="1.2" fill="#1a1a1a" />
-          <circle cx="3" cy="-13" r="1.2" fill="#1a1a1a" />
-          <circle cx="-2.5" cy="-13.5" r="0.4" fill="white" />
-          <circle cx="3.5" cy="-13.5" r="0.4" fill="white" />
-          {/* Beak */}
-          <path d="M -2 -8 L 0 -5 L 2 -8 Z" fill="#e89020" />
-          {/* Cheek blush */}
+        {/* Feet */}
+        <ellipse cx={-6 + waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
+        <ellipse cx={6 - waddle * 0.3} cy="26" rx="4" ry="2.5" fill="#e89020" filter="url(#watercolorSoft)" />
+        {/* Body - black back */}
+        <ellipse cx="0" cy="6" rx="14" ry="20" fill="#2a2a2a" filter="url(#watercolorSoft)" />
+        {/* White belly */}
+        <ellipse cx="0" cy="8" rx="10" ry="16" fill="#f5f0ea" filter="url(#watercolorSoft)" />
+        {/* Wings */}
+        <ellipse cx={-13 + waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
+          transform={`rotate(${waddle * 0.5} -13 6)`} />
+        <ellipse cx={13 - waddle * 0.4} cy="6" rx="4" ry="12" fill="#1a1a1a" filter="url(#watercolorSoft)"
+          transform={`rotate(${-waddle * 0.5} 13 6)`} />
+        {/* Head */}
+        <ellipse cx="0" cy="-12" rx="11" ry="11" fill="#2a2a2a" filter="url(#watercolorSoft)" />
+        {/* Face - white area */}
+        <ellipse cx="0" cy="-10" rx="7" ry="6" fill="#f5f0ea" />
+        {/* Eyes */}
+        <circle cx="-3" cy="-13" r="1.2" fill="#1a1a1a" />
+        <circle cx="3" cy="-13" r="1.2" fill="#1a1a1a" />
+        <circle cx="-2.5" cy="-13.5" r="0.4" fill="white" />
+        <circle cx="3.5" cy="-13.5" r="0.4" fill="white" />
+        {/* Beak */}
+        <path d="M -2 -8 L 0 -5 L 2 -8 Z" fill="#e89020" />
+        {/* Cheek blush */}
           <circle cx="-5" cy="-9" r="1.5" fill="#ffb0b0" opacity="0.5" />
           <circle cx="5" cy="-9" r="1.5" fill="#ffb0b0" opacity="0.5" />
         </svg>
       </div>
+    </>
+  );
+}
+
+/* ─── PENGUIN FLOCK ─── handles a group of penguins, pauses when monkeys hovered */
+function PenguinFlock({ activeMsg }) {
+  const { anyHovering } = useContext(HoverContext);
+  const penguins = [
+    { x: 12, y: 18, size: 22, speed: 0.8, variant: 0 },
+    { x: 28, y: 14, size: 18, speed: 1.0, variant: 1 },
+    { x: 75, y: 16, size: 24, speed: 0.7, variant: 2 },
+    { x: 88, y: 22, size: 20, speed: 0.9, variant: 3 },
+    { x: 45, y: 12, size: 19, speed: 1.1, variant: 4 },
+  ];
+  return (
+    <>
+      {penguins.map((p, i) => (
+        <Penguin key={i}
+          startX={p.x} startY={p.y}
+          baseSize={p.size} speed={p.speed} variant={p.variant}
+          paused={anyHovering}
+          message={activeMsg && activeMsg.idx === i ? activeMsg.text : null}
+        />
+      ))}
+      {/* Pause indicator - subtle "shh!" effect */}
+      {anyHovering && (
+        <div style={{
+          position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)",
+          fontSize: 12, color: C.textLight, opacity: 0.5, pointerEvents: "none",
+          fontFamily: "'Patrick Hand', cursive", zIndex: 7,
+          animation: "shhFade 0.4s ease",
+        }}>
+          <style>{`@keyframes shhFade { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } to { opacity: 0.5; transform: translateX(-50%) translateY(0); } }`}</style>
+          🐧 ...the penguins are watching
+        </div>
+      )}
     </>
   );
 }
@@ -4088,7 +4113,6 @@ function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused,
   const frameRef = useRef(0);
   const pausedRef = useRef(false);
   const lastTimeRef = useRef(performance.now());
-  // baseY changes when the dragon wraps off-screen (fresh "altitude" each pass)
   const stateRef = useRef({ x: startX, y: startY, baseY: startY, dir: variant % 2 === 0 ? 1 : -1, t: variant * 100 });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
@@ -4102,22 +4126,18 @@ function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused,
       if (!pausedRef.current) {
         const s = stateRef.current;
         s.t += dt;
-        s.x += s.dir * speed * 14 * dt; // slightly faster than penguins
-        // Wrap around the screen — fly fully off-screen, then re-enter from the other side
-        // with a new vertical lane so each pass looks different
+        s.x += s.dir * speed * 14 * dt;
+        // Wrap off-screen and re-enter from the other side at a fresh altitude
         if (s.x > 112) {
           s.x = -12;
-          s.baseY = 6 + Math.random() * 22; // 6-28% from top
+          s.baseY = 6 + Math.random() * 22;
         } else if (s.x < -12) {
           s.x = 112;
           s.baseY = 6 + Math.random() * 22;
         }
-        // Occasional mid-flight reversal for variety
         if (Math.random() < 0.001) { s.dir = -s.dir; setDirection(s.dir); }
-        // Float-like vertical drift around the current lane
         const newY = s.baseY + Math.sin(s.t * 0.6 + variant) * 2.5;
         setPos({ x: s.x, y: newY });
-        // Wing flap
         setFlap(Math.sin(s.t * 7) * 1);
       }
       frameRef.current = requestAnimationFrame(animate);
@@ -4127,7 +4147,6 @@ function Dragon({ startX, startY, baseSize = 26, speed = 1, variant = 0, paused,
   }, [startY, speed, variant]);
 
   const palette = DRAGON_PALETTES[variant % DRAGON_PALETTES.length];
-  // Wing rotation based on flap
   const wingRot = flap * 25;
   const onScreen = pos.x > -2 && pos.x < 102;
 
@@ -4286,40 +4305,12 @@ function DragonFlock({ activeMsg }) {
   );
 }
 
-/* ─── BIRD FLOCK ─── auto-switches between penguins and dragons based on theme.
-   Orchestrates the speech-bubble messages — picks a random creature every 14-22s
-   to deliver a message from getMessage(), if one is available.
-*/
-function BirdFlock({ getMessage }) {
+/* ─── BIRD FLOCK ─── auto-switches between penguins and dragons based on theme */
+function BirdFlock() {
+  // Read theme directly from C — when theme changes, parent re-renders and we get the new mode
+  // Use a state to ensure we re-render on theme change
   const isRainbow = _themeMode === "rainbow";
-  const [activeMsg, setActiveMsg] = useState(null);
-  const getMessageRef = useRef(getMessage);
-  getMessageRef.current = getMessage;
-
-  useEffect(() => {
-    let nextTimeout, hideTimeout;
-    const cycle = () => {
-      const fn = getMessageRef.current;
-      const text = fn ? fn() : null;
-      if (text) {
-        // 5 creatures - pick one at random to deliver
-        setActiveMsg({ idx: Math.floor(Math.random() * 5), text });
-        hideTimeout = setTimeout(() => setActiveMsg(null), 6500);
-      }
-      // Next message in 14-22 seconds
-      nextTimeout = setTimeout(cycle, 14000 + Math.random() * 8000);
-    };
-    // First message after 5 seconds
-    nextTimeout = setTimeout(cycle, 5000);
-    return () => {
-      if (nextTimeout) clearTimeout(nextTimeout);
-      if (hideTimeout) clearTimeout(hideTimeout);
-    };
-  }, []);
-
-  return isRainbow
-    ? <DragonFlock activeMsg={activeMsg} />
-    : <PenguinFlock activeMsg={activeMsg} />;
+  return isRainbow ? <DragonFlock /> : <PenguinFlock />;
 }
 
 /* ─── WORDLE GAME COMPONENT ─── */
@@ -4376,7 +4367,6 @@ function WordleGame({ onWin, onLose, onClose }) {
     } else if (newGuesses.length >= maxGuesses) {
       SFX.gameOver();
       setGameOver(true); setMessage(`The word was ${answer}`);
-      // Lock out further attempts today
       if (onLose) setTimeout(() => onLose(), 1800);
     } else {
       SFX.click();
@@ -4403,15 +4393,9 @@ function WordleGame({ onWin, onLose, onClose }) {
   const tileColor = { correct: C.green, present: C.gold, absent: "#8a8a8a" };
   const kbRows = [["Q","W","E","R","T","Y","U","I","O","P"],["A","S","D","F","G","H","J","K","L"],["ENTER","Z","X","C","V","B","N","M","DEL"]];
 
-  // If user closes early after starting, count it as a loss (one attempt only)
   const handleEarlyClose = () => {
     if (gameOver) { onClose(); return; }
-    if (guesses.length === 0) {
-      // No guesses yet - allow free close (they haven't used their attempt)
-      onClose();
-      return;
-    }
-    // They've guessed at least once - confirm they want to forfeit
+    if (guesses.length === 0) { onClose(); return; }
     if (typeof window !== "undefined" && window.confirm("Are you sure you want to leave? This will count as your daily attempt and you won't be able to retry today!")) {
       if (onLose) onLose();
       else onClose();
@@ -4883,7 +4867,6 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
   const [monkeyHappy, setMonkeyHappy] = useState(false);
   const [finished, setFinished] = useState(false);
   const [rewarded, setRewarded] = useState(false);
-  // Track which questions were answered wrong, with the chosen answer
   const [wrongAnswers, setWrongAnswers] = useState([]);
 
   const questions = quiz?.questions || [];
@@ -4919,7 +4902,6 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
       setMonkeyShake(true);
       setShowHawk(true);
       setTimeout(() => setMonkeyShake(false), 4200);
-      // Record this wrong answer for the summary
       setWrongAnswers(w => [...w, {
         questionIdx: currentIdx,
         question: currentQ.q,
@@ -4958,8 +4940,6 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
         <div style={{ ...modalCardStyle, textAlign: "center", width: 540, maxHeight: "92vh", overflow: "auto", padding: "24px 28px" }} onClick={e => e.stopPropagation()}>
           <h2 style={{ color: C.text, margin: "0 0 4px", fontSize: 28 }}>🎉 Quiz Complete!</h2>
           <p style={{ color: C.textLight, fontSize: 16, margin: "0 0 14px" }}>{studentName} · {quiz?.name}</p>
-
-          {/* Score row */}
           <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 12, flexWrap: "wrap" }}>
             <div style={{ background: `${C.gold}15`, borderRadius: 12, padding: "10px 16px", minWidth: 100 }}>
               <div style={{ fontSize: 11, color: C.textLight, textTransform: "uppercase", letterSpacing: 0.5 }}>Score</div>
@@ -4974,12 +4954,9 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
               <div style={{ fontSize: 22, color: C.accent, fontWeight: 700 }}>+{earned} ★</div>
             </div>
           </div>
-
           <div style={{ fontSize: 18, color: pct >= 80 ? C.green : pct >= 50 ? C.gold : C.accent, fontWeight: 700, marginBottom: 14 }}>
             {pct === 100 ? "Perfect score! 🌟" : pct >= 80 ? "Amazing!" : pct >= 50 ? "Good job!" : "Keep practicing!"}
           </div>
-
-          {/* Wrong answers review */}
           {wrongAnswers.length > 0 && (
             <div style={{ textAlign: "left", marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, color: C.text, margin: "0 0 8px" }}>📝 Review ({wrongAnswers.length} wrong)</h3>
@@ -4991,12 +4968,8 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
                   }}>
                     <div style={{ fontSize: 13, color: C.textLight, marginBottom: 4 }}>Q{w.questionIdx + 1}</div>
                     <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 6 }}>{w.question}</div>
-                    <div style={{ fontSize: 13, color: C.accentDark, marginBottom: 2 }}>
-                      ❌ You chose: <strong>{w.chosenText}</strong>
-                    </div>
-                    <div style={{ fontSize: 13, color: C.green }}>
-                      ✅ Correct: <strong>{w.correctText}</strong>
-                    </div>
+                    <div style={{ fontSize: 13, color: C.accentDark, marginBottom: 2 }}>❌ You chose: <strong>{w.chosenText}</strong></div>
+                    <div style={{ fontSize: 13, color: C.green }}>✅ Correct: <strong>{w.correctText}</strong></div>
                   </div>
                 ))}
               </div>
@@ -5007,8 +4980,6 @@ function QuizGame({ studentId, studentName, quiz, onClose, onComplete, onShop })
               🌟 You aced every question!
             </div>
           )}
-
-          {/* Actions */}
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             {earned > 0 && onShop && (
               <button onClick={() => { onShop(); onClose(); }}
@@ -5495,9 +5466,9 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     velY: 0,
     onGround: true,
     obstacles: [], // {x, type, w, h, ...}
-    speed: 7,
+    speed: 9,
     distance: 0,
-    obstaclesPassed: (savedProgress?.questionsAnswered || 0) * 5, // resume checkpoint counting
+    obstaclesPassed: (savedProgress?.questionsAnswered || 0) * 5,
     cloudOffset: 0,
     mountainOffset: 0,
     groundOffset: 0,
@@ -5507,7 +5478,6 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     hurt: 0,
   });
 
-  // Seed from saved progress if the student lost previously and is resuming
   const initial = savedProgress || {};
   const [showQuestion, setShowQuestion] = useState(false);
   const [questionIdx, setQuestionIdx] = useState(0);
@@ -5520,14 +5490,11 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
   const [won, setWon] = useState(false);
   const [started, setStarted] = useState(false);
   const [rewarded, setRewarded] = useState(false);
-  const rewardedRef = useRef(false); // synchronous guard for game loop / collision callbacks
+  const rewardedRef = useRef(false);
   const [size, setSize] = useState({ w: 600, h: 240 });
   const isResuming = !!savedProgress && (savedProgress.questionsAnswered > 0 || savedProgress.score > 0);
-  // Refs that always have the latest values for use inside game-loop callbacks
   const questionsAnsweredRef = useRef(initial.questionsAnswered || 0);
   const scoreRef = useRef(initial.score || 0);
-  // Track wrong checkpoint answers for the post-mission summary
-  const [wrongAnswers, setWrongAnswers] = useState([]);
 
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
@@ -5566,13 +5533,16 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const loop = (now) => {
       const dt = Math.min(50, now - lastTime);
       lastTime = now;
+      // Frame-rate independent: scale all per-frame motion by dt relative to a 60fps baseline (~16.67ms).
+      // Capped at 3x to prevent giant leaps after tab-switching or stalls.
+      const dtMul = Math.min(3, dt / 16.67);
       const s = stateRef.current;
       s.frame++;
 
       // Physics
       if (!s.onGround) {
-        s.velY += gravity;
-        s.monkeyY += s.velY;
+        s.velY += gravity * dtMul;
+        s.monkeyY += s.velY * dtMul;
         if (s.monkeyY >= 0) {
           s.monkeyY = 0;
           s.velY = 0;
@@ -5582,13 +5552,13 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
       }
 
       // Move world
-      s.distance += s.speed;
-      s.cloudOffset = (s.cloudOffset + s.speed * 0.1) % size.w;
-      s.mountainOffset = (s.mountainOffset + s.speed * 0.3) % size.w;
-      s.groundOffset = (s.groundOffset + s.speed) % 30;
+      s.distance += s.speed * dtMul;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.1 * dtMul) % size.w;
+      s.mountainOffset = (s.mountainOffset + s.speed * 0.3 * dtMul) % size.w;
+      s.groundOffset = (s.groundOffset + s.speed * dtMul) % 30;
 
       // Move obstacles
-      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed }));
+      s.obstacles = s.obstacles.map(o => ({ ...o, x: o.x - s.speed * dtMul }));
 
       // Check passed obstacles
       s.obstacles.forEach(o => {
@@ -5610,7 +5580,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
       s.obstacles = s.obstacles.filter(o => o.x + o.w > -10);
 
       // Spawn obstacles
-      s.nextSpawnIn--;
+      s.nextSpawnIn -= dtMul;
       if (s.nextSpawnIn <= 0) {
         const obs = RUNNER_OBSTACLES[Math.floor(Math.random() * RUNNER_OBSTACLES.length)];
         s.obstacles.push({
@@ -5623,8 +5593,8 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
         s.nextSpawnIn = 60 + Math.floor(Math.random() * 60) - Math.min(20, s.speed * 2);
       }
 
-      // Speed up gradually — starts fast (7), caps at 16
-      s.speed = Math.min(16, 7 + s.distance * 0.0012);
+      // Speed up gradually — starts brisk (9), caps at 18
+      s.speed = Math.min(18, 9 + s.distance * 0.0012);
 
       // Decrease hurt
       if (s.hurt > 0) s.hurt--;
@@ -5840,13 +5810,12 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
   };
 
   const restart = () => {
-    // Resume from current progress (which may have just been saved on the previous loss)
     const resumedQs = questionsAnsweredRef.current;
     const resumedScore = scoreRef.current;
     stateRef.current = {
       monkeyY: 0, velY: 0, onGround: true,
-      obstacles: [], speed: 7, distance: 0,
-      obstaclesPassed: resumedQs * 5, // resume checkpoint counting
+      obstacles: [], speed: 9, distance: 0,
+      obstaclesPassed: resumedQs * 5,
       cloudOffset: 0, mountainOffset: 0, groundOffset: 0,
       nextSpawnIn: 60, frame: 0, paused: false, hurt: 0,
     };
@@ -5958,7 +5927,6 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
               </div>
               {won ? (
                 <>
-                  {/* Stats row */}
                   <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", justifyContent: "center" }}>
                     <div style={{ background: `${C.gold}25`, padding: "6px 12px", borderRadius: 10 }}>
                       <div style={{ fontSize: 10, color: C.textLight }}>EARNED</div>
@@ -5975,7 +5943,6 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
                       <div style={{ fontSize: 18, color: C.accent, fontWeight: 700 }}>{score}</div>
                     </div>
                   </div>
-                  {/* Wrong answers review */}
                   {wrongAnswers.length > 0 && (
                     <div style={{ width: "100%", maxWidth: 460, textAlign: "left", marginBottom: 8 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>📝 Review ({wrongAnswers.length} missed)</div>
@@ -6099,7 +6066,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     monkeyY: 0, // px from canvas top
     velY: 0,
     pipes: [], // {x, gapY, gapH, scored}
-    speed: 3,
+    speed: 4.5,
     distance: 0,
     pipesPassed: (savedProgress?.questionsAnswered || 0) * 4,
     cloudOffset: 0,
@@ -6170,13 +6137,16 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const loop = (now) => {
       const dt = Math.min(50, now - lastTime);
       lastTime = now;
+      // Frame-rate independent: scale all per-frame motion by dt relative to a 60fps baseline (~16.67ms).
+      // Capped at 3x to prevent giant leaps after tab-switching or stalls.
+      const dtMul = Math.min(3, dt / 16.67);
       const s = stateRef.current;
       s.frame++;
 
       // Physics
-      s.velY = Math.min(maxVy, s.velY + gravity);
-      s.monkeyY += s.velY;
-      if (s.flapAnim > 0) s.flapAnim--;
+      s.velY = Math.min(maxVy, s.velY + gravity * dtMul);
+      s.monkeyY += s.velY * dtMul;
+      if (s.flapAnim > 0) s.flapAnim -= dtMul;
 
       // Boundaries
       const groundY = size.h - 24;
@@ -6192,12 +6162,12 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
       }
 
       // Move world
-      s.distance += s.speed;
-      s.cloudOffset = (s.cloudOffset + s.speed * 0.15) % size.w;
-      s.iceShelfOffset = (s.iceShelfOffset + s.speed) % 40;
+      s.distance += s.speed * dtMul;
+      s.cloudOffset = (s.cloudOffset + s.speed * 0.15 * dtMul) % size.w;
+      s.iceShelfOffset = (s.iceShelfOffset + s.speed * dtMul) % 40;
 
       // Move pipes
-      s.pipes = s.pipes.map(p => ({ ...p, x: p.x - s.speed }));
+      s.pipes = s.pipes.map(p => ({ ...p, x: p.x - s.speed * dtMul }));
 
       // Check passed pipes
       s.pipes.forEach(p => {
@@ -6217,7 +6187,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
       s.pipes = s.pipes.filter(p => p.x + p.w > -10);
 
       // Spawn new pipes
-      s.nextSpawnIn--;
+      s.nextSpawnIn -= dtMul;
       if (s.nextSpawnIn <= 0) {
         const gapH = Math.max(110, size.h * 0.34);
         const minGapY = 30;
@@ -6235,10 +6205,10 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
         s.nextSpawnIn = Math.max(70, 130 - Math.floor(s.speed * 6));
       }
 
-      // Speed up gradually
-      s.speed = Math.min(6, 3 + s.distance * 0.0006);
+      // Speed up gradually — starts brisker (4.5), caps at 8.5
+      s.speed = Math.min(8.5, 4.5 + s.distance * 0.0006);
 
-      if (s.hurt > 0) s.hurt--;
+      if (s.hurt > 0) s.hurt -= dtMul;
 
       // Collision detection
       const monkeyBox = {
@@ -6527,7 +6497,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const resumedScore = scoreRef.current;
     stateRef.current = {
       monkeyY: size.h * 0.4, velY: 0,
-      pipes: [], speed: 3, distance: 0,
+      pipes: [], speed: 4.5, distance: 0,
       pipesPassed: resumedQs * pipesPerCheckpoint,
       cloudOffset: 0, iceShelfOffset: 0,
       nextSpawnIn: 80, frame: 0, paused: false, hurt: 0, flapAnim: 0,
@@ -6920,7 +6890,6 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
           return newCount;
         });
       }
-      // If wrong: don't place, lose turn
       setPendingPlacement(null);
       setSelected(null);
       setQuestionResult(null);
@@ -7173,10 +7142,10 @@ function SnowMonkeyTrackerInner() {
   const [showFoodShop, setShowFoodShop] = useState(false);
   const [showMyPool, setShowMyPool] = useState(false);
   const [showWalk, setShowWalk] = useState(false);
-  const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
-  const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
+  const [petMartTab, setPetMartTab] = useState("packs");
+  const [packResult, setPackResult] = useState(null);
   const [showCustomize, setShowCustomize] = useState(false);
-  const [customizeTab, setCustomizeTab] = useState("all"); // "all" | "owned" | "shop"
+  const [customizeTab, setCustomizeTab] = useState("all");
   const [quizzes, setQuizzes] = useState({}); // { studentId: [{id, subject, name, points, questions[]}] }
   const [missions, setMissions] = useState({}); // { studentId: [{id, name, points, questions[]}] }
   const [showQuizUpload, setShowQuizUpload] = useState(false);
@@ -7200,7 +7169,6 @@ function SnowMonkeyTrackerInner() {
   const [examDate, setExamDate] = useState("");
   const [examTime, setExamTime] = useState("09:00");
   const [examEmoji, setExamEmoji] = useState("📝");
-  // Real-time tick for countdown — updates every second
   const [, setNowTick] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
@@ -7211,15 +7179,13 @@ function SnowMonkeyTrackerInner() {
     const next = !soundOn;
     setSoundsEnabled(next);
     setSoundOn(next);
-    if (next) setTimeout(() => SFX.click(), 50); // Confirm sound is back
+    if (next) setTimeout(() => SFX.click(), 50);
   };
-  // Theme (light/dark/rainbow)
   const [themeMode, setThemeModeState] = useState(getTheme());
   const toggleTheme = () => {
-    // Cycle: light → dark → rainbow → light
     const next = themeMode === "light" ? "dark" : themeMode === "dark" ? "rainbow" : "light";
-    setTheme(next); // mutates global C
-    setThemeModeState(next); // triggers re-render
+    setTheme(next);
+    setThemeModeState(next);
     SFX.click();
   };
   const themeIcon = themeMode === "dark" ? "🌈" : themeMode === "rainbow" ? "☀️" : "🌙";
@@ -7227,86 +7193,31 @@ function SnowMonkeyTrackerInner() {
 
   useEffect(() => {
     (async () => {
-      try {
-        const t = await getTeachers();
-        const s = await getStudents();
-        const q = await getQuizzes();
-        const m = await getMissions();
-        setTeachers(t);
-        setStudents(s);
-        setQuizzes(q || {});
-        setMissions(m || {});
-      } catch (error) {
-        console.error("Failed to load data:", error);
+      const t = await loadData("monkeyTracker_teachers", DEFAULT_TEACHERS);
+      const s = await loadData("monkeyTracker_students", []);
+      const q = await loadData("monkeyTracker_quizzes", {});
+      const m = await loadData("monkeyTracker_missions", {});
+      // Migrate old quiz format to new array format
+      const qNorm = {};
+      for (const [sid, val] of Object.entries(q || {})) {
+        if (Array.isArray(val) && val.length > 0 && val[0] && val[0].q !== undefined) {
+          // Old format: array of questions directly
+          qNorm[sid] = [{ id: "default", subject: "General", name: "Quiz", points: 1, questions: val }];
+        } else {
+          qNorm[sid] = val || [];
+        }
       }
-      setLoading(false);
+      setTeachers(t); setStudents(s); setQuizzes(qNorm); setMissions(m || {}); setLoading(false);
     })();
   }, []);
 
   const persist = useCallback(async (newT, newS, newQ, newM) => {
-    if (newT) { setTeachers(newT); }
-    if (newS) {
-      const prevStudents = students;
-      setStudents(newS);
-      for (const student of newS) {
-        const prev = prevStudents.find(p => p.id === student.id);
-        if (prev && JSON.stringify(prev) !== JSON.stringify(student)) {
-          try {
-            const { id, ...data } = student;
-            await updateStudent(id, data);
-          } catch (error) {
-            console.error("Failed to update student:", student.name, error);
-          }
-        }
-      }
-    }
-    if (newQ) {
-      setQuizzes(newQ);
-      const prevQuizzes = quizzes;
-      for (const studentId in newQ) {
-        if (JSON.stringify(prevQuizzes[studentId]) !== JSON.stringify(newQ[studentId])) {
-          try {
-            if (newQ[studentId] && newQ[studentId].length > 0) {
-              await setQuizzesForStudent(studentId, newQ[studentId]);
-            } else {
-              await deleteQuizzesForStudent(studentId);
-            }
-          } catch (error) {
-            console.error("Failed to update quiz:", error);
-          }
-        }
-      }
-      for (const studentId in prevQuizzes) {
-        if (!(studentId in newQ)) {
-          try { await deleteQuizzesForStudent(studentId); } catch (e) { console.error(e); }
-        }
-      }
-    }
-    if (newM) {
-      setMissions(newM);
-      const prevMissions = missions;
-      for (const studentId in newM) {
-        if (JSON.stringify(prevMissions[studentId]) !== JSON.stringify(newM[studentId])) {
-          try {
-            if (newM[studentId] && newM[studentId].length > 0) {
-              await setMissionsForStudent(studentId, newM[studentId]);
-            } else {
-              await deleteMissionsForStudent(studentId);
-            }
-          } catch (error) {
-            console.error("Failed to update mission:", error);
-          }
-        }
-      }
-      for (const studentId in prevMissions) {
-        if (!(studentId in newM)) {
-          try { await deleteMissionsForStudent(studentId); } catch (e) { console.error(e); }
-        }
-      }
-    }
-  }, [students, quizzes, missions]);
+    if (newT) { setTeachers(newT); await saveData("monkeyTracker_teachers", newT); }
+    if (newS) { setStudents(newS); await saveData("monkeyTracker_students", newS); }
+    if (newQ) { setQuizzes(newQ); await saveData("monkeyTracker_quizzes", newQ); }
+    if (newM) { setMissions(newM); await saveData("monkeyTracker_missions", newM); }
+  }, []);
 
-  // Exams
   const addExam = (studentId, exam) => {
     const newS = students.map(s => {
       if (s.id !== studentId) return s;
@@ -7323,8 +7234,6 @@ function SnowMonkeyTrackerInner() {
     });
     persist(null, newS);
   };
-
-  // Quotes (teacher-set per student, and student's own personal quotes)
   const addTeacherQuote = (studentId, text) => {
     const t = text?.trim(); if (!t) return;
     const newS = students.map(s => s.id === studentId
@@ -7351,7 +7260,6 @@ function SnowMonkeyTrackerInner() {
       : s);
     persist(null, newS);
   };
-
   const submitExam = (studentId) => {
     if (!examName.trim() || !examDate) return;
     const dateMs = new Date(examDate + "T" + (examTime || "09:00")).getTime();
@@ -7401,7 +7309,7 @@ function SnowMonkeyTrackerInner() {
       id: "m" + Date.now(),
       name: name?.trim() || "Mission",
       points: Math.max(1, parseInt(points) || 5),
-      type, // "blockblast" or "runner"
+      type,
       questions: parsed,
     };
     const existing = missions[studentId] || [];
@@ -7480,8 +7388,6 @@ function SnowMonkeyTrackerInner() {
           lastAttempt: Date.now(),
           totalEarned: (prev.totalEarned || 0) + pointsEarned,
           completed: prev.completed || won,
-          // Save progress so the student can resume next time (only for runner missions)
-          // Clear progress when they win — fresh start next time
           progress: won ? null : (r.progress || prev.progress || null),
         };
       }
@@ -7515,39 +7421,18 @@ function SnowMonkeyTrackerInner() {
     }
   };
 
-  const addStudent = async () => {
+  const addStudent = () => {
     if (!newStudentName.trim() || !newStudentUser.trim() || !newStudentPass.trim()) { notify("Please fill in all fields", "error"); return; }
     if (students.find(s => s.username === newStudentUser) || teachers.find(t => t.username === newStudentUser)) { notify("Username already taken", "error"); return; }
-    try {
-      const studentData = {
-        username: newStudentUser.trim(),
-        password: newStudentPass.trim(),
-        name: newStudentName.trim(),
-        points: 0,
-        accessories: [],
-        ownedPets: [],
-        pet: null,
-      };
-      const newStudent = await addStudentToDB(studentData);
-      setStudents([...students, newStudent]);
-      setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
-      notify(`${newStudentName.trim()} joined the hot spring!`);
-    } catch (error) {
-      console.error("Failed to add student:", error);
-      notify("Failed to add student. Try again.", "error");
-    }
+    const newS = [...students, { id: "s" + Date.now(), username: newStudentUser.trim(), password: newStudentPass.trim(), name: newStudentName.trim(), points: 0 }];
+    persist(null, newS);
+    setNewStudentName(""); setNewStudentUser(""); setNewStudentPass(""); setShowAddStudent(false);
+    notify(`${newStudentName.trim()} joined the hot spring!`);
   };
 
-  const removeStudent = async (id) => {
-    try {
-      await deleteStudent(id);
-      setStudents(students.filter(s => s.id !== id));
-      if (selectedStudent === id) setSelectedStudent(null);
-      notify("Student removed");
-    } catch (error) {
-      console.error("Failed to remove student:", error);
-      notify("Failed to remove student", "error");
-    }
+  const removeStudent = (id) => {
+    persist(null, students.filter(s => s.id !== id));
+    if (selectedStudent === id) setSelectedStudent(null); notify("Student removed");
   };
 
   const addPoints = (id, amount) => {
@@ -7663,7 +7548,6 @@ function SnowMonkeyTrackerInner() {
       notify(`Not enough stars! Need ${food.price - st.points} more ★`, "error");
       return false;
     }
-    // Get current decayed values, then apply boost
     const cur = getPetCare(st) || { hunger: 80, happiness: 80 };
     const newHunger = Math.min(100, cur.hunger + food.hunger);
     const newHappiness = Math.min(100, cur.happiness + food.happiness);
@@ -7684,7 +7568,6 @@ function SnowMonkeyTrackerInner() {
     return true;
   };
 
-  // Walk completion — boosts happiness, awards a tiny star bonus
   const walkPet = (studentId, happinessBoost = 25, starBonus = 0) => {
     const st = students.find(s => s.id === studentId);
     if (!st || !st.pet) return;
@@ -7695,7 +7578,7 @@ function SnowMonkeyTrackerInner() {
       points: s.points + starBonus,
       petCare: {
         ...(s.petCare || {}),
-        hunger: cur.hunger, // hunger doesn't change on walk
+        hunger: cur.hunger,
         happiness: newHappiness,
         lastUpdated: Date.now(),
       },
@@ -7814,73 +7697,50 @@ function SnowMonkeyTrackerInner() {
 
   const handleWordleLose = () => {
     if (!user || hasCompletedChallenge(user.id)) return;
-    // Mark day as attempted (no points), and reset streak since they didn't win
     const newS = students.map(s => s.id === user.id ? {
       ...s,
       lastChallengeDate: todayKey,
-      streak: 0, // Streak broken — they didn't get it right
+      streak: 0,
     } : s);
     persist(null, newS);
     setShowWordle(false);
     notify("😔 Better luck tomorrow! Streak reset.", "error");
   };
 
-  // Compute monkey positions on a NATURAL SCATTER layout based on count.
-  // Uses Poisson-disk-style placement: deterministic seed + minimum distance constraint
-  // so monkeys never overlap but don't look like a rigid grid.
   const monkeyPositions = useMemo(() => {
     const count = students.length;
     if (count === 0) return [];
-
-    // Bounds (within monkey container, percentages)
     const xMin = 6, xMax = 82, yMin = 6, yMax = 60;
     const xRange = xMax - xMin;
     const yRange = yMax - yMin;
-
-    // Minimum allowed distance between monkey anchors (% units in container space).
-    // Smaller for larger groups so they fit, but always enough to prevent visual overlap.
     const minDist =
       count <= 4  ? 30 :
       count <= 8  ? 22 :
       count <= 12 ? 16 :
       count <= 16 ? 13 :
                     11;
-
-    // Deterministic pseudo-random based on seed (so positions are stable across renders).
     const rand = (n) => {
       const x = Math.sin(n * 9301 + 49297) * 233280;
       return x - Math.floor(x);
     };
-
-    const positions = []; // { x, y }
+    const positions = [];
     for (let i = 0; i < count; i++) {
       let best = null;
       let bestMinD = -1;
-      // Try up to 80 candidate positions, keep the one farthest from already-placed monkeys.
       for (let attempt = 0; attempt < 80; attempt++) {
         const x = xMin + rand(i * 31 + attempt * 71 + 17) * xRange;
         const y = yMin + rand(i * 53 + attempt * 19 + 41) * yRange;
-        // Find distance to nearest placed monkey
         let nearest = Infinity;
         for (const p of positions) {
           const dx = x - p.x, dy = y - p.y;
           const d = Math.sqrt(dx * dx + dy * dy);
           if (d < nearest) nearest = d;
         }
-        // Accept early if we have enough space
-        if (nearest >= minDist) {
-          best = { x, y };
-          break;
-        }
-        // Otherwise track the candidate with the most space
-        if (nearest > bestMinD) {
-          bestMinD = nearest;
-          best = { x, y };
-        }
+        if (nearest >= minDist) { best = { x, y }; break; }
+        if (nearest > bestMinD) { bestMinD = nearest; best = { x, y }; }
       }
       positions.push(best);
     }
-
     return positions.map(p => ({ left: `${p.x}%`, top: `${p.y}%` }));
   }, [students.length]);
 
@@ -7890,8 +7750,6 @@ function SnowMonkeyTrackerInner() {
     fontSize: 18, color: C.text, outline: "none", width: "100%", boxSizing: "border-box",
   };
 
-  // Speech-bubble message generator for the BirdFlock — must be declared before any
-  // conditional return so the hook order stays stable across renders.
   const getFlockMessage = useCallback(() => {
     if (screen === "teacher") {
       return getTeacherUpdate(students);
@@ -7913,13 +7771,12 @@ function SnowMonkeyTrackerInner() {
   /* ── LOGIN ── */
   if (screen === "login") {
     const loginBg = themeMode === "rainbow"
-      ? C.bg // direct rainbow gradient
+      ? C.bg
       : `linear-gradient(160deg, ${C.snow1} 0%, ${C.bg} 40%, ${themeMode === "dark" ? "#0a0c14" : "#e2d0c0"} 100%)`;
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: loginBg, backgroundSize: themeMode === "rainbow" ? "400% 400%" : undefined, animation: themeMode === "rainbow" ? "rainbowShift 18s ease infinite" : undefined, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
         <WatercolorFilters /><GlobalKeyframes /><SnowParticles />
-        {/* Theme toggle in top-right corner */}
         <button onClick={toggleTheme}
           title={themeTitle}
           style={{
@@ -7961,15 +7818,13 @@ function SnowMonkeyTrackerInner() {
             </button>
           </div>
           <p style={{ textAlign: "center", color: C.textLight, fontSize: 13, marginTop: 18, marginBottom: 0 }}>
-            {loginTab === "teacher" ? "Use your teacher credentials to log in" : "Ask your teacher for login details"}
+            {loginTab === "teacher" ? "Login: teacher / 1234" : "Ask your teacher for login details"}
           </p>
         </div>
       </div>
     );
   }
 
-  // Speech-bubble message generator for the BirdFlock — provides reminders for students
-  // and update notifications for teachers. Memoized so the flock effect doesn't churn.
   /* ── TEACHER ── */
   if (screen === "teacher") {
     const sel = students.find(s => s.id === selectedStudent);
@@ -8107,7 +7962,7 @@ function SnowMonkeyTrackerInner() {
                     ))}
                   </div>
 
-                  {/* Inspirational quotes section */}
+                  {/* Quotes section */}
                   <div style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>💬 Quotes for {s.name} ({(s.teacherQuotes || []).length})</div>
                     {(s.teacherQuotes || []).map((q, idx) => (
@@ -8325,7 +8180,6 @@ function SnowMonkeyTrackerInner() {
           </div>
           <SteamParticles count={18} />
           <BirdFlock getMessage={getFlockMessage} />
-          {/* Exam countdown: shows selected student's exams; hidden otherwise so it doesn't clutter */}
           {sel && (
             <ExamCountdown
               exams={sel.exams || []}
@@ -8569,7 +8423,7 @@ function SnowMonkeyTrackerInner() {
           );
         })()}
 
-        {/* Add Exam modal (also rendered in teacher scene so 'Add Exam' button works) */}
+        {/* Add Exam modal (also in teacher scene) */}
         {showAddExam && examTargetStudentId && (
           <div style={modalBackdropStyle} onClick={() => setShowAddExam(false)}>
             <div style={{ ...modalCardStyle, width: 460, maxWidth: "95vw" }} onClick={e => e.stopPropagation()}>
@@ -8625,6 +8479,7 @@ function SnowMonkeyTrackerInner() {
             </div>
           </div>
         )}
+
       </div>
     );
   }
@@ -9828,7 +9683,6 @@ function SnowMonkeyTrackerInner() {
               )}
             </div>
           )}
-
 
           {/* My stats badge - bottom left */}
           <div style={{
