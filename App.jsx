@@ -514,6 +514,23 @@ function isFreePetAccessory(id) { const a = getPetAccessory(id); return a && a.p
 function getPetAccessoryBySlot(equippedIds, slot) {
   return equippedIds.map(getPetAccessory).find(a => a && a.slot === slot);
 }
+/* Pet accessories are stored per-pet: student.petAccessories = { [petId]: [accessoryIds] }.
+   Older saves used a single flat array (shared across pets) — normalize by treating that
+   array as accessories for the currently-equipped pet only. */
+function normalizePetAccessories(student) {
+  const pa = student?.petAccessories;
+  if (!pa) return {};
+  if (Array.isArray(pa)) {
+    const map = {};
+    if (student.pet && pa.length > 0) map[student.pet] = pa;
+    return map;
+  }
+  return pa;
+}
+function getPetAccessoriesForPet(student, petId) {
+  if (!student || !petId) return [];
+  return normalizePetAccessories(student)[petId] || [];
+}
 
 /* ─── STREAK LEVELS ─── each level gives the monkey visual upgrades */
 const STREAK_LEVELS = [
@@ -1949,7 +1966,7 @@ function FoodShop({ student, onClose, onBuy }) {
           border: `1px solid ${C.water1}40`,
         }}>
           <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
-            <PetEatingAnimation petId={pet.id} feedingFood={feedingFood} showHearts={showHearts} size={88} petAccessories={student.petAccessories || []} />
+            <PetEatingAnimation petId={pet.id} feedingFood={feedingFood} showHearts={showHearts} size={88} petAccessories={getPetAccessoriesForPet(student, pet.id)} />
           </div>
         </div>
 
@@ -2029,7 +2046,7 @@ function FoodShop({ student, onClose, onBuy }) {
 }
 
 /* ─── MY POOL ─── personal Tamagotchi-style scene where the student cares for their pet */
-function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
+function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart, onTogglePetAcc, onBuyPetAcc, onClearPetAcc }) {
   // Live tick for stat updates
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -2042,6 +2059,10 @@ function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
   const careLabel = care ? getCareLabel(care.avgCare) : null;
   const incomeMul = care ? getCareIncomeMultiplier(care.avgCare) : 1.0;
   const ownedPets = student?.ownedPets || [];
+
+  // Per-pet customization state — petCustomizeId is the pet currently being dressed up
+  const [petCustomizeId, setPetCustomizeId] = useState(null);
+  const [petCustomizeTab, setPetCustomizeTab] = useState("all");
 
   return (
     <div style={{
@@ -2108,10 +2129,23 @@ function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
             variant={0}
             accessories={student.accessories || []}
             pet={student.pet}
-            petAccessories={student.petAccessories || []}
+            petAccessoriesByPet={normalizePetAccessories(student)}
             ownedPets={ownedPets}
+            onPetClick={(petId) => { SFX.click(); setPetCustomizeId(petId); setPetCustomizeTab("all"); }}
             streakLevel="sprout"
           />
+          {ownedPets.length > 0 && (
+            <div style={{
+              position: "absolute", bottom: -24, left: "50%",
+              transform: "translateX(-50%)",
+              fontSize: 12, color: C.textLight,
+              fontFamily: "'Patrick Hand', cursive",
+              background: `${C.card}cc`, padding: "3px 12px", borderRadius: 999,
+              whiteSpace: "nowrap", pointerEvents: "none",
+            }}>
+              💡 Tap a pet to customize it
+            </div>
+          )}
         </div>
       </div>
 
@@ -2209,6 +2243,167 @@ function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart }) {
           )}
         </div>
       </div>
+
+      {/* ─── PER-PET CUSTOMIZE MODAL ───
+          Opens when student taps a pet in their Hot Spring. Shows pet accessories
+          for THAT specific pet. Buy/equip flow is identical to monkey customize. */}
+      {petCustomizeId && (() => {
+        const customPet = getPet(petCustomizeId);
+        if (!customPet) return null;
+        const ownedPetAccs = student.ownedPetAccessories || [];
+        const equippedForPet = getPetAccessoriesForPet(student, petCustomizeId);
+        const visibleAccs = PET_ACCESSORY_CATALOG.filter(a => {
+          if (petCustomizeTab === "owned") return a.price === 0 || ownedPetAccs.includes(a.id);
+          if (petCustomizeTab === "shop") return a.price > 0;
+          return true;
+        });
+        const bySlot = {};
+        visibleAccs.forEach(a => {
+          if (!bySlot[a.slot]) bySlot[a.slot] = [];
+          bySlot[a.slot].push(a);
+        });
+        const slotLabels = { head: "🎀 Head", neck: "📿 Neck", back: "🦋 Back" };
+
+        return (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 2000,
+            background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }} onClick={() => setPetCustomizeId(null)}>
+            <div onClick={e => e.stopPropagation()}
+              style={{
+                ...modalCardStyle, width: 720, maxWidth: "95vw",
+                maxHeight: "92vh", overflowY: "auto",
+              }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <h2 style={{ margin: 0, color: C.text, fontSize: 24, fontFamily: "'Patrick Hand', cursive" }}>
+                  🎨 Customize {customPet.emoji} {customPet.name}
+                </h2>
+                <button onClick={() => setPetCustomizeId(null)}
+                  style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>
+                  ✕
+                </button>
+              </div>
+
+              {/* Live preview of just this pet */}
+              <div style={{
+                display: "flex", justifyContent: "center", alignItems: "center", gap: 16, flexWrap: "wrap",
+                background: `linear-gradient(135deg, ${C.snow1}, ${C.water1}30)`,
+                borderRadius: 18, padding: "20px 12px", marginBottom: 14,
+              }}>
+                <svg width={140} height={140} viewBox="-32 -32 64 64" style={{ overflow: "visible" }}>
+                  <ellipse cx="0" cy="22" rx="20" ry="4" fill={C.water1} opacity="0.35" filter="url(#watercolorSoft)" />
+                  <g transform="scale(1.6)">
+                    <PetSVG petId={petCustomizeId} centered={true} mood="happy" petAccessories={equippedForPet} />
+                  </g>
+                </svg>
+                <div style={{ minWidth: 140, fontFamily: "'Patrick Hand', cursive" }}>
+                  <div style={{ fontSize: 14, color: C.textLight, marginBottom: 2 }}>Stars</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: C.gold, marginBottom: 8 }}>★ {student.points}</div>
+                  <div style={{ fontSize: 13, color: C.textLight }}>
+                    {equippedForPet.length} equipped · {ownedPetAccs.length} owned
+                  </div>
+                  <button onClick={() => onClearPetAcc && onClearPetAcc(student.id, petCustomizeId)}
+                    style={{
+                      marginTop: 10, padding: "6px 12px", borderRadius: 10,
+                      border: `2px solid ${C.accent}40`, background: "transparent",
+                      color: C.accentDark, cursor: "pointer",
+                      fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 600,
+                    }}>
+                    Remove All
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, justifyContent: "center" }}>
+                {[
+                  { id: "all", label: "All" },
+                  { id: "owned", label: `My Items (${ownedPetAccs.length + PET_ACCESSORY_CATALOG.filter(a => a.price === 0).length})` },
+                  { id: "shop", label: "🛍️ Shop" },
+                ].map(tab => (
+                  <button key={tab.id} onClick={() => setPetCustomizeTab(tab.id)}
+                    style={{
+                      padding: "7px 16px", borderRadius: 999,
+                      border: petCustomizeTab === tab.id ? `2px solid ${C.accent}` : `2px solid ${C.fur2}30`,
+                      background: petCustomizeTab === tab.id ? `${C.accent}20` : "transparent",
+                      color: petCustomizeTab === tab.id ? C.accentDark : C.textLight,
+                      fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Accessories grouped by slot */}
+              {PET_ACCESSORY_SLOTS.map(slot => {
+                const items = bySlot[slot];
+                if (!items || items.length === 0) return null;
+                return (
+                  <div key={slot} style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.textLight, marginBottom: 8, letterSpacing: 0.5, fontFamily: "'Patrick Hand', cursive" }}>
+                      {slotLabels[slot] || slot.toUpperCase()}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
+                      {items.map(acc => {
+                        const isOwned = acc.price === 0 || ownedPetAccs.includes(acc.id);
+                        const isEquipped = equippedForPet.includes(acc.id);
+                        const canAfford = student.points >= acc.price;
+                        const rarityColor = RARITY_COLORS[acc.rarity] || C.fur2;
+                        return (
+                          <div key={acc.id}
+                            onClick={() => {
+                              if (isOwned) {
+                                onTogglePetAcc && onTogglePetAcc(student.id, petCustomizeId, acc.id);
+                              } else if (canAfford && window.confirm(`Buy ${acc.name} for ${acc.price} ★?`)) {
+                                onBuyPetAcc && onBuyPetAcc(student.id, petCustomizeId, acc.id);
+                              } else if (!canAfford) {
+                                SFX.wrong();
+                              }
+                            }}
+                            style={{
+                              background: isEquipped ? `${C.gold}20` : `${C.snow1}80`,
+                              border: isEquipped ? `2.5px solid ${C.gold}` : `2px solid ${rarityColor}40`,
+                              borderRadius: 12, padding: "10px 8px",
+                              cursor: "pointer", transition: "all 0.2s",
+                              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                              fontFamily: "'Patrick Hand', cursive",
+                              position: "relative", overflow: "hidden",
+                            }}>
+                            {acc.price > 0 && (
+                              <div style={{
+                                position: "absolute", top: 4, right: 4,
+                                fontSize: 9, padding: "1px 6px", borderRadius: 8,
+                                background: rarityColor, color: "white", fontWeight: 700,
+                                letterSpacing: 0.5, textTransform: "uppercase",
+                              }}>{acc.rarity}</div>
+                            )}
+                            <div style={{ fontSize: 32, marginTop: acc.price > 0 ? 8 : 0 }}>{acc.emoji}</div>
+                            <div style={{ fontSize: 11, color: C.text, fontWeight: 600, textAlign: "center", lineHeight: 1.1 }}>{acc.name}</div>
+                            {isEquipped ? (
+                              <div style={{ fontSize: 9, color: C.gold, fontWeight: 700, letterSpacing: 0.5 }}>EQUIPPED</div>
+                            ) : isOwned ? (
+                              <div style={{ fontSize: 9, color: C.green, fontWeight: 700, letterSpacing: 0.5 }}>{acc.price === 0 ? "FREE" : "OWNED"}</div>
+                            ) : (
+                              <div style={{
+                                fontSize: 11, fontWeight: 700,
+                                color: canAfford ? C.gold : C.textLight,
+                                background: canAfford ? `${C.gold}15` : "transparent",
+                                padding: "1px 8px", borderRadius: 8,
+                              }}>★ {acc.price}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2489,7 +2684,7 @@ function WalkGame({ student, onClose, onComplete }) {
               }}>
               <svg width="80" height="80" viewBox="-32 -32 64 64" style={{ overflow: "visible" }}>
                 <g transform="scale(1.15)">
-                  <PetSVG petId={pet.id} centered={true} mood="happy" petAccessories={student.petAccessories || []} />
+                  <PetSVG petId={pet.id} centered={true} mood="happy" petAccessories={getPetAccessoriesForPet(student, pet.id)} />
                 </g>
               </svg>
             </div>
@@ -2542,7 +2737,7 @@ function WalkGame({ student, onClose, onComplete }) {
 }
 
 /* ─── IMPROVED MONKEY SVG ─── */
-function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null, petAccessories = [], ownedPets = [], streakLevel = "sprout" }) {
+function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay = 0, style = {}, selected, variant = 0, accessories = [], pet = null, petAccessoriesByPet = {}, ownedPets = [], streakLevel = "sprout", onPetClick = null }) {
   const { setAnyHovering } = useContext(HoverContext);
   const [bob, setBob] = useState(0);
   const [sway, setSway] = useState(0);
@@ -4011,9 +4206,13 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
           ];
           return allPets.map((petId, i) => {
             const p = positions[Math.min(i, positions.length - 1)];
-            const accs = (petId === pet) ? petAccessories : []; // only main pet shows accessories for now
+            const accs = petAccessoriesByPet[petId] || [];
+            const clickable = !!onPetClick;
             return (
-              <g key={petId} transform={`translate(${p.dx}, ${p.dy}) scale(${p.scale})`}>
+              <g key={petId}
+                transform={`translate(${p.dx}, ${p.dy}) scale(${p.scale})`}
+                onClick={clickable ? (e) => { e.stopPropagation(); onPetClick(petId); } : undefined}
+                style={clickable ? { cursor: "pointer" } : undefined}>
                 <PetSVG petId={petId} side={p.side} petAccessories={accs} />
               </g>
             );
@@ -4046,15 +4245,17 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
       </svg>
       {label && (
         <div style={{
-          textAlign: "center", marginTop: -10, fontFamily: "'Patrick Hand', cursive",
+          textAlign: "center", fontFamily: "'Patrick Hand', cursive",
           fontSize: 14, color: C.text, fontWeight: 700,
           textShadow: "0 1px 3px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.6)",
-          maxWidth: size + 20, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "0 auto",
+          maxWidth: size + 20, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          margin: "-22px auto 0",
+          position: "relative", zIndex: 4,
         }}>{label}</div>
       )}
       {points !== undefined && (
         <div style={{
-          textAlign: "center", marginTop: 2, fontFamily: "'Patrick Hand', cursive",
+          textAlign: "center", marginTop: label ? -2 : -22, fontFamily: "'Patrick Hand', cursive",
           fontSize: hovering ? 22 : 18, fontWeight: 700,
           color: hovering ? "#fff4c2" : C.gold,
           textShadow: hovering
@@ -7227,6 +7428,629 @@ function generateShape() {
   return { cells: shape, color, id: Math.random() };
 }
 
+/* ─── MONKEY CRUSH ─── match-3 puzzle: swap adjacent tiles to make rows of 3+
+   Watercolor monkey-themed tiles. Every 4 crushes = checkpoint question. */
+const CRUSH_SIZE = 8;
+const CRUSH_TILES = [
+  { id: "blossom", emoji: "🌸", color: "#ff90b8", glow: "#ffd0e0" },
+  { id: "banana",  emoji: "🍌", color: "#f5d040", glow: "#fff080" },
+  { id: "coconut", emoji: "🥥", color: "#a87858", glow: "#d4b090" },
+  { id: "leaf",    emoji: "🌿", color: "#7cc080", glow: "#a8e8b8" },
+  { id: "drop",    emoji: "💧", color: "#5ac8e8", glow: "#a0e8f0" },
+  { id: "stone",   emoji: "🪨", color: "#a8a8b0", glow: "#d0d0d8" },
+];
+function getCrushTile(id) { return CRUSH_TILES.find(t => t.id === id); }
+
+// Render a single watercolor tile by id
+function CrushTileSVG({ tileId, size = 40 }) {
+  const t = getCrushTile(tileId);
+  if (!t) return null;
+  const r = size / 2;
+  return (
+    <svg width={size} height={size} viewBox="-32 -32 64 64" style={{ overflow: "visible" }}>
+      {/* Soft watercolor background */}
+      <circle cx="0" cy="0" r="26" fill={t.glow} opacity="0.5" filter="url(#watercolorSoft)" />
+      <circle cx="0" cy="0" r="22" fill={t.color} opacity="0.45" filter="url(#watercolorSoft)" />
+      {/* Tile-specific shapes */}
+      {tileId === "blossom" && (
+        <g filter="url(#watercolorSoft)">
+          {[0, 72, 144, 216, 288].map((deg, i) => (
+            <ellipse key={i} cx="0" cy="-12" rx="7" ry="11" fill="#ffb0d0" transform={`rotate(${deg})`} opacity="0.92" />
+          ))}
+          <circle cx="0" cy="0" r="5" fill="#fff080" />
+          <circle cx="-1.5" cy="-1.5" r="2" fill="#ffd060" />
+        </g>
+      )}
+      {tileId === "banana" && (
+        <g filter="url(#watercolorSoft)" transform="rotate(-25)">
+          <path d="M -16 6 Q -10 -16 16 -10 Q 10 14 -16 6 Z" fill="#edb830" />
+          <path d="M -14 4 Q -8 -14 14 -8 Q 8 12 -14 4 Z" fill="#ffd040" opacity="0.85" />
+          <path d="M -12 0 Q -6 -10 10 -6" stroke="#a07810" strokeWidth="1" fill="none" opacity="0.5" />
+          <ellipse cx="-15" cy="6" rx="2" ry="1.5" fill="#7a5810" />
+          <ellipse cx="16" cy="-9" rx="2" ry="1.5" fill="#7a5810" />
+        </g>
+      )}
+      {tileId === "coconut" && (
+        <g filter="url(#furTexture)">
+          <circle cx="0" cy="0" r="15" fill="#7a5840" />
+          <circle cx="0" cy="0" r="12" fill="#a87858" />
+          <circle cx="-3" cy="-3" r="8" fill="#c8987a" opacity="0.5" />
+          <circle cx="-5" cy="-5" r="2" fill="#3a2810" />
+          <circle cx="5" cy="-3" r="2" fill="#3a2810" />
+          <circle cx="0" cy="6" r="2" fill="#3a2810" />
+          {/* Highlight */}
+          <ellipse cx="-4" cy="-7" rx="3" ry="2" fill="#fff" opacity="0.3" />
+        </g>
+      )}
+      {tileId === "leaf" && (
+        <g filter="url(#watercolorSoft)">
+          <path d="M -12 8 Q -14 -8 0 -16 Q 14 -8 12 8 Q 0 14 -12 8 Z" fill="#5caa5e" />
+          <path d="M -10 6 Q -12 -6 0 -14 Q 12 -6 10 6 Q 0 12 -10 6 Z" fill="#7cc080" opacity="0.85" />
+          <path d="M 0 -14 L 0 12" stroke="#3a7a3c" strokeWidth="0.8" />
+          {[-8, -3, 3, 8].map((y, i) => (
+            <path key={i} d={`M 0 ${y} Q ${i % 2 ? 6 : -6} ${y + 2} ${i % 2 ? 8 : -8} ${y + 1}`} stroke="#3a7a3c" strokeWidth="0.5" fill="none" opacity="0.6" />
+          ))}
+        </g>
+      )}
+      {tileId === "drop" && (
+        <g filter="url(#watercolorSoft)">
+          <path d="M 0 -16 Q -12 -2 -10 8 Q -6 16 0 16 Q 6 16 10 8 Q 12 -2 0 -16 Z" fill="#5ac8e8" />
+          <path d="M 0 -13 Q -9 -1 -7 7 Q -3 12 0 12 Q 3 12 7 7 Q 9 -1 0 -13 Z" fill="#a0e8f0" opacity="0.85" />
+          {/* Highlight */}
+          <ellipse cx="-4" cy="-2" rx="2.5" ry="5" fill="#fff" opacity="0.6" />
+          <ellipse cx="-4" cy="-2" rx="1.2" ry="3" fill="#fff" opacity="0.9" />
+        </g>
+      )}
+      {tileId === "stone" && (
+        <g filter="url(#furTexture)">
+          <ellipse cx="0" cy="2" rx="16" ry="12" fill="#7a7a82" />
+          <ellipse cx="0" cy="0" rx="14" ry="10" fill="#a8a8b0" />
+          <ellipse cx="-3" cy="-3" rx="8" ry="5" fill="#c0c0c8" opacity="0.6" />
+          <ellipse cx="-5" cy="-4" rx="3" ry="2" fill="#fff" opacity="0.4" />
+          <circle cx="6" cy="3" r="1" fill="#5a5a62" opacity="0.5" />
+          <circle cx="-4" cy="6" r="0.8" fill="#5a5a62" opacity="0.5" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function generateCrushGrid() {
+  // Generate grid with no initial 3-matches
+  const grid = [];
+  for (let r = 0; r < CRUSH_SIZE; r++) {
+    const row = [];
+    for (let c = 0; c < CRUSH_SIZE; c++) {
+      let candidates = CRUSH_TILES.map(t => t.id);
+      // Avoid creating an immediate match-3 horizontally
+      if (c >= 2 && row[c-1] === row[c-2]) {
+        candidates = candidates.filter(id => id !== row[c-1]);
+      }
+      // Avoid creating an immediate match-3 vertically
+      if (r >= 2 && grid[r-1][c] === grid[r-2][c]) {
+        candidates = candidates.filter(id => id !== grid[r-1][c]);
+      }
+      row.push(candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+function findCrushMatches(grid) {
+  // Returns Set of "r,c" strings for all tiles in 3+ matches
+  const matches = new Set();
+  // Horizontal
+  for (let r = 0; r < CRUSH_SIZE; r++) {
+    let runStart = 0;
+    for (let c = 1; c <= CRUSH_SIZE; c++) {
+      if (c === CRUSH_SIZE || grid[r][c] !== grid[r][runStart] || !grid[r][runStart]) {
+        const len = c - runStart;
+        if (len >= 3 && grid[r][runStart]) {
+          for (let i = runStart; i < c; i++) matches.add(`${r},${i}`);
+        }
+        runStart = c;
+      }
+    }
+  }
+  // Vertical
+  for (let c = 0; c < CRUSH_SIZE; c++) {
+    let runStart = 0;
+    for (let r = 1; r <= CRUSH_SIZE; r++) {
+      if (r === CRUSH_SIZE || grid[r][c] !== grid[runStart][c] || !grid[runStart][c]) {
+        const len = r - runStart;
+        if (len >= 3 && grid[runStart][c]) {
+          for (let i = runStart; i < r; i++) matches.add(`${i},${c}`);
+        }
+        runStart = r;
+      }
+    }
+  }
+  return matches;
+}
+
+function applyCrushGravity(grid) {
+  // For each column, drop non-null tiles down, fill empties with new tiles
+  const newGrid = grid.map(row => [...row]);
+  for (let c = 0; c < CRUSH_SIZE; c++) {
+    // Collect non-null from bottom to top
+    const stack = [];
+    for (let r = CRUSH_SIZE - 1; r >= 0; r--) {
+      if (newGrid[r][c]) stack.push(newGrid[r][c]);
+    }
+    // Refill column from bottom
+    for (let r = CRUSH_SIZE - 1; r >= 0; r--) {
+      if (stack.length > 0) {
+        newGrid[r][c] = stack.shift();
+      } else {
+        // Spawn new random tile at top
+        newGrid[r][c] = CRUSH_TILES[Math.floor(Math.random() * CRUSH_TILES.length)].id;
+      }
+    }
+  }
+  return newGrid;
+}
+
+function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+  const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
+  const [selected, setSelected] = useState(null); // {r, c}
+  const [crushing, setCrushing] = useState(new Set()); // Set of "r,c" being animated
+  const [score, setScore] = useState(savedProgress?.score || 0);
+  const [crushCount, setCrushCount] = useState(savedProgress?.crushCount || 0);
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [questionResult, setQuestionResult] = useState(null);
+  const [questionAnswer, setQuestionAnswer] = useState(null);
+  const [questionsAnswered, setQuestionsAnswered] = useState(savedProgress?.questionsAnswered || 0);
+  const [gameOver, setGameOver] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+  const [busy, setBusy] = useState(false); // Lock UI during animations
+  const [splatters, setSplatters] = useState([]); // Watercolor splatter overlay {id, r, c, color}
+  const [comboCount, setComboCount] = useState(0); // Cascade combo counter
+
+  const questions = mission?.questions || [];
+  const totalReward = mission?.points || 5;
+  const targetQuestions = questions.length;
+  const CRUSHES_PER_QUESTION = 4;
+
+  // Save progress whenever state changes
+  useEffect(() => {
+    if (gameOver) return;
+    if (savedProgress?.questionsAnswered === questionsAnswered && savedProgress?.score === score) return;
+    onComplete && onComplete({
+      missionId: mission.id,
+      partial: true,
+      progress: { grid, score, crushCount, questionsAnswered },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsAnswered]);
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🌸 No Mission Yet</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>Your teacher hasn't assigned a mission yet!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdjacent = (a, b) => {
+    if (!a || !b) return false;
+    const dr = Math.abs(a.r - b.r), dc = Math.abs(a.c - b.c);
+    return (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+  };
+
+  const handleTileClick = (r, c) => {
+    if (busy || showQuestion || gameOver) return;
+    SFX.click();
+    if (!selected) {
+      setSelected({ r, c });
+      return;
+    }
+    if (selected.r === r && selected.c === c) {
+      setSelected(null);
+      return;
+    }
+    if (!isAdjacent(selected, { r, c })) {
+      setSelected({ r, c });
+      return;
+    }
+    // Try swap
+    attemptSwap(selected, { r, c });
+  };
+
+  const attemptSwap = (a, b) => {
+    setBusy(true);
+    setSelected(null);
+    const swapped = grid.map(row => [...row]);
+    [swapped[a.r][a.c], swapped[b.r][b.c]] = [swapped[b.r][b.c], swapped[a.r][a.c]];
+    const matches = findCrushMatches(swapped);
+    if (matches.size === 0) {
+      // No match — animate swap-back briefly
+      setGrid(swapped);
+      setTimeout(() => {
+        setGrid(grid); // revert
+        setBusy(false);
+        SFX.wrong();
+      }, 280);
+      return;
+    }
+    // Match — proceed with crush + cascade
+    setGrid(swapped);
+    setComboCount(0);
+    setTimeout(() => processCrushes(swapped, 0), 200);
+  };
+
+  const processCrushes = (currentGrid, combo) => {
+    const matches = findCrushMatches(currentGrid);
+    if (matches.size === 0) {
+      // Done cascading
+      setBusy(false);
+      setComboCount(0);
+      // Check if we hit a question threshold
+      return;
+    }
+    SFX.collect();
+    setComboCount(combo + 1);
+    setCrushing(matches);
+    // Spawn splatters at each match position
+    const newSplatters = Array.from(matches).map(key => {
+      const [r, c] = key.split(",").map(Number);
+      const tileId = currentGrid[r][c];
+      const tile = getCrushTile(tileId);
+      return { id: Math.random(), r, c, color: tile?.color || "#fff", glow: tile?.glow || "#fff" };
+    });
+    setSplatters(prev => [...prev, ...newSplatters]);
+    // Remove splatters after animation
+    setTimeout(() => {
+      setSplatters(prev => prev.filter(s => !newSplatters.some(ns => ns.id === s.id)));
+    }, 700);
+
+    // Score: 10 per tile + combo bonus
+    const points = matches.size * 10 + combo * 20;
+    setScore(s => s + points);
+    const newCrushes = crushCount + matches.size;
+    setCrushCount(newCrushes);
+
+    // Trigger question if we've crossed a threshold
+    const oldThresh = Math.floor(crushCount / CRUSHES_PER_QUESTION);
+    const newThresh = Math.floor(newCrushes / CRUSHES_PER_QUESTION);
+    const triggeredQuestion = newThresh > oldThresh && questionsAnswered < targetQuestions;
+
+    setTimeout(() => {
+      // Clear matched tiles
+      const cleared = currentGrid.map(row => [...row]);
+      for (const key of matches) {
+        const [r, c] = key.split(",").map(Number);
+        cleared[r][c] = null;
+      }
+      setCrushing(new Set());
+      setTimeout(() => {
+        // Apply gravity
+        const dropped = applyCrushGravity(cleared);
+        setGrid(dropped);
+        if (triggeredQuestion) {
+          // Pause for question
+          setTimeout(() => {
+            setQuestionIdx(questionsAnswered % questions.length);
+            setQuestionAnswer(null);
+            setQuestionResult(null);
+            setShowQuestion(true);
+          }, 350);
+        } else {
+          // Continue cascade
+          setTimeout(() => processCrushes(dropped, combo + 1), 280);
+        }
+      }, 200);
+    }, 380);
+  };
+
+  const answerQuestion = (idx) => {
+    if (questionAnswer !== null) return;
+    const q = questions[questionIdx];
+    const correct = idx === q.correct;
+    setQuestionAnswer(idx);
+    setQuestionResult(correct ? "correct" : "wrong");
+    if (correct) SFX.correct(); else SFX.wrong();
+    setTimeout(() => {
+      setShowQuestion(false);
+      const newAnswered = questionsAnswered + (correct ? 1 : 0);
+      setQuestionsAnswered(newAnswered);
+      // Check win
+      if (newAnswered >= targetQuestions) {
+        setGameOver(true);
+        if (!rewarded) {
+          setRewarded(true);
+          SFX.victory();
+          onComplete && onComplete({
+            missionId: mission.id,
+            stars: totalReward,
+            partial: false,
+          });
+        }
+        return;
+      }
+      // Continue cascading
+      setTimeout(() => processCrushes(grid, 0), 200);
+    }, 1400);
+  };
+
+  const currentQ = questions[questionIdx];
+  const progressPct = (questionsAnswered / targetQuestions) * 100;
+
+  return (
+    <div style={modalBackdropStyle}>
+      <div style={{
+        ...modalCardStyle,
+        width: "min(960px, 96vw)", maxWidth: "96vw",
+        height: "min(820px, 95vh)", maxHeight: "95vh",
+        position: "relative", overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        padding: "24px 30px",
+        background: `linear-gradient(180deg, ${C.snow1} 0%, ${C.water2}30 60%, ${C.water1}40 100%)`,
+      }}>
+        <style>{`
+          @keyframes crushPop {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: scale(1.4) rotate(-12deg); opacity: 0.8; }
+            100% { transform: scale(0) rotate(20deg); opacity: 0; }
+          }
+          @keyframes splatBurst {
+            0% { transform: scale(0.3); opacity: 0; }
+            30% { transform: scale(1.2); opacity: 0.85; }
+            100% { transform: scale(2); opacity: 0; }
+          }
+          @keyframes splatDroplet {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+          }
+          @keyframes tileBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+          }
+          @keyframes selectGlow {
+            0%, 100% { box-shadow: 0 0 0 3px ${C.gold}, 0 0 14px ${C.gold}80; }
+            50% { box-shadow: 0 0 0 4px ${C.gold}, 0 0 24px ${C.gold}c0; }
+          }
+          @keyframes comboFlash {
+            0% { transform: translateY(0) scale(0.6); opacity: 0; }
+            30% { transform: translateY(-8px) scale(1.2); opacity: 1; }
+            70% { transform: translateY(-16px) scale(1.0); opacity: 1; }
+            100% { transform: translateY(-30px) scale(0.9); opacity: 0; }
+          }
+        `}</style>
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 26 }}>🌸 Monkey Crush</h2>
+            <p style={{ margin: 0, color: C.textLight, fontSize: 14 }}>
+              {mission.name} · Match 3+ to crush · ★ {totalReward} reward
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 24, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Progress bar + score */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13, color: C.textLight }}>
+              <span>Questions: <strong style={{ color: C.text }}>{questionsAnswered}/{targetQuestions}</strong></span>
+              <span>Crushes to next: <strong style={{ color: C.gold }}>{CRUSHES_PER_QUESTION - (crushCount % CRUSHES_PER_QUESTION)}</strong></span>
+            </div>
+            <div style={{ height: 10, background: `${C.fur2}30`, borderRadius: 5, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", width: `${progressPct}%`,
+                background: `linear-gradient(90deg, ${C.gold}, ${C.green})`,
+                transition: "width 0.5s",
+              }} />
+            </div>
+          </div>
+          <div style={{
+            background: `${C.gold}25`, padding: "6px 14px", borderRadius: 999,
+            fontSize: 16, fontWeight: 700, color: C.gold, minWidth: 90, textAlign: "center",
+          }}>
+            ★ {score}
+          </div>
+        </div>
+
+        {/* Game area */}
+        {gameOver ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18 }}>
+            <div style={{ fontSize: 80 }}>🌸</div>
+            <h2 style={{ color: C.green, margin: 0, fontSize: 32 }}>Mission Complete!</h2>
+            <p style={{ color: C.text, fontSize: 18, margin: 0, textAlign: "center" }}>
+              You earned <strong style={{ color: C.gold, fontSize: 24 }}>★ {totalReward}</strong> stars!<br/>
+              <span style={{ fontSize: 15, color: C.textLight }}>Final score: {score}</span>
+            </p>
+            {onShop && (
+              <button onClick={() => { onClose(); onShop(); }}
+                style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${C.gold}, #b88810)` }}>
+                🍱 Spend stars in Food Shop
+              </button>
+            )}
+            <button onClick={onClose} style={primaryBtnStyle}>Back to Hot Spring</button>
+          </div>
+        ) : (
+          <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${CRUSH_SIZE}, 56px)`,
+              gridTemplateRows: `repeat(${CRUSH_SIZE}, 56px)`,
+              gap: 3,
+              padding: 8,
+              background: `linear-gradient(135deg, ${C.water1}30, ${C.snow1}40)`,
+              borderRadius: 16,
+              border: `2px solid ${C.water1}50`,
+              position: "relative",
+            }}>
+              {grid.map((row, r) => row.map((tileId, c) => {
+                const key = `${r},${c}`;
+                const isSelected = selected && selected.r === r && selected.c === c;
+                const isCrushing = crushing.has(key);
+                const tile = getCrushTile(tileId);
+                return (
+                  <div key={key}
+                    onClick={() => handleTileClick(r, c)}
+                    style={{
+                      width: 56, height: 56,
+                      background: isSelected ? `${C.gold}30` : `${tile?.glow || "#fff"}25`,
+                      borderRadius: 10,
+                      cursor: busy ? "default" : "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "background 0.2s",
+                      animation: isCrushing
+                        ? "crushPop 0.5s ease-out forwards"
+                        : isSelected
+                        ? "selectGlow 0.8s ease-in-out infinite"
+                        : `tileBob ${2 + (r + c) * 0.1}s ease-in-out infinite`,
+                      animationDelay: isCrushing || isSelected ? "0s" : `${((r * CRUSH_SIZE + c) % 7) * 0.15}s`,
+                      position: "relative",
+                    }}>
+                    <CrushTileSVG tileId={tileId} size={48} />
+                  </div>
+                );
+              }))}
+              {/* Splatter overlays */}
+              {splatters.map(s => (
+                <div key={s.id} style={{
+                  position: "absolute",
+                  left: 8 + s.c * 59 + 28,
+                  top: 8 + s.r * 59 + 28,
+                  width: 0, height: 0, pointerEvents: "none",
+                }}>
+                  {/* Central burst */}
+                  <div style={{
+                    position: "absolute",
+                    left: -30, top: -30,
+                    width: 60, height: 60, borderRadius: "50%",
+                    background: `radial-gradient(circle, ${s.glow}cc 0%, ${s.color}80 40%, transparent 70%)`,
+                    animation: "splatBurst 0.7s ease-out forwards",
+                    filter: "blur(2px)",
+                  }} />
+                  {/* Droplets */}
+                  {[0, 60, 120, 180, 240, 300].map((deg, i) => {
+                    const dist = 30 + Math.random() * 14;
+                    const dx = Math.cos(deg * Math.PI / 180) * dist;
+                    const dy = Math.sin(deg * Math.PI / 180) * dist;
+                    return (
+                      <div key={i} style={{
+                        position: "absolute",
+                        left: -3, top: -3, width: 6, height: 6, borderRadius: "50%",
+                        background: s.color,
+                        animation: `splatDroplet ${0.4 + Math.random() * 0.3}s ease-out forwards`,
+                        "--dx": `${dx}px`,
+                        "--dy": `${dy}px`,
+                      }} />
+                    );
+                  })}
+                </div>
+              ))}
+              {/* Combo flash */}
+              {comboCount >= 2 && (
+                <div key={`combo-${comboCount}`} style={{
+                  position: "absolute",
+                  left: "50%", top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  fontSize: 36, fontWeight: 700, color: C.gold,
+                  textShadow: `0 0 12px ${C.gold}, 0 0 24px #fff080`,
+                  fontFamily: "'Patrick Hand', cursive",
+                  animation: "comboFlash 0.9s ease-out forwards",
+                  pointerEvents: "none", zIndex: 10,
+                }}>
+                  COMBO ×{comboCount}!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Hint */}
+        {!gameOver && !showQuestion && (
+          <div style={{ textAlign: "center", marginTop: 12, fontSize: 13, color: C.textLight }}>
+            {selected ? "🎯 Click an adjacent tile to swap!" : "👆 Click a tile to select, then click a neighbor to swap"}
+          </div>
+        )}
+
+        {/* Question modal */}
+        {showQuestion && currentQ && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)",
+            zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+          }}>
+            <div style={{
+              background: C.card, borderRadius: 20, padding: "26px 32px",
+              maxWidth: 700, width: "100%",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+              border: `2.5px solid ${C.gold}50`,
+            }}>
+              <div style={{ fontSize: 17, color: C.textLight, marginBottom: 8, fontFamily: "'Patrick Hand', cursive" }}>
+                💎 Solve to keep crushing!
+              </div>
+              <div style={{
+                background: `${C.snow1}`, borderRadius: 14, padding: "20px 22px", marginBottom: 18,
+                fontSize: 26, color: C.text, fontWeight: 600, textAlign: "center", minHeight: 70,
+                display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4,
+                fontFamily: "'Patrick Hand', cursive", wordBreak: "break-word",
+              }}>
+                {currentQ.q}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct;
+                  const isPicked = idx === questionAnswer;
+                  const colors = [C.accent, C.gold, "#5a8fc7", C.green];
+                  let bg = colors[idx], textColor = "white";
+                  if (questionAnswer !== null) {
+                    if (isCorrect) bg = C.green;
+                    else if (isPicked) bg = "#a85050";
+                    else { bg = `${colors[idx]}50`; textColor = `${C.text}80`; }
+                  }
+                  return (
+                    <button key={idx} onClick={() => answerQuestion(idx)} disabled={questionAnswer !== null}
+                      style={{
+                        padding: "16px", borderRadius: 12, border: "none",
+                        background: bg, color: textColor,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
+                        cursor: questionAnswer !== null ? "default" : "pointer",
+                        transition: "all 0.3s",
+                        textAlign: "left", display: "flex", alignItems: "center", gap: 10,
+                        minHeight: 60, lineHeight: 1.3,
+                      }}>
+                      <span style={{
+                        width: 30, height: 30, borderRadius: "50%", background: "rgba(255,255,255,0.3)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        fontSize: 16, fontWeight: 700,
+                      }}>{"ABCD"[idx]}</span>
+                      <span style={{ flex: 1 }}>{opt}</span>
+                      {questionAnswer !== null && isCorrect && <span style={{ fontSize: 24, flexShrink: 0 }}>✓</span>}
+                      {questionAnswer !== null && isPicked && !isCorrect && <span style={{ fontSize: 24, flexShrink: 0 }}>✗</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {questionResult && (
+                <div style={{
+                  textAlign: "center", marginTop: 14, fontSize: 18, fontWeight: 700,
+                  color: questionResult === "correct" ? C.green : C.accent,
+                  fontFamily: "'Patrick Hand', cursive",
+                }}>
+                  {questionResult === "correct" ? "🎉 Correct!" : "🦅 Try the next one!"}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
   const [grid, setGrid] = useState(() => Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
   const [tray, setTray] = useState(() => [generateShape(), generateShape(), generateShape()]);
@@ -7681,6 +8505,19 @@ function SnowMonkeyTrackerInner() {
     try { localStorage.setItem("monkeyTracker_showNames", String(next)); } catch {}
     SFX.click();
   };
+  // Show/hide ★ points on the main scene — persisted across sessions
+  const [showPoints, setShowPointsState] = useState(() => {
+    try {
+      const stored = localStorage.getItem("monkeyTracker_showPoints");
+      return stored === null ? true : stored === "true";
+    } catch { return true; }
+  });
+  const toggleShowPoints = () => {
+    const next = !showPoints;
+    setShowPointsState(next);
+    try { localStorage.setItem("monkeyTracker_showPoints", String(next)); } catch {}
+    SFX.click();
+  };
 
   useEffect(() => {
     (async () => {
@@ -8098,13 +8935,13 @@ function SnowMonkeyTrackerInner() {
   };
 
   // ─── PET ACCESSORY HELPERS ───
-  const togglePetAccessory = (studentId, accessoryId) => {
+  const togglePetAccessory = (studentId, petId, accessoryId) => {
     const acc = getPetAccessory(accessoryId);
     if (!acc) return;
     const st = students.find(s => s.id === studentId);
     if (!st) return;
-    if (!st.pet) {
-      notify("You need a pet first!", "error");
+    if (!petId) {
+      notify("Pick a pet to customize!", "error");
       return;
     }
     const ownedPetAccessories = st.ownedPetAccessories || [];
@@ -8113,11 +8950,12 @@ function SnowMonkeyTrackerInner() {
       notify(`You haven't unlocked the ${acc.name} yet!`, "error");
       return;
     }
-    const current = st.petAccessories || [];
+    const map = normalizePetAccessories(st);
+    const current = map[petId] || [];
     const has = current.includes(accessoryId);
-    let next;
+    let nextList;
     if (has) {
-      next = current.filter(a => a !== accessoryId);
+      nextList = current.filter(a => a !== accessoryId);
       SFX.click();
     } else {
       // Remove anything else in the same slot
@@ -8125,19 +8963,20 @@ function SnowMonkeyTrackerInner() {
         const other = getPetAccessory(id);
         return !other || other.slot !== acc.slot;
       });
-      next = [...filtered, accessoryId];
+      nextList = [...filtered, accessoryId];
       SFX.collect();
     }
-    const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: next } : s);
+    const newMap = { ...map, [petId]: nextList };
+    const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: newMap } : s);
     persist(null, newS);
   };
 
-  const buyPetAccessory = (studentId, accessoryId) => {
+  const buyPetAccessory = (studentId, petId, accessoryId) => {
     const acc = getPetAccessory(accessoryId);
     const st = students.find(s => s.id === studentId);
     if (!acc || !st) return;
-    if (!st.pet) {
-      notify("You need a pet first!", "error");
+    if (!petId) {
+      notify("Pick a pet to customize!", "error");
       return;
     }
     if (acc.price === 0) return;
@@ -8148,15 +8987,18 @@ function SnowMonkeyTrackerInner() {
       notify(`Not enough stars! Need ${acc.price - st.points} more ★`, "error");
       return;
     }
-    const current = st.petAccessories || [];
+    // Auto-equip on the pet being customized
+    const map = normalizePetAccessories(st);
+    const current = map[petId] || [];
     const equipped = [...current.filter(id => {
       const o = getPetAccessory(id);
       return !o || o.slot !== acc.slot;
     }), accessoryId];
+    const newMap = { ...map, [petId]: equipped };
     const newS = students.map(s => s.id === studentId ? {
       ...s,
       points: s.points - acc.price,
-      petAccessories: equipped,
+      petAccessories: newMap,
       ownedPetAccessories: [...ownedPetAccessories, accessoryId],
     } : s);
     persist(null, newS);
@@ -8164,9 +9006,18 @@ function SnowMonkeyTrackerInner() {
     notify(`🎉 Your pet got ${acc.emoji} ${acc.name}!`);
   };
 
-  const clearPetAccessories = (studentId) => {
-    const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: [] } : s);
-    persist(null, newS);
+  const clearPetAccessories = (studentId, petId) => {
+    const st = students.find(s => s.id === studentId);
+    if (!st) return;
+    const map = normalizePetAccessories(st);
+    if (petId) {
+      const newMap = { ...map, [petId]: [] };
+      const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: newMap } : s);
+      persist(null, newS);
+    } else {
+      const newS = students.map(s => s.id === studentId ? { ...s, petAccessories: {} } : s);
+      persist(null, newS);
+    }
     SFX.click();
     notify("Pet accessories cleared!");
   };
@@ -8580,6 +9431,15 @@ function SnowMonkeyTrackerInner() {
               }}>
               {showNames ? "🏷️" : "🚫"}
             </button>
+            <button onClick={toggleShowPoints}
+              title={showPoints ? "Hide points" : "Show points"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {showPoints ? "★" : "☆"}
+            </button>
             {[
               { label: "📋 Manage", active: showManage, fn: () => { SFX.click(); setShowManage(!showManage); setShowAddStudent(false); }, c: C.accent },
               { label: "➕ Add", active: showAddStudent, fn: () => { SFX.click(); setShowAddStudent(!showAddStudent); setShowManage(false); }, c: C.green },
@@ -8820,7 +9680,7 @@ function SnowMonkeyTrackerInner() {
                 </div>
 
                 <div style={{ background: `${C.green}15`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13, color: C.text, border: `1px solid ${C.green}30` }}>
-                  <strong>📋 How missions work:</strong> Upload a single CSV of questions. When the student plays, they'll choose how they want to answer them — 🧩 Block Blast (Tetris-style puzzle), 🏃 Fruit Runner (jump over fruits), or ❄️ Icicle Flap (flap between icicles). Same questions, three ways to play!
+                  <strong>📋 How missions work:</strong> Upload a single CSV of questions. When the student plays, they'll choose how they want to answer them — 🧩 Block Blast (Tetris-style puzzle), 🏃 Fruit Runner (jump over fruits), ❄️ Icicle Flap (flap between icicles), or 🌸 Monkey Crush (match-3 tiles). Same questions, four ways to play!
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8, marginBottom: 10 }}>
                   <div>
@@ -8889,7 +9749,7 @@ function SnowMonkeyTrackerInner() {
               const pos = monkeyPositions[i % monkeyPositions.length];
               return (
                 <div key={s.id} style={{ position: "absolute", left: pos.left, top: pos.top, zIndex: 15 }}>
-                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={showNames ? s.name : null} points={s.points} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} petAccessories={s.petAccessories || []} ownedPets={s.ownedPets || []} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
+                  <MonkeySVG size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110} mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"} label={showNames ? s.name : null} points={showPoints ? s.points : undefined} delay={i * 0.4} variant={i} accessories={s.accessories || []} pet={s.pet} petAccessoriesByPet={normalizePetAccessories(s)} ownedPets={s.ownedPets || []} streakLevel={getStreakLevel(getEffectiveStreak(s)).id} selected={selectedStudent === s.id} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)} />
                 </div>
               );
             })}
@@ -9218,6 +10078,15 @@ function SnowMonkeyTrackerInner() {
               }}>
               {showNames ? "🏷️" : "🚫"}
             </button>
+            <button onClick={toggleShowPoints}
+              title={showPoints ? "Hide points" : "Show points"}
+              style={{
+                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
+              }}>
+              {showPoints ? "★" : "☆"}
+            </button>
             <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
           </div>
         </div>
@@ -9431,6 +10300,14 @@ function SnowMonkeyTrackerInner() {
                     color: "#5a8fc7",
                     progress: completions[`mission:${gameTypeChoiceMission.id}:flappy`]?.progress || null,
                   },
+                  {
+                    id: "crush",
+                    emoji: "🌸",
+                    title: "Monkey Crush",
+                    desc: "Match-3 watercolor tiles. Every 4 crushes = a checkpoint.",
+                    color: "#ff90b8",
+                    progress: completions[`mission:${gameTypeChoiceMission.id}:crush`]?.progress || null,
+                  },
                 ];
                 return (
                   <div style={{ display: "grid", gap: 10 }}>
@@ -9534,6 +10411,19 @@ function SnowMonkeyTrackerInner() {
               />
             );
           }
+          if (gameType === "crush") {
+            const savedProgress = me.completions?.[progressKey]?.progress || null;
+            return (
+              <CrushGame
+                studentName={me.name}
+                mission={activeMission}
+                savedProgress={savedProgress}
+                onClose={closeFn}
+                onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onShop={() => setShowFoodShop(true)}
+              />
+            );
+          }
           return (
             <MissionGame
               studentName={me.name}
@@ -9623,27 +10513,37 @@ function SnowMonkeyTrackerInner() {
                   </span>
                 )}
               </button>
-              {/* My Hot Spring button - opens personal scene with monkey & all pets */}
+              {/* My Hot Spring button - prominent gradient + soft glow pulse */}
               {(() => {
                 const myCare = getPetCare(me);
                 const careLbl = myCare ? getCareLabel(myCare.avgCare) : null;
-                const accent = careLbl ? careLbl.color : C.water1;
                 const needsAttention = me.pet && myCare && myCare.avgCare < 30;
                 return (
                   <button onClick={() => { SFX.click(); setShowMyPool(true); }}
                     style={{
-                      padding: "10px 22px", borderRadius: 16,
-                      border: `2px solid ${accent}80`,
-                      background: `${C.card}ee`,
-                      color: C.text,
-                      fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
+                      padding: "12px 26px", borderRadius: 18,
+                      border: "none",
+                      background: `linear-gradient(135deg, #ff80c0 0%, #ff9050 50%, #ffc430 100%)`,
+                      color: "white",
+                      fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
                       cursor: "pointer",
-                      boxShadow: `0 4px 14px ${accent}40`,
+                      boxShadow: `0 4px 18px #ff80c080, 0 0 0 0 #ff80c060`,
                       transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
-                      backdropFilter: "blur(8px)",
                       position: "relative",
-                    }}>
-                    🌸 My Hot Spring
+                      letterSpacing: 0.3,
+                      animation: "hotSpringGlow 2.4s ease-in-out infinite",
+                      textShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px) scale(1.03)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; }}>
+                    <style>{`
+                      @keyframes hotSpringGlow {
+                        0%, 100% { box-shadow: 0 4px 18px #ff80c080, 0 0 0 0 #ff80c060; }
+                        50% { box-shadow: 0 6px 26px #ff80c0c0, 0 0 0 6px #ff80c020; }
+                      }
+                    `}</style>
+                    <span style={{ fontSize: 22 }}>🌸</span>
+                    My Hot Spring
                     {careLbl && me.pet && <span style={{ fontSize: 14 }}>{careLbl.emoji}</span>}
                     {needsAttention && (
                       <span style={{
@@ -9661,14 +10561,12 @@ function SnowMonkeyTrackerInner() {
           );
         })()}
 
-        {/* Customize Monkey modal - student dresses up own monkey */}
+        {/* Customize Monkey modal - student dresses up own monkey (pet customization is in Hot Spring) */}
         {showCustomize && me && (() => {
-          const isPetMode = customizeTarget === "pet" && me.pet;
-          // Choose the catalog and equipped lists based on target
-          const owned = isPetMode ? (me.ownedPetAccessories || []) : (me.ownedAccessories || []);
-          const equipped = isPetMode ? (me.petAccessories || []) : (me.accessories || []);
-          const catalog = isPetMode ? PET_ACCESSORY_CATALOG : ACCESSORY_CATALOG;
-          const slots = isPetMode ? PET_ACCESSORY_SLOTS : ACCESSORY_SLOTS;
+          const owned = me.ownedAccessories || [];
+          const equipped = me.accessories || [];
+          const catalog = ACCESSORY_CATALOG;
+          const slots = ACCESSORY_SLOTS;
           const visibleAccessories = catalog.filter(a => {
             if (customizeTab === "owned") return a.price === 0 || owned.includes(a.id);
             if (customizeTab === "shop") return a.price > 0;
@@ -9679,24 +10577,19 @@ function SnowMonkeyTrackerInner() {
             if (!bySlot[a.slot]) bySlot[a.slot] = [];
             bySlot[a.slot].push(a);
           });
-          const slotLabels = isPetMode
-            ? { head: "🎀 Head", neck: "📿 Neck", back: "🦋 Back" }
-            : { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
+          const slotLabels = { head: "🎩 Head", face: "🕶️ Face", neck: "🧣 Neck", hold: "🎾 Hold", back: "🦋 Back" };
           const onItemClick = (acc, isOwned, canAfford) => {
             if (isOwned) {
-              if (isPetMode) togglePetAccessory(me.id, acc.id);
-              else toggleAccessory(me.id, acc.id);
+              toggleAccessory(me.id, acc.id);
             } else if (canAfford && window.confirm(`Buy ${acc.name} for ${acc.price} ★?`)) {
-              if (isPetMode) buyPetAccessory(me.id, acc.id);
-              else buyAccessory(me.id, acc.id);
+              buyAccessory(me.id, acc.id);
             } else if (!canAfford) {
               SFX.wrong();
               notify(`Need ${acc.price - me.points} more ★`, "error");
             }
           };
           const onClearAll = () => {
-            if (isPetMode) clearPetAccessories(me.id);
-            else clearAccessories(me.id);
+            clearAccessories(me.id);
           };
 
           return (
@@ -9715,7 +10608,7 @@ function SnowMonkeyTrackerInner() {
                   <MonkeySVG size={160} mood="excited" delay={0}
                     variant={students.findIndex(st => st.id === me.id)}
                     accessories={me.accessories || []} pet={me.pet}
-                    petAccessories={me.petAccessories || []}
+                    petAccessoriesByPet={normalizePetAccessories(me)}
                     ownedPets={me.ownedPets || []}
                     streakLevel={getStreakLevel(getEffectiveStreak(me)).id} />
                   <div style={{ minWidth: 140 }}>
@@ -9728,30 +10621,13 @@ function SnowMonkeyTrackerInner() {
                       style={{ marginTop: 10, padding: "6px 12px", borderRadius: 10, border: `2px solid ${C.accent}40`, background: "transparent", color: C.accentDark, cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 600 }}>
                       Remove All
                     </button>
+                    {me.pet && (
+                      <div style={{ marginTop: 10, fontSize: 11, color: C.textLight, lineHeight: 1.3 }}>
+                        🐾 Customize pets in your<br/>🌸 Hot Spring page!
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Target toggle: Monkey / Pet (only show Pet if student has a pet) */}
-                {me.pet && (
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12, justifyContent: "center" }}>
-                    {[
-                      { id: "monkey", label: "🐵 Monkey" },
-                      { id: "pet", label: `🐾 Pet (${getPet(me.pet)?.emoji || ""})` },
-                    ].map(t => (
-                      <button key={t.id} onClick={() => setCustomizeTarget(t.id)}
-                        style={{
-                          padding: "9px 22px", borderRadius: 14,
-                          border: customizeTarget === t.id ? `2.5px solid ${C.gold}` : `2px solid ${C.fur2}30`,
-                          background: customizeTarget === t.id ? `${C.gold}25` : `${C.snow1}80`,
-                          color: customizeTarget === t.id ? C.text : C.textLight,
-                          fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                          transition: "all 0.2s",
-                        }}>
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
 
                 {/* Tabs */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 14, justifyContent: "center" }}>
@@ -9850,6 +10726,9 @@ function SnowMonkeyTrackerInner() {
             onShop={() => { setShowMyPool(false); setShowFoodShop(true); }}
             onWalk={() => { setShowMyPool(false); setShowWalk(true); }}
             onPetMart={() => { setPetMartTab("packs"); setShowPetMart(true); }}
+            onTogglePetAcc={togglePetAccessory}
+            onBuyPetAcc={buyPetAccessory}
+            onClearPetAcc={clearPetAccessories}
           />
         )}
 
@@ -10238,11 +11117,11 @@ function SnowMonkeyTrackerInner() {
                   <MonkeySVG
                     size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110}
                     mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
-                    label={showNames ? s.name : null} points={s.points}
+                    label={showNames ? s.name : null} points={showPoints ? s.points : undefined}
                     delay={i * 0.4} variant={i}
                     accessories={s.accessories || []}
                     pet={s.pet}
-                    petAccessories={s.petAccessories || []}
+                    petAccessoriesByPet={normalizePetAccessories(s)}
                     ownedPets={s.ownedPets || []}
                     streakLevel={getStreakLevel(getEffectiveStreak(s)).id}
                     selected={isMe}
