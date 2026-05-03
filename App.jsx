@@ -258,22 +258,48 @@ function isStarUserCheck(user, allTeachers) {
 /* ─── PETS ─── catalog of pets students get from mystery packs
    weeklyIncome = stars earned per week if equipped (capped, no compounding)
 */
+/* ─── PET CATALOG ───
+   Each pet has:
+   - id: stable string ID (matches keys in PetSVG / petAccessories)
+   - name: display name (can be overridden by student.petNicknames)
+   - emoji: shown as a small badge on UI cards (the actual pet body is hand-drawn)
+   - rarity: common | uncommon | rare | epic | legendary | mythic
+   - weeklyIncome: ★ stars per week if equipped
+   - packId: which mystery pack this pet ROLLS from
+              (omit for universal pets that any pack can roll)
+   Cosmic pack is special: it can also roll pets from OTHER packs (see rollPack).
+*/
 const PET_CATALOG = [
-  // Common (low income)
+  // ── ORIGINAL 9 (universal — any pack can roll these) ──
   { id: "fish",   name: "Crystal Goldie",   emoji: "🐠", rarity: "common",    weeklyIncome: 5  },
   { id: "duck",   name: "Splash Sprout",    emoji: "🦆", rarity: "common",    weeklyIncome: 5  },
-  // Uncommon
   { id: "turtle", name: "Mossback Sage",    emoji: "🐢", rarity: "uncommon",  weeklyIncome: 10 },
   { id: "bunny",  name: "Frostpaw",         emoji: "🐰", rarity: "uncommon",  weeklyIncome: 10 },
-  // Rare
   { id: "fox",    name: "Aurora Fox",       emoji: "🦊", rarity: "rare",      weeklyIncome: 18 },
   { id: "otter",  name: "River Spirit",     emoji: "🦦", rarity: "rare",      weeklyIncome: 18 },
-  // Epic
   { id: "owl",    name: "Moonlit Sentinel", emoji: "🦉", rarity: "epic",      weeklyIncome: 28 },
-  // Legendary
   { id: "panda",  name: "Bamboo Guardian",  emoji: "🐼", rarity: "legendary", weeklyIncome: 40 },
-  // Mythic
   { id: "dragon", name: "Ember Wyrmling",   emoji: "🐲", rarity: "mythic",    weeklyIncome: 60 },
+
+  // ── 🫧 STARTER BUBBLE PACK ──
+  { id: "towel_pup",  name: "Towel Pup",  emoji: "🐶", rarity: "common",   weeklyIncome: 5,  packId: "starter" },
+  { id: "mist_bunny", name: "Mist Bunny", emoji: "💨", rarity: "uncommon", weeklyIncome: 10, packId: "starter" },
+
+  // ── 🍮 JELLY DROP PACK ──
+  { id: "boba_foxlet",      name: "Boba Foxlet",      emoji: "🧋", rarity: "uncommon", weeklyIncome: 11, packId: "jelly" },
+  { id: "royal_jelly_deer", name: "Royal Jelly Deer", emoji: "🦌", rarity: "epic",     weeklyIncome: 30, packId: "jelly" },
+
+  // ── ❄️ FROST GLIMMER PACK ──
+  { id: "aurora_fawn", name: "Aurora Fawn",     emoji: "🌌", rarity: "rare",      weeklyIncome: 20, packId: "frost" },
+  { id: "halo_ram",    name: "Winter Halo Ram", emoji: "🐏", rarity: "legendary", weeklyIncome: 45, packId: "frost" },
+
+  // ── ✨ SPARKLE SURGE PACK ──
+  { id: "disco_corgi",      name: "Disco Corgi",          emoji: "🪩", rarity: "rare",      weeklyIncome: 22, packId: "sparkle" },
+  { id: "starlace_unicorn", name: "Starlace Unicorn Bun", emoji: "🦄", rarity: "legendary", weeklyIncome: 50, packId: "sparkle" },
+
+  // ── 🌌 COSMIC MYTHSTONE PACK ──
+  { id: "chronowl",    name: "Chronowl",                emoji: "🕰️", rarity: "legendary", weeklyIncome: 55, packId: "mythic" },
+  { id: "moon_spirit", name: "The Bathing Moon Spirit", emoji: "🌙", rarity: "mythic",    weeklyIncome: 90, packId: "mythic" },
 ];
 function getPet(id) { return PET_CATALOG.find(p => p.id === id); }
 
@@ -412,6 +438,7 @@ const MYSTERY_PACKS = [
 function rollPack(packId, ownedIds = []) {
   const pack = MYSTERY_PACKS.find(p => p.id === packId);
   if (!pack) return null;
+  // 1. Pick a rarity by weighted roll
   const total = Object.values(pack.odds).reduce((s, v) => s + v, 0);
   let roll = Math.random() * total;
   let chosenRarity = "common";
@@ -419,14 +446,29 @@ function rollPack(packId, ownedIds = []) {
     if (roll < weight) { chosenRarity = rarity; break; }
     roll -= weight;
   }
-  const candidates = PET_CATALOG.filter(p => p.rarity === chosenRarity);
-  if (candidates.length === 0) {
-    return PET_CATALOG.find(p => p.rarity === "common");
+  // 2. Build the candidate pool.
+  // - Cosmic Mythstone (mythic pack) is special: it can roll pets from ANY pack
+  //   plus the universal originals. This makes it the prestige "wildcard" pack.
+  // - All other packs roll from their own themed pets PLUS the universal
+  //   originals (the original 9 with no packId).
+  const universal = PET_CATALOG.filter(p => p.rarity === chosenRarity && !p.packId);
+  let pool;
+  if (packId === "mythic") {
+    // Cosmic: includes themed pets from EVERY pack at this rarity, plus universals.
+    pool = PET_CATALOG.filter(p => p.rarity === chosenRarity);
+  } else {
+    // Other packs: only their themed pets + universals.
+    const themed = PET_CATALOG.filter(p => p.rarity === chosenRarity && p.packId === packId);
+    pool = [...themed, ...universal];
   }
-  const unowned = candidates.filter(p => !ownedIds.includes(p.id));
-  // Prefer unowned, but allow duplicates (will yield consolation stars)
-  const pool = unowned.length > 0 ? unowned : candidates;
-  return pool[Math.floor(Math.random() * pool.length)];
+  // Defensive fallback: if somehow empty (shouldn't happen), grab any common pet
+  if (pool.length === 0) {
+    pool = PET_CATALOG.filter(p => p.rarity === "common");
+  }
+  // 3. Prefer unowned pets, but allow duplicates (yields consolation stars)
+  const unowned = pool.filter(p => !ownedIds.includes(p.id));
+  const finalPool = unowned.length > 0 ? unowned : pool;
+  return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
 
 // Weekly income calculator: 1 payout per 7 days, no compounding.
@@ -3149,6 +3191,413 @@ function PetSVG({ petId, side = "right", centered = false, mood = "neutral", pet
             <text x="16" y="6" fontSize="7" fill="#a060c0">✦</text>
           </g>
         );
+
+      // ── 🫧 STARTER: TOWEL PUP ──
+      // A sleepy beige puppy curled in a fluffy white spa towel with mint stripes.
+      case "towel_pup":
+        return (
+          <g transform={groupTransform}>
+            {/* Towel wrap — fluffy spa towel base behind the pup */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="6" rx="20" ry="10" fill="#f5f0e8" />
+              <ellipse cx="0" cy="6" rx="18" ry="8" fill="#fff8ee" />
+              {/* mint stripes on towel */}
+              <path d="M -16 8 Q 0 4 16 8" stroke="#a8e0c8" strokeWidth="1.5" fill="none" />
+              <path d="M -14 11 Q 0 8 14 11" stroke="#a8e0c8" strokeWidth="1.2" fill="none" opacity="0.7" />
+            </g>
+            {/* Puppy body (peeking out of the towel) */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="-3" rx="12" ry="11" fill="#dcc4a0" />
+              <ellipse cx="-3" cy="-5" rx="6" ry="4" fill="#ecd6b8" opacity="0.7" />
+              {/* floppy ears */}
+              <ellipse cx="-9" cy="-7" rx="4.5" ry="6" fill="#a88058" transform="rotate(-20 -9 -7)" />
+              <ellipse cx="9" cy="-7" rx="4.5" ry="6" fill="#a88058" transform="rotate(20 9 -7)" />
+              <ellipse cx="-9" cy="-7" rx="2.5" ry="4" fill="#c69878" transform="rotate(-20 -9 -7)" />
+              <ellipse cx="9" cy="-7" rx="2.5" ry="4" fill="#c69878" transform="rotate(20 9 -7)" />
+            </g>
+            {/* Sleepy eyes (always closed/sleepy lines) */}
+            <path d="M -6 -3 Q -4 -1 -2 -3" fill="none" stroke="#1a1a1a" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M 2 -3 Q 4 -1 6 -3" fill="none" stroke="#1a1a1a" strokeWidth="1.4" strokeLinecap="round" />
+            {/* Nose */}
+            <ellipse cx="0" cy="0" rx="1.8" ry="1.4" fill="#3a2618" />
+            {/* Tiny smile */}
+            <path d="M -2 3 Q 0 4 2 3" fill="none" stroke="#3a2618" strokeWidth="1" strokeLinecap="round" />
+            {blush(-7, 7, 1)}
+            {/* Steam puff above head */}
+            <ellipse cx="-8" cy="-15" rx="3" ry="2" fill="white" opacity="0.55" />
+            <ellipse cx="-4" cy="-17" rx="2" ry="1.5" fill="white" opacity="0.4" />
+          </g>
+        );
+
+      // ── 🫧 STARTER: MIST BUNNY ──
+      // A fluffy steam-cloud bunny with glowing bubble feet. Whole body is wispy.
+      case "mist_bunny":
+        return (
+          <g transform={groupTransform}>
+            {/* Outer steam halo */}
+            <ellipse cx="0" cy="0" rx="20" ry="16" fill="#e8f4f8" opacity="0.5" filter="url(#watercolorSoft)" />
+            {/* Bunny body — soft cloud */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="2" rx="13" ry="11" fill="#f8fafc" />
+              <ellipse cx="-3" cy="-1" rx="6" ry="4" fill="white" opacity="0.7" />
+              {/* Long bunny ears, wispy at tips */}
+              <ellipse cx="-5" cy="-13" rx="2.5" ry="8" fill="#e0eaf0" transform="rotate(-10 -5 -13)" />
+              <ellipse cx="5"  cy="-13" rx="2.5" ry="8" fill="#e0eaf0" transform="rotate(10 5 -13)" />
+              <ellipse cx="-5" cy="-12" rx="1.2" ry="6" fill="#ffd0d4" transform="rotate(-10 -5 -12)" opacity="0.85" />
+              <ellipse cx="5"  cy="-12" rx="1.2" ry="6" fill="#ffd0d4" transform="rotate(10 5 -12)" opacity="0.85" />
+            </g>
+            {eyes(-4, 4, -1, 2.2)}
+            {/* Tiny pink nose */}
+            <path d="M -1 3 Q 0 4 1 3 Q 0 5 -1 3" fill="#ff8090" />
+            {/* Whiskers */}
+            <line x1="-6" y1="4" x2="-12" y2="3" stroke="#c0d0d8" strokeWidth="0.6" />
+            <line x1="6"  y1="4" x2="12"  y2="3" stroke="#c0d0d8" strokeWidth="0.6" />
+            {blush(-7, 7, 5)}
+            {/* Glowing bubble feet */}
+            <circle cx="-7" cy="13" r="3" fill="#a8e0f0" opacity="0.7" filter="url(#watercolorSoft)" />
+            <circle cx="-7" cy="13" r="1.5" fill="white" opacity="0.6" />
+            <circle cx="7"  cy="13" r="3" fill="#a8e0f0" opacity="0.7" filter="url(#watercolorSoft)" />
+            <circle cx="7"  cy="13" r="1.5" fill="white" opacity="0.6" />
+            {/* Floating steam bubbles */}
+            <circle cx="-13" cy="-4" r="1.2" fill="white" opacity="0.5" />
+            <circle cx="14"  cy="-2" r="1"   fill="white" opacity="0.5" />
+          </g>
+        );
+
+      // ── 🍮 JELLY: BOBA FOXLET ──
+      // Tiny milk-tea-colored fox with translucent tapioca pearl spots and a glossy syrup tail.
+      case "boba_foxlet":
+        return (
+          <g transform={groupTransform}>
+            {/* Body */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="3" rx="13" ry="9" fill="#d4a878" />
+              <ellipse cx="-3" cy="0" rx="7" ry="4" fill="#e8c8a0" opacity="0.7" />
+            </g>
+            {/* Pointy fox ears */}
+            <g filter="url(#watercolorSoft)">
+              <path d="M -10 -8 L -7 -16 L -3 -10 Z" fill="#b88858" />
+              <path d="M  10 -8 L  7 -16 L  3 -10 Z" fill="#b88858" />
+              <path d="M -8 -10 L -7 -14 L -5 -10 Z" fill="#ffe0c0" />
+              <path d="M  8 -10 L  7 -14 L  5 -10 Z" fill="#ffe0c0" />
+            </g>
+            {/* Snout */}
+            <ellipse cx="0" cy="3" rx="6" ry="4" fill="#fff0d8" filter="url(#watercolorSoft)" />
+            {eyes(-4, 4, -3, 2.3)}
+            <ellipse cx="0" cy="2" rx="1.4" ry="1.1" fill="#1a1a1a" />
+            <path d="M -2 5 Q 0 6.5 2 5" fill="none" stroke="#1a1a1a" strokeWidth="1" strokeLinecap="round" />
+            {blush(-7, 7, 4)}
+            {/* Boba pearl spots on body — translucent dark circles */}
+            <circle cx="-5" cy="6" r="1.5" fill="#3a2010" opacity="0.7" />
+            <circle cx="-5" cy="6" r="0.6" fill="#5a3020" opacity="0.8" />
+            <circle cx="6"  cy="7" r="1.5" fill="#3a2010" opacity="0.7" />
+            <circle cx="6"  cy="7" r="0.6" fill="#5a3020" opacity="0.8" />
+            <circle cx="2"  cy="9" r="1.2" fill="#3a2010" opacity="0.7" />
+            {/* Glossy syrup tail — curling */}
+            <path d="M 11 4 Q 18 0 16 -6 Q 13 -8 13 -3" fill="#a06030" filter="url(#watercolorSoft)" />
+            <path d="M 13 2 Q 16 -1 15 -4" stroke="#d09060" strokeWidth="1.5" fill="none" opacity="0.6" />
+          </g>
+        );
+
+      // ── 🍮 JELLY: ROYAL JELLY DEER ──
+      // Rosy-pink deer with elegant translucent crystal-jelly antlers that glisten.
+      case "royal_jelly_deer":
+        return (
+          <g transform={groupTransform}>
+            {/* Outer rare-glow halo */}
+            <ellipse cx="0" cy="-10" rx="18" ry="14" fill="#ffb0c8" opacity="0.2" filter="url(#watercolorSoft)" />
+            {/* Body */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="4" rx="12" ry="9" fill="#fcc8d4" />
+              <ellipse cx="-3" cy="1" rx="6" ry="3.5" fill="#ffe0e8" opacity="0.7" />
+            </g>
+            {/* Slender deer head/snout */}
+            <ellipse cx="0" cy="-3" rx="7" ry="6" fill="#fcc8d4" filter="url(#watercolorSoft)" />
+            <ellipse cx="0" cy="-1" rx="4" ry="3" fill="#fff0f4" opacity="0.6" />
+            {/* Soft ears */}
+            <ellipse cx="-7" cy="-9" rx="2" ry="4" fill="#e8a0b0" transform="rotate(-15 -7 -9)" />
+            <ellipse cx="7"  cy="-9" rx="2" ry="4" fill="#e8a0b0" transform="rotate(15 7 -9)" />
+            {/* CRYSTAL JELLY ANTLERS — translucent dripping shapes */}
+            <g filter="url(#watercolorSoft)" opacity="0.85">
+              {/* Left antler */}
+              <path d="M -5 -10 Q -8 -16 -10 -14 Q -7 -12 -8 -8 Q -10 -10 -12 -8" fill="#ffb0d0" stroke="#e090b0" strokeWidth="0.8" />
+              <path d="M -7 -16 Q -9 -19 -7 -20" stroke="#e090b0" strokeWidth="1" fill="#ffd0e0" />
+              {/* Right antler */}
+              <path d="M 5 -10 Q 8 -16 10 -14 Q 7 -12 8 -8 Q 10 -10 12 -8" fill="#ffb0d0" stroke="#e090b0" strokeWidth="0.8" />
+              <path d="M 7 -16 Q 9 -19 7 -20" stroke="#e090b0" strokeWidth="1" fill="#ffd0e0" />
+            </g>
+            {/* Antler shine highlights */}
+            <ellipse cx="-9" cy="-15" rx="0.8" ry="2" fill="white" opacity="0.7" />
+            <ellipse cx="9"  cy="-15" rx="0.8" ry="2" fill="white" opacity="0.7" />
+            {eyes(-3, 3, -3, 2)}
+            <ellipse cx="0" cy="-1" rx="1.3" ry="1" fill="#a04060" />
+            <path d="M -2 1 Q 0 2.5 2 1" fill="none" stroke="#a04060" strokeWidth="0.9" strokeLinecap="round" />
+            {blush(-6, 6, 1)}
+            {/* Sparkle dots */}
+            <text x="-13" y="-12" fontSize="6" fill="#fff4f8">✦</text>
+            <text x="11" y="-14" fontSize="5" fill="#fff4f8">✧</text>
+          </g>
+        );
+
+      // ── ❄️ FROST: AURORA FAWN ──
+      // Baby deer with shifting purple-teal-pink northern-light fur stripes.
+      case "aurora_fawn":
+        return (
+          <g transform={groupTransform}>
+            {/* Aurora glow behind body */}
+            <ellipse cx="0" cy="0" rx="18" ry="14" fill="#a0d0e0" opacity="0.25" filter="url(#watercolorSoft)" />
+            {/* Body — base white with aurora gradient streaks layered on top */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="4" rx="12" ry="9" fill="#f0f8fc" />
+              {/* Aurora bands across the body */}
+              <path d="M -10 4 Q 0 -2 10 4" stroke="#80c0d8" strokeWidth="2.5" fill="none" opacity="0.5" />
+              <path d="M -10 7 Q 0 1 10 7" stroke="#a070c0" strokeWidth="2" fill="none" opacity="0.4" />
+              <path d="M -10 10 Q 0 4 10 10" stroke="#f090b0" strokeWidth="1.8" fill="none" opacity="0.4" />
+            </g>
+            {/* Small fawn head */}
+            <ellipse cx="0" cy="-3" rx="6" ry="5" fill="#f0f8fc" filter="url(#watercolorSoft)" />
+            {/* Tiny budding antlers */}
+            <line x1="-3" y1="-9" x2="-4" y2="-13" stroke="#c0a080" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3"  y1="-9" x2="4"  y2="-13" stroke="#c0a080" strokeWidth="1.5" strokeLinecap="round" />
+            {/* Ears */}
+            <ellipse cx="-6" cy="-7" rx="2" ry="3" fill="#d0e0e8" transform="rotate(-15 -6 -7)" />
+            <ellipse cx="6"  cy="-7" rx="2" ry="3" fill="#d0e0e8" transform="rotate(15 6 -7)" />
+            {eyes(-3, 3, -3, 2.2)}
+            <ellipse cx="0" cy="-1" rx="1.2" ry="1" fill="#1a1a1a" />
+            <path d="M -1.5 1 Q 0 2 1.5 1" fill="none" stroke="#1a1a1a" strokeWidth="0.9" strokeLinecap="round" />
+            {blush(-5, 5, 1)}
+            {/* Aurora particles floating */}
+            <circle cx="-14" cy="-4" r="0.8" fill="#a070c0" opacity="0.7" />
+            <circle cx="13"  cy="-6" r="0.8" fill="#80c0d8" opacity="0.7" />
+            <circle cx="11"  cy="11" r="0.7" fill="#f090b0" opacity="0.7" />
+          </g>
+        );
+
+      // ── ❄️ FROST: WINTER HALO RAM ──
+      // Majestic fluffy white ram with curled glowing crystal-ice horns.
+      case "halo_ram":
+        return (
+          <g transform={groupTransform}>
+            {/* Glowing halo behind horns */}
+            <ellipse cx="0" cy="-10" rx="22" ry="10" fill="#a0e8f8" opacity="0.3" filter="url(#watercolorSoft)" />
+            {/* Fluffy cloudy body */}
+            <g filter="url(#watercolorSoft)">
+              {/* Multiple soft puffs make a wool effect */}
+              <circle cx="-7" cy="3" r="6" fill="#f8f8ff" />
+              <circle cx="0"  cy="6" r="7" fill="#f8f8ff" />
+              <circle cx="7"  cy="3" r="6" fill="#f8f8ff" />
+              <circle cx="-4" cy="-1" r="5" fill="#fdfdff" />
+              <circle cx="4"  cy="-1" r="5" fill="#fdfdff" />
+            </g>
+            {/* Face — pinkish-tan inset */}
+            <ellipse cx="0" cy="-1" rx="6" ry="5" fill="#f5d8c8" filter="url(#watercolorSoft)" />
+            {/* CURLED ICE HORNS — glowing translucent spirals */}
+            <g filter="url(#watercolorSoft)">
+              {/* Left horn — spiral curl */}
+              <path d="M -7 -7 Q -14 -10 -14 -5 Q -10 -3 -8 -6" fill="#cef4fc" stroke="#80c8e0" strokeWidth="1" />
+              <path d="M -10 -7 Q -12 -8 -11 -5" stroke="#80c8e0" strokeWidth="0.8" fill="none" />
+              {/* Right horn — mirror */}
+              <path d="M 7 -7 Q 14 -10 14 -5 Q 10 -3 8 -6" fill="#cef4fc" stroke="#80c8e0" strokeWidth="1" />
+              <path d="M 10 -7 Q 12 -8 11 -5" stroke="#80c8e0" strokeWidth="0.8" fill="none" />
+            </g>
+            {/* Horn shine */}
+            <ellipse cx="-12" cy="-7" rx="0.8" ry="2" fill="white" opacity="0.85" />
+            <ellipse cx="12"  cy="-7" rx="0.8" ry="2" fill="white" opacity="0.85" />
+            {eyes(-3, 3, -1, 2)}
+            <ellipse cx="0" cy="2" rx="1.5" ry="1" fill="#3a2618" />
+            <path d="M -2 4 Q 0 5 2 4" fill="none" stroke="#3a2618" strokeWidth="0.9" strokeLinecap="round" />
+            {blush(-5, 5, 3)}
+            {/* Sparkle dust */}
+            <text x="-15" y="-12" fontSize="6" fill="#cef4fc">❄</text>
+            <text x="11"  y="-13" fontSize="5" fill="#cef4fc">✦</text>
+            <text x="0"   y="-16" fontSize="4" fill="white" opacity="0.7">✧</text>
+          </g>
+        );
+
+      // ── ✨ SPARKLE: DISCO CORGI ──
+      // A short-legged corgi whose fur shimmers in rainbow color stripes.
+      case "disco_corgi":
+        return (
+          <g transform={groupTransform}>
+            {/* Color-shift halo */}
+            <ellipse cx="0" cy="0" rx="18" ry="13" fill="#ffc0e0" opacity="0.25" filter="url(#watercolorSoft)" />
+            {/* Body — golden corgi base */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="4" rx="13" ry="9" fill="#e8a868" />
+              {/* White underbelly */}
+              <ellipse cx="0" cy="7" rx="9" ry="4" fill="#fff8ee" />
+              {/* RAINBOW DISCO STRIPES — shifting bands */}
+              <path d="M -10 -2 Q 0 -6 10 -2" stroke="#ff7080" strokeWidth="2" fill="none" opacity="0.55" />
+              <path d="M -11 1 Q 0 -3 11 1" stroke="#ffd040" strokeWidth="2" fill="none" opacity="0.55" />
+              <path d="M -11 4 Q 0 0 11 4" stroke="#60d090" strokeWidth="2" fill="none" opacity="0.55" />
+              <path d="M -11 7 Q 0 3 11 7" stroke="#60c0e0" strokeWidth="2" fill="none" opacity="0.55" />
+              <path d="M -10 10 Q 0 6 10 10" stroke="#a070c0" strokeWidth="2" fill="none" opacity="0.55" />
+            </g>
+            {/* Big upright corgi ears */}
+            <g filter="url(#watercolorSoft)">
+              <path d="M -8 -6 L -10 -14 L -5 -10 Z" fill="#d09058" />
+              <path d="M  8 -6 L  10 -14 L  5 -10 Z" fill="#d09058" />
+              <path d="M -8 -7 L -9 -12 L -6 -10 Z" fill="#fce0c0" />
+              <path d="M  8 -7 L  9 -12 L  6 -10 Z" fill="#fce0c0" />
+            </g>
+            {/* Snout */}
+            <ellipse cx="0" cy="2" rx="5" ry="3.5" fill="#fff8ee" filter="url(#watercolorSoft)" />
+            {eyes(-4, 4, -2, 2.3)}
+            <ellipse cx="0" cy="2" rx="1.5" ry="1.1" fill="#1a1a1a" />
+            <path d="M -2 4 Q 0 5.5 2 4" fill="none" stroke="#1a1a1a" strokeWidth="0.9" strokeLinecap="round" />
+            <path d="M 0 5.5 L 0 7" stroke="#1a1a1a" strokeWidth="0.7" />
+            {blush(-7, 7, 3)}
+            {/* Disco sparkles */}
+            <text x="-15" y="-8"  fontSize="6" fill="#ffd040">✦</text>
+            <text x="13"  y="-10" fontSize="5" fill="#ff7080">✧</text>
+            <text x="0"   y="-15" fontSize="5" fill="#60c0e0">✦</text>
+          </g>
+        );
+
+      // ── ✨ SPARKLE: STARLACE UNICORN BUN ──
+      // Bunny+unicorn hybrid with iridescent ribbon ears and a glowing comet tail.
+      case "starlace_unicorn":
+        return (
+          <g transform={groupTransform}>
+            {/* Comet tail trail */}
+            <g filter="url(#watercolorSoft)">
+              <path d="M 10 5 Q 22 8 26 -2 Q 24 -6 18 -2" fill="#e8c0f0" opacity="0.6" />
+              <path d="M 12 4 Q 20 6 24 0" stroke="#ffe0c8" strokeWidth="1.2" fill="none" opacity="0.8" />
+            </g>
+            {/* Comet sparkles in tail */}
+            <text x="20" y="0" fontSize="6" fill="#ffd0a0">✦</text>
+            <text x="24" y="-4" fontSize="4" fill="#ffe0c0">✧</text>
+            {/* Body — pearly white */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="3" rx="11" ry="10" fill="#fdf8fc" />
+              <ellipse cx="-3" cy="0" rx="5" ry="4" fill="white" opacity="0.7" />
+              {/* Iridescent purple-pink shimmer over body */}
+              <ellipse cx="0" cy="6" rx="9" ry="3" fill="#e8b8ec" opacity="0.4" />
+            </g>
+            {/* RIBBON EARS — long, ribbon-like, iridescent */}
+            <g filter="url(#watercolorSoft)">
+              <path d="M -4 -8 Q -10 -16 -7 -20 Q -3 -18 -3 -10" fill="#f0c8e8" />
+              <path d="M  4 -8 Q  10 -16 7 -20 Q 3 -18 3 -10" fill="#f0c8e8" />
+              {/* inner ribbon highlight */}
+              <path d="M -5 -9 Q -8 -15 -6 -18" stroke="#ffe0f0" strokeWidth="1.2" fill="none" />
+              <path d="M  5 -9 Q  8 -15 6 -18" stroke="#ffe0f0" strokeWidth="1.2" fill="none" />
+            </g>
+            {/* TINY GOLD UNICORN HORN between the ears */}
+            <path d="M 0 -10 L -1.5 -16 L 1.5 -16 Z" fill="#ffd060" stroke="#c08818" strokeWidth="0.6" />
+            <path d="M 0 -16 L 0 -19" stroke="#ffd060" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="-1" y1="-13" x2="1" y2="-13" stroke="#c08818" strokeWidth="0.4" />
+            {eyes(-4, 4, -2, 2.4)}
+            {/* Pink heart-shaped nose */}
+            <path d="M 0 2 Q -1.5 0.5 -1 2 Q 0 3 0 2 Q 0 3 1 2 Q 1.5 0.5 0 2" fill="#ff8a9e" />
+            <path d="M -2 4 Q 0 5.5 2 4" fill="none" stroke="#ff8a9e" strokeWidth="0.9" strokeLinecap="round" />
+            {blush(-6, 6, 3)}
+            {/* Magic sparkles around */}
+            <text x="-14" y="-4" fontSize="5" fill="#ffd060">✦</text>
+            <text x="13" y="-6" fontSize="4" fill="#f0c8e8">✧</text>
+          </g>
+        );
+
+      // ── 🌌 COSMIC: CHRONOWL ──
+      // Mysterious owl with clock-face eyes and constellation feather speckles.
+      case "chronowl":
+        return (
+          <g transform={groupTransform}>
+            {/* Cosmic glow behind */}
+            <ellipse cx="0" cy="0" rx="18" ry="14" fill="#3a2058" opacity="0.25" filter="url(#watercolorSoft)" />
+            {/* Body — deep midnight blue with constellation speckles */}
+            <g filter="url(#watercolorSoft)">
+              <ellipse cx="0" cy="4" rx="13" ry="13" fill="#3a3068" />
+              <ellipse cx="-4" cy="0" rx="6" ry="5" fill="#5a508a" opacity="0.6" />
+              {/* belly fade */}
+              <ellipse cx="0" cy="9" rx="9" ry="6" fill="#6a608a" opacity="0.7" />
+            </g>
+            {/* Star speckles on body */}
+            <circle cx="-5" cy="6"  r="0.8" fill="#fff4c2" />
+            <circle cx="6"  cy="3"  r="0.7" fill="#fff4c2" />
+            <circle cx="2"  cy="9"  r="0.6" fill="#fff4c2" />
+            <circle cx="-7" cy="11" r="0.7" fill="#fff4c2" />
+            <circle cx="8"  cy="9"  r="0.6" fill="#fff4c2" />
+            {/* Feathered ear tufts */}
+            <path d="M -8 -6 L -10 -14 L -5 -10" fill="#3a3068" filter="url(#watercolorSoft)" />
+            <path d="M  8 -6 L  10 -14 L  5 -10" fill="#3a3068" filter="url(#watercolorSoft)" />
+            {/* CLOCK-FACE EYES — large white circles with hour marks and clock hands */}
+            <circle cx="-5" cy="-1" r="4.5" fill="#fff8e8" />
+            <circle cx="-5" cy="-1" r="4.5" fill="none" stroke="#3a3068" strokeWidth="0.8" />
+            <circle cx="5"  cy="-1" r="4.5" fill="#fff8e8" />
+            <circle cx="5"  cy="-1" r="4.5" fill="none" stroke="#3a3068" strokeWidth="0.8" />
+            {/* hour marks */}
+            <line x1="-5" y1="-5" x2="-5" y2="-4" stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="-5" y1="2"  x2="-5" y2="3"  stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="-9" y1="-1" x2="-8" y2="-1" stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="-2" y1="-1" x2="-1" y2="-1" stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="5" y1="-5" x2="5" y2="-4" stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="5" y1="2"  x2="5" y2="3"  stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="1" y1="-1" x2="2" y2="-1" stroke="#3a3068" strokeWidth="0.6" />
+            <line x1="8" y1="-1" x2="9" y2="-1" stroke="#3a3068" strokeWidth="0.6" />
+            {/* clock hands */}
+            <line x1="-5" y1="-1" x2="-5" y2="-3.5" stroke="#3a3068" strokeWidth="0.9" strokeLinecap="round" />
+            <line x1="-5" y1="-1" x2="-3" y2="-1" stroke="#3a3068" strokeWidth="0.9" strokeLinecap="round" />
+            <line x1="5" y1="-1" x2="5" y2="-3.5" stroke="#3a3068" strokeWidth="0.9" strokeLinecap="round" />
+            <line x1="5" y1="-1" x2="7" y2="-1" stroke="#3a3068" strokeWidth="0.9" strokeLinecap="round" />
+            <circle cx="-5" cy="-1" r="0.5" fill="#3a3068" />
+            <circle cx="5"  cy="-1" r="0.5" fill="#3a3068" />
+            {/* Beak */}
+            <path d="M -1.5 4 L 1.5 4 L 0 7 Z" fill="#d09848" />
+            {/* Constellation sparkles around */}
+            <text x="-14" y="-6" fontSize="5" fill="#fff4c2">✦</text>
+            <text x="13" y="-8" fontSize="4" fill="#fff4c2">✧</text>
+            <text x="-12" y="14" fontSize="4" fill="#fff4c2">✦</text>
+          </g>
+        );
+
+      // ── 🌌 COSMIC: THE BATHING MOON SPIRIT ──
+      // Sacred crescent-moon spirit with floating wisps and starlight glow.
+      // The crown jewel of the whole game (mythic, 90★/week).
+      case "moon_spirit":
+        return (
+          <g transform={groupTransform}>
+            {/* Outer mythic radial glow — large pulsing aura */}
+            <circle cx="0" cy="0" r="22" fill="#fff2d0" opacity="0.25" filter="url(#watercolorSoft)">
+              <animate attributeName="r" values="22;26;22" dur="3s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.25;0.4;0.25" dur="3s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="0" cy="0" r="18" fill="#ffe8a8" opacity="0.3" filter="url(#watercolorSoft)" />
+            {/* CRESCENT MOON BODY — the spirit IS a crescent, with a face */}
+            <g filter="url(#watercolorSoft)">
+              {/* Outer crescent (full moon disc) */}
+              <circle cx="0" cy="2" r="13" fill="#fff8d8" />
+              {/* Cut-out shadow to make crescent shape */}
+              <circle cx="6" cy="0" r="11" fill="#7a6850" opacity="0.55" />
+              {/* Moon highlight */}
+              <ellipse cx="-6" cy="-2" rx="5" ry="6" fill="#fffce8" opacity="0.8" />
+            </g>
+            {/* Crescent silver-cream outline */}
+            <path d="M -12 2 Q -13 -8 -5 -10 Q -10 -2 -10 4 Q -10 12 -3 14 Q -13 12 -12 2 Z"
+                  fill="none" stroke="#e0c890" strokeWidth="0.7" opacity="0.5" />
+            {/* Sleepy/serene face on the crescent */}
+            <path d="M -10 -2 Q -8 -1 -6 -2" fill="none" stroke="#3a2618" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M -5 -2 Q -3 -1 -1 -2" fill="none" stroke="#3a2618" strokeWidth="1.4" strokeLinecap="round" />
+            {/* Tiny serene smile */}
+            <path d="M -8 3 Q -6 5 -4 3" fill="none" stroke="#3a2618" strokeWidth="1.1" strokeLinecap="round" />
+            {/* Cheeks — soft golden glow */}
+            <circle cx="-9" cy="1" r="2" fill="#ffb070" opacity="0.45" />
+            <circle cx="-3" cy="1" r="2" fill="#ffb070" opacity="0.45" />
+            {/* Floating wisps trailing the spirit */}
+            <ellipse cx="-15" cy="8"  rx="3" ry="1.5" fill="#fff8d8" opacity="0.5" filter="url(#watercolorSoft)" />
+            <ellipse cx="-18" cy="10" rx="2" ry="1"   fill="#fff8d8" opacity="0.4" filter="url(#watercolorSoft)" />
+            <ellipse cx="13"  cy="10" rx="2.5" ry="1.2" fill="#fff8d8" opacity="0.45" filter="url(#watercolorSoft)" />
+            {/* Tiny stars orbiting the spirit */}
+            <text x="-16" y="-8" fontSize="6" fill="#ffd060">✦</text>
+            <text x="13"  y="-10" fontSize="5" fill="#fff4c2">✧</text>
+            <text x="0"   y="-15" fontSize="7" fill="#ffd060">✦</text>
+            <text x="14"  y="6"  fontSize="4" fill="#fff4c2">✧</text>
+            <text x="-13" y="14" fontSize="4" fill="#fff4c2">✦</text>
+            {/* A trailing little comet sparkle */}
+            <circle cx="-19" cy="6" r="0.8" fill="#ffd060" opacity="0.8" />
+            <circle cx="-21" cy="5" r="0.5" fill="#fff4c2" opacity="0.7" />
+          </g>
+        );
+
       default: return null;
     }
   };
@@ -3175,13 +3624,30 @@ const PET_ANCHORS = {
   owl:    { head: { x: 0,  y: -19, scale: 1.05 }, neck: { x: 0,  y: 0,  scale: 1.0  }, back: { x: 4,  y: 2,  scale: 1.0 } },
   panda:  { head: { x: 0,  y: -16, scale: 1.05 }, neck: { x: 0,  y: 0,  scale: 1.0  }, back: { x: 6,  y: 4,  scale: 1.05 } },
   dragon: { head: { x: 14, y: -10, scale: 0.8  }, neck: { x: 8,  y: 2,  scale: 0.85 }, back: { x: -8, y: -2, scale: 1.0 } },
+  // ── New custom pets ──
+  towel_pup:        { head: { x: 0,  y: -11, scale: 0.9  }, neck: { x: 0,  y: 1,   scale: 0.85 }, back: { x: 0,  y: 8,  scale: 1.1 } },
+  mist_bunny:       { head: { x: 0,  y: -16, scale: 0.95 }, neck: { x: 0,  y: 1,   scale: 0.9  }, back: { x: 0,  y: 8,  scale: 1.0 } },
+  boba_foxlet:      { head: { x: 0,  y: -14, scale: 0.95 }, neck: { x: 0,  y: 1,   scale: 0.9  }, back: { x: 0,  y: 7,  scale: 1.0 } },
+  royal_jelly_deer: { head: { x: 0,  y: -18, scale: 0.95 }, neck: { x: 0,  y: -2,  scale: 0.9  }, back: { x: 0,  y: 6,  scale: 1.0 } },
+  aurora_fawn:      { head: { x: 0,  y: -16, scale: 0.9  }, neck: { x: 0,  y: -2,  scale: 0.85 }, back: { x: 0,  y: 6,  scale: 1.0 } },
+  halo_ram:         { head: { x: 0,  y: -14, scale: 0.95 }, neck: { x: 0,  y: 0,   scale: 0.9  }, back: { x: 0,  y: 6,  scale: 1.05 } },
+  disco_corgi:      { head: { x: 0,  y: -14, scale: 0.95 }, neck: { x: 0,  y: 1,   scale: 0.9  }, back: { x: 0,  y: 7,  scale: 1.05 } },
+  starlace_unicorn: { head: { x: 0,  y: -22, scale: 0.85 }, neck: { x: 0,  y: -2,  scale: 0.85 }, back: { x: 0,  y: 5,  scale: 1.0 } },
+  chronowl:         { head: { x: 0,  y: -16, scale: 1.0  }, neck: { x: 0,  y: 0,   scale: 0.95 }, back: { x: 4,  y: 2,  scale: 1.0 } },
+  moon_spirit:      { head: { x: -7, y: -10, scale: 0.85 }, neck: { x: -6, y: -2,  scale: 0.85 }, back: { x: 0,  y: 4,  scale: 1.0 } },
 };
 
 /* ─── PET ACCESSORY LAYER ─── renders watercolor SVG accessories on the pet
-   Each accessory has its own render function at given (x, y, scale). */
+   Each accessory has its own render function at given (x, y, scale).
+   Pets without specific entries in PET_ANCHORS (the 35+ emoji-bubble pets)
+   get a default set of anchor points sized to the bubble body. */
+const DEFAULT_PET_ANCHORS = {
+  head: { x: 0, y: -16, scale: 0.9 },
+  neck: { x: 0, y: 2,   scale: 0.85 },
+  back: { x: 8, y: 2,   scale: 0.95 },
+};
 function PetAccessoryLayer({ petId, accessories }) {
-  const anchors = PET_ANCHORS[petId];
-  if (!anchors) return null;
+  const anchors = PET_ANCHORS[petId] || DEFAULT_PET_ANCHORS;
   // Group by slot — only render the LAST equipped item per slot
   const equipped = { head: null, neck: null, back: null };
   for (const id of accessories) {
@@ -13515,61 +13981,6 @@ function SnowMonkeyTrackerInner() {
           </div>
         </section>
 
-        {/* ─── SECTION: For Teachers (2-column) ─── */}
-        <section style={{ padding: isMobile ? "48px 20px" : "80px 40px", position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48, alignItems: "center" }}>
-            <div>
-              <p style={{ fontSize: 14, color: C.accent, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", margin: "0 0 8px" }}>For Teachers</p>
-              <h2 style={{ fontSize: isMobile ? 26 : 38, color: C.text, margin: "0 0 16px", fontWeight: 700, lineHeight: 1.15 }}>Built for classrooms,<br />not boardrooms.</h2>
-              <p style={{ fontSize: 16, color: C.textLight, margin: "0 0 24px", lineHeight: 1.55 }}>
-                Skip the spreadsheets. Big A Star handles the busywork so you can focus on teaching.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {[
-                  { ic: "✓", t: "One-click student onboarding", d: "Add students with name, username, password — done." },
-                  { ic: "✓", t: "Upload missions as CSV", d: "Drag in a quiz CSV and assign it to anyone." },
-                  { ic: "✓", t: "Yearbook view", d: "See every student's monkey + completion at a glance." },
-                  { ic: "✓", t: "Per-question wrong-answer tracking", d: "Spot exactly where students struggled, by question." },
-                ].map((f, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 999, flexShrink: 0,
-                      background: `${C.green}25`, color: C.green, fontWeight: 700,
-                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                    }}>{f.ic}</div>
-                    <div>
-                      <div style={{ fontSize: 17, color: C.text, fontWeight: 700, marginBottom: 2 }}>{f.t}</div>
-                      <div style={{ fontSize: 14, color: C.textLight, lineHeight: 1.4 }}>{f.d}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Right: stylized teacher dashboard mockup */}
-            <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
-              <div style={{
-                background: `${C.card}f0`, borderRadius: 24, padding: 24,
-                boxShadow: "0 24px 48px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.05)",
-                border: `2px solid ${C.fur2}30`, width: "100%", maxWidth: 420,
-                transform: "rotate(-1.5deg)",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.fur2}30` }}>
-                  <WatercolorIcon name="brand_monkey" size={28} />
-                  <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Class Yearbook</span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                      <MonkeySVG size={56} mood={i % 2 === 0 ? "happy" : "excited"} variant={i} delay={i * 0.2} accessories={i === 1 ? ["crown"] : i === 4 ? ["scarf"] : []} />
-                      <div style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>Student {i}</div>
-                      <div style={{ fontSize: 10, color: C.gold, fontWeight: 700 }}>★ {Math.floor(20 + Math.random() * 40)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* ─── SECTION: Final CTA ─── */}
         <section style={{ padding: isMobile ? "60px 20px 50px" : "100px 40px 80px", position: "relative", zIndex: 10, background: `${C.water1}15` }}>
