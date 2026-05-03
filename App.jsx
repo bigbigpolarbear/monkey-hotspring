@@ -12052,7 +12052,6 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
 
 /* ─── MAIN APP ─── */
 export default function SnowMonkeyTracker() {
-  const isMobile = useIsMobile(640); // portrait phone breakpoint
   const [anyHovering, setAnyHovering] = useState(false);
   return (
     <HoverContext.Provider value={{ anyHovering, setAnyHovering }}>
@@ -12062,6 +12061,7 @@ export default function SnowMonkeyTracker() {
 }
 
 function SnowMonkeyTrackerInner() {
+  const isMobile = useIsMobile(640); // portrait phone breakpoint
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("login");
   const [loginTab, setLoginTab] = useState("student");
