@@ -2,7 +2,11 @@ import { useState, useEffect, useRef, useCallback, useMemo, createContext, useCo
 import {
   getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent, addTeacherToDB,
   setQuizzesForStudent, deleteQuizzesForStudent, getQuizzes,
-  setMissionsForStudent, deleteMissionsForStudent, getMissions
+  setMissionsForStudent, deleteMissionsForStudent, getMissions,
+  signInWithGoogle,
+  getStudyPacks, addStudyPack, deleteStudyPack, setTeacherStarStatus,
+  createLiveGame, watchLiveGame, joinLiveGame, startLiveGame,
+  advanceLiveGameQuestion, endLiveGame, submitLiveAnswer, deleteLiveGame
 } from "./firebase";
 
 /* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
@@ -11,14 +15,22 @@ const HoverContext = createContext({ anyHovering: false, setAnyHovering: () => {
 /* ─── palette matched to original watercolor ─── */
 /* ─── THEME SYSTEM ─── light + dark mode, swap by mutating the C object */
 const C_LIGHT = {
-  water1: "#6cc4b8", water2: "#8fd4ca", water3: "#4db0a4", water4: "#3a9e92",
-  snow1: "#f2f0f5", snow2: "#e4e0eb", snow3: "#d2cdd9",
-  rock1: "#8b6352", rock2: "#6b4a3a", rock3: "#a3796a", rock4: "#553928",
-  face: "#f5cdd0", cheek: "#e06060", nose: "#cc3333", noseDark: "#a82828",
-  fur1: "#ede6dc", fur2: "#dbd2c4", fur3: "#c9bfae", fur4: "#b8ac98",
-  accent: "#e06060", accentDark: "#c04545",
-  bg: "#f5f0ea", card: "#fffdf8", text: "#3e2a1a", textLight: "#7a6050",
-  gold: "#edb830", green: "#5caa5e",
+  // Water — brighter, more cyan, refreshing pool feel
+  water1: "#5dd4c8", water2: "#85e3d8", water3: "#3eb9ad", water4: "#2da596",
+  // Snow → cleaner whites for that "freshly painted" feel
+  snow1: "#f8f8fc", snow2: "#ececf2", snow3: "#d8d8e0",
+  // Rocks — slightly punchier earth tones
+  rock1: "#9b6850", rock2: "#724a30", rock3: "#b07c64", rock4: "#5a3820",
+  // Face/cheeks — vibrant rosy pink
+  face: "#ffd0d4", cheek: "#ff7080", nose: "#e02828", noseDark: "#b81818",
+  // Fur — warmer cream
+  fur1: "#f0e8dc", fur2: "#dccfb8", fur3: "#c8b8a0", fur4: "#b09878",
+  // Accents — punchier coral red
+  accent: "#ff6878", accentDark: "#dc3848",
+  // Backgrounds — much cleaner near-white
+  bg: "#fafaf6", card: "#ffffff", text: "#2c1e10", textLight: "#6a5040",
+  // Gold + green — brighter, sunnier
+  gold: "#ffc428", green: "#48c060",
 };
 
 const C_DARK = {
@@ -113,6 +125,24 @@ function getTodaysWord() {
 }
 
 /* ─── SVG filter definitions (shared) ─── */
+/* ─── Hook: detect narrow viewports (portrait phone) ───
+   Returns true when the window is ≤640px wide — used by the homepage to
+   render a mobile-optimized layout (smaller fonts, single column, smaller
+   monkeys) without affecting tablet/laptop landscape views. */
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= breakpoint : false
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const check = () => setIsMobile(window.innerWidth <= breakpoint);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 function WatercolorFilters() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }}>
@@ -156,8 +186,73 @@ function GlobalKeyframes() {
         50% { background-position: 100% 50%; }
         100% { background-position: 0% 50%; }
       }
+      @keyframes starBob {
+        0%, 100% { transform: translateY(0) rotate(-6deg); }
+        50%      { transform: translateY(-8px) rotate(6deg); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      @keyframes modalPop {
+        from { opacity: 0; transform: scale(0.92) translateY(8px); }
+        to   { opacity: 1; transform: scale(1) translateY(0); }
+      }
     `}</style>
   );
+}
+
+/* ─── STAR USER (paid tier) ─── pricing and Stripe Payment Links.
+   Stripe Payment Links are pre-built hosted checkout pages — no backend needed.
+   Create them in your Stripe Dashboard: https://dashboard.stripe.com/payment-links
+   Steps to wire up:
+     1. Create two Products in Stripe: "Star Monthly" ($4.99/mo) and "Star Yearly" ($29/yr)
+     2. For each, create a Payment Link (recurring)
+     3. In Payment Link settings → "After payment" → "Redirect to your URL"
+        Set: https://YOUR-DOMAIN.com/?starPaid=success
+     4. Copy each link's URL and paste below — replace the placeholder strings
+     5. Install the "Run Payments with Stripe" Firebase Extension to handle the webhook
+        (it auto-syncs subscription status → see STRIPE_SETUP.md for details)
+*/
+const STAR_PRICING = {
+  monthly: { price: 19.99, label: "$19.99/mo", description: "Billed monthly, cancel anytime" },
+  yearly:  { price: 199.00, label: "$199/yr",  description: "Save 17% — best value",       badge: "BEST VALUE" },
+};
+// Replace these with your real Stripe Payment Link URLs after creating the products.
+// We append ?client_reference_id=<teacherId> so the webhook knows which teacher to upgrade.
+const STRIPE_PAYMENT_LINKS = {
+  monthly: "https://buy.stripe.com/test_REPLACE_WITH_MONTHLY_LINK",
+  yearly:  "https://buy.stripe.com/test_REPLACE_WITH_YEARLY_LINK",
+};
+function buildStripeCheckoutUrl(plan, teacherId, email) {
+  const base = STRIPE_PAYMENT_LINKS[plan];
+  if (!base || base.includes("REPLACE_WITH")) return null; // not configured
+  const params = new URLSearchParams();
+  if (teacherId) params.set("client_reference_id", teacherId);
+  if (email) params.set("prefilled_email", email);
+  return `${base}${base.includes("?") ? "&" : "?"}${params.toString()}`;
+}
+/* Convenience: returns true if the given user (teacher) is a Star subscriber.
+   The Stripe Firebase extension writes subscription docs under `customers/{uid}/subscriptions/{subId}`
+   with status === "active" — but for simplicity we ALSO mirror an `isStarUser` boolean
+   onto the teacher record itself (set by webhook OR by the manual admin tool).
+   Students inherit Star access from their teacher (so a paying teacher unlocks all their students). */
+function isStarUserCheck(user, allTeachers) {
+  if (!user) return false;
+  // Direct flag (teachers OR students who paid for themselves)
+  if (user.isStarUser) {
+    if (user.starExpiresAt && new Date(user.starExpiresAt) < new Date()) return false; // expired
+    return true;
+  }
+  // Student inherits from their teacher
+  if (user.teacherId) {
+    const teacher = (allTeachers || []).find(t => t.id === user.teacherId);
+    if (teacher?.isStarUser) {
+      if (teacher.starExpiresAt && new Date(teacher.starExpiresAt) < new Date()) return false;
+      return true;
+    }
+  }
+  return false;
 }
 
 /* ─── PETS ─── catalog of pets students get from mystery packs
@@ -551,6 +646,18 @@ function getStreakLevel(streak) {
   return level;
 }
 
+/* Top-level utility: returns the effective streak (0 if missed > 1 day).
+   Available globally so all components (including TeacherOverview) can use it. */
+function getEffectiveStreak(student) {
+  if (!student?.streak) return 0;
+  if (!student.lastChallengeDate) return 0;
+  const last = new Date(student.lastChallengeDate);
+  const today = new Date(getTodayKey());
+  const diffDays = Math.floor((today - last) / (1000 * 60 * 60 * 24));
+  if (diffDays > 1) return 0; // Missed a day - streak broken
+  return student.streak;
+}
+
 function getNextStreakLevel(streak) {
   for (const lvl of STREAK_LEVELS) {
     if (streak < lvl.days) return lvl;
@@ -820,6 +927,19 @@ const SFX = {
 /* ─── WATERCOLOR ICON ─── hand-drawn SVG icons matching the monkey aesthetic.
    Used for foods, mystery packs, streak ranks, and mission game types — anywhere
    an emoji previously appeared as a prominent visual element. */
+/* ─── Google "G" logo for the OAuth button.
+   Uses Google's official 4-color G mark (red, yellow, green, blue). */
+function GoogleIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ verticalAlign: "middle" }}>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  );
+}
+
 function WatercolorIcon({ name, size = 32, style = {} }) {
   return (
     <svg width={size} height={size} viewBox="-32 -32 64 64"
@@ -1376,6 +1496,29 @@ function renderWatercolorIcon(name) {
           <path d="M 7 -13 L 10 -13 L 10 -10 Z" fill="#d8c8a8" />
         </g>
       );
+    case "game_tetris": // stack of falling tetromino blocks
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* I-piece on top falling */}
+          <rect x="-12" y="-14" width="6" height="6" rx="1" fill="#5ac8e8" />
+          <rect x="-6" y="-14" width="6" height="6" rx="1" fill="#5ac8e8" />
+          <rect x="0" y="-14" width="6" height="6" rx="1" fill="#5ac8e8" />
+          <rect x="6" y="-14" width="6" height="6" rx="1" fill="#5ac8e8" />
+          {/* L-piece below */}
+          <rect x="-12" y="-2" width="6" height="6" rx="1" fill="#ff9050" />
+          <rect x="-12" y="4" width="6" height="6" rx="1" fill="#ff9050" />
+          <rect x="-6" y="4" width="6" height="6" rx="1" fill="#ff9050" />
+          <rect x="0" y="4" width="6" height="6" rx="1" fill="#ff9050" />
+          {/* T-piece bottom right */}
+          <rect x="6" y="-2" width="6" height="6" rx="1" fill="#a060c0" />
+          <rect x="0" y="-2" width="6" height="6" rx="1" fill="#a060c0" />
+          <rect x="6" y="4" width="6" height="6" rx="1" fill="#a060c0" />
+          {/* shine highlights */}
+          {[[-12,-14],[-6,-14],[0,-14],[6,-14],[-12,-2],[6,-2],[0,-2],[-12,4],[-6,4],[0,4],[6,4]].map((p,i) => (
+            <rect key={i} x={p[0]+0.5} y={p[1]+0.5} width="2" height="2" fill="white" opacity="0.5" rx="0.5" />
+          ))}
+        </g>
+      );
 
     // ─── TOP NAVIGATION BUTTON ICONS ───
     case "btn_daily": // jigsaw puzzle piece — Daily Challenge
@@ -1450,6 +1593,34 @@ function renderWatercolorIcon(name) {
           {[0, 60, 120, 180, 240, 300].map((deg, i) => (
             <circle key={i} cx={Math.cos(deg * Math.PI / 180) * 2} cy={Math.sin(deg * Math.PI / 180) * 2} r="0.3" fill="#a07810" />
           ))}
+        </g>
+      );
+    case "brand_monkey": // tiny watercolor monkey face — used as brand mark
+      return (
+        <g filter="url(#watercolorSoft)">
+          {/* outer ears */}
+          <circle cx="-15" cy="-2" r="7" fill="#a07840" />
+          <circle cx="15"  cy="-2" r="7" fill="#a07840" />
+          <circle cx="-15" cy="-2" r="4" fill="#d4a878" />
+          <circle cx="15"  cy="-2" r="4" fill="#d4a878" />
+          {/* head */}
+          <ellipse cx="0" cy="0" rx="14" ry="13" fill="#a07840" />
+          {/* face mask (lighter peach) */}
+          <ellipse cx="0" cy="3" rx="10" ry="9" fill="#f5cdb0" />
+          {/* tuft of hair on top */}
+          <path d="M -4 -10 Q -2 -14 0 -12 Q 2 -14 4 -10" fill="#7a5828" stroke="#7a5828" strokeWidth="0.5" />
+          {/* eyes — black pupils with subtle white catchlight */}
+          <ellipse cx="-5" cy="0" rx="1.6" ry="2" fill="#1a1a1a" />
+          <ellipse cx="5"  cy="0" rx="1.6" ry="2" fill="#1a1a1a" />
+          <circle cx="-4.5" cy="-0.5" r="0.5" fill="white" opacity="0.8" />
+          <circle cx="5.5"  cy="-0.5" r="0.5" fill="white" opacity="0.8" />
+          {/* tiny pink nose */}
+          <ellipse cx="0" cy="4" rx="1.3" ry="1" fill="#cc6060" />
+          {/* smile */}
+          <path d="M -3 7 Q 0 9 3 7" stroke="#5a3818" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+          {/* cheek blush */}
+          <circle cx="-7" cy="5" r="1.6" fill="#ff9090" opacity="0.5" />
+          <circle cx="7"  cy="5" r="1.6" fill="#ff9090" opacity="0.5" />
         </g>
       );
 
@@ -3890,6 +4061,2021 @@ function FoodShop({ student, onClose, onBuy }) {
   );
 }
 
+/* ─── STAR UPGRADE MODAL ─── upsells the paid plan with two pricing tiers.
+   Works for BOTH teachers and students:
+   - Teacher path: "unlocks all your students" benefit + classroom-focused copy
+   - Student path: "personal Star access" + lone-learner copy
+   The role determines benefits shown, not the price (same price for both). */
+function StarUpgradeModal({ onClose, onCheckout, currentUser, role }) {
+  const [selected, setSelected] = useState("yearly");
+  const monthly = STAR_PRICING.monthly;
+  const yearly = STAR_PRICING.yearly;
+  const isTeacher = role === "teacher";
+
+  // Role-specific benefits — teachers get classroom unlock, students get personal access
+  const benefits = isTeacher ? [
+    "📚 All premade study packs unlocked",
+    "👨‍🎓 Every student in your class gets access",
+    "🆕 New packs added regularly",
+    "✓ Cancel anytime",
+  ] : [
+    "📚 All premade study packs unlocked",
+    "🧠 Study independently — no teacher needed",
+    "🆕 New packs added regularly",
+    "✓ Cancel anytime",
+  ];
+
+  const ctaTitle = isTeacher ? "Become a Star Teacher" : "Become a Star Student";
+  const subtitle = isTeacher
+    ? "Unlock all premade study packs for your entire classroom"
+    : "Unlock all premade study packs and study at your own pace";
+  return (
+    <div onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 2000, padding: 20, backdropFilter: "blur(6px)",
+        animation: "fadeIn 0.2s ease",
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background: `${C.card}fa`, borderRadius: 28, padding: "36px 40px",
+          maxWidth: 540, width: "100%", position: "relative",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+          border: `2px solid ${C.gold}40`,
+          animation: "modalPop 0.25s ease",
+          maxHeight: "92vh", overflowY: "auto",
+        }}>
+        <button onClick={onClose}
+          style={{
+            position: "absolute", top: 14, right: 16, background: "transparent",
+            border: "none", cursor: "pointer", fontSize: 24, color: C.textLight,
+            lineHeight: 1, padding: 4,
+          }}>✕</button>
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 64, height: 64, borderRadius: 999,
+            background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+            boxShadow: `0 8px 22px ${C.gold}55`, marginBottom: 8,
+          }}>
+            <span style={{ fontSize: 36 }}>⭐</span>
+          </div>
+          <h2 style={{ fontSize: 28, color: C.text, margin: "4px 0 4px", fontWeight: 700 }}>
+            {ctaTitle}
+          </h2>
+          <p style={{ color: C.textLight, fontSize: 15, margin: 0, lineHeight: 1.5 }}>
+            {subtitle}
+          </p>
+        </div>
+        {/* Benefits list */}
+        <div style={{ background: `${C.gold}12`, borderRadius: 16, padding: "16px 18px", marginBottom: 22, border: `1.5px solid ${C.gold}30` }}>
+          {benefits.map((line, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", fontSize: 15, color: C.text }}>
+              <span style={{ color: C.green, fontWeight: 700 }}>✓</span>
+              <span>{line.replace(/^.\s/, "")}</span>
+            </div>
+          ))}
+        </div>
+        {/* Pricing tiles */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+          {[
+            { id: "monthly", ...monthly, perWeek: `~$${(monthly.price / 4.3).toFixed(2)}/wk` },
+            { id: "yearly",  ...yearly,  perWeek: `~$${(yearly.price / 52).toFixed(2)}/wk`, badge: "BEST VALUE" },
+          ].map(opt => {
+            const isSelected = selected === opt.id;
+            return (
+              <button key={opt.id} onClick={() => setSelected(opt.id)}
+                style={{
+                  flex: 1, padding: "20px 14px", borderRadius: 16,
+                  border: `3px solid ${isSelected ? C.gold : `${C.fur2}40`}`,
+                  background: isSelected ? `${C.gold}10` : `${C.card}cc`,
+                  cursor: "pointer", textAlign: "center", position: "relative",
+                  transition: "all 0.2s",
+                  boxShadow: isSelected ? `0 4px 16px ${C.gold}30` : "none",
+                  fontFamily: "'Patrick Hand', cursive",
+                }}>
+                {opt.badge && (
+                  <div style={{
+                    position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)",
+                    background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                    color: "white", fontSize: 10, fontWeight: 700, letterSpacing: 0.7,
+                    padding: "3px 10px", borderRadius: 999,
+                    boxShadow: `0 2px 8px ${C.gold}50`,
+                  }}>{opt.badge}</div>
+                )}
+                <div style={{ fontSize: 13, color: C.textLight, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  {opt.id === "monthly" ? "Monthly" : "Yearly"}
+                </div>
+                <div style={{ fontSize: 28, color: C.text, fontWeight: 700, margin: "6px 0 2px" }}>
+                  {opt.label}
+                </div>
+                <div style={{ fontSize: 12, color: C.textLight }}>{opt.perWeek}</div>
+                <div style={{ fontSize: 11, color: C.textLight, marginTop: 6, lineHeight: 1.3 }}>
+                  {opt.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {/* Checkout CTA */}
+        <button onClick={() => onCheckout(selected)}
+          style={{
+            width: "100%", padding: "16px", borderRadius: 14, border: "none", cursor: "pointer",
+            background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+            color: "white", fontFamily: "'Patrick Hand', cursive",
+            fontSize: 20, fontWeight: 700,
+            boxShadow: `0 8px 22px ${C.gold}50`,
+            transition: "transform 0.2s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"}
+          onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}>
+          ⭐ Continue to checkout — {selected === "monthly" ? monthly.label : yearly.label}
+        </button>
+        <p style={{ textAlign: "center", color: C.textLight, fontSize: 11, marginTop: 12, marginBottom: 0, lineHeight: 1.4 }}>
+          Secure payment by Stripe. You'll be redirected to Stripe Checkout.<br />
+          Subscription auto-renews. Cancel anytime in your account.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── STUDY PACKS BROWSER ─── full-screen modal listing every pack.
+   Three view modes (toggle in top-right):
+     1. 📇 Cards — grid of pack cards with filter chips for curriculum/grade/subject/topic
+     2. 📁 Folders — drill-down: Curriculum → Grade → Subject → Topic → Packs
+     3. 🏷 Tags — flat list with multi-select tag pills + search
+   Pack metadata: curriculum, gradeLevel, subject, topic, standardCode, tags[]
+   Access tiers:
+   - Star users: full access to every pack
+   - Free users: 1 preview pack unlocked (first non-Star pack alphabetically),
+     plus any explicitly free packs (isFree: true). All other Star packs show 🔒.
+   - Admins (username "teacher" or isAdmin) can upload + delete.
+*/
+function StudyPacksBrowser({ packs, students, missions, isStar, isAdmin, studentMode, onClose, onPreview, onUpgrade, onUploadCSV, onDeletePack }) {
+  const [accessFilter, setAccessFilter] = useState("all"); // all | free | star
+  const [viewMode, setViewMode] = useState("cards"); // cards | folders | tags
+
+  // Filter chip state — for cards view
+  const [chipCurr, setChipCurr] = useState("");
+  const [chipGrade, setChipGrade] = useState("");
+  const [chipSubject, setChipSubject] = useState("");
+  const [chipTopic, setChipTopic] = useState("");
+
+  // Folder navigation breadcrumb — for folders view
+  const [folderPath, setFolderPath] = useState([]); // [curr, grade, subject, topic]
+
+  // Selected tags + search — for tags view
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [tagSearch, setTagSearch] = useState("");
+
+  // Pick the "free preview" pack — the first Star pack sorted by title.
+  const previewPackId = useMemo(() => {
+    if (isStar) return null;
+    const starPacks = packs.filter(p => !p.isFree).sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+    return starPacks[0]?.id || null;
+  }, [packs, isStar]);
+
+  const isPackUnlocked = (pack) => {
+    if (isStar) return true;
+    if (pack.isFree) return true;
+    return pack.id === previewPackId;
+  };
+
+  // Helpers to extract field with fallback
+  const getCurr = (p) => p.curriculum || "General";
+  const getGrade = (p) => p.gradeLevel || "All Grades";
+  const getSubject = (p) => p.subject || "General";
+  const getTopic = (p) => p.topic || "Other";
+  // tags = explicit tags[] + auto-derived from curriculum/grade/subject/topic
+  const getTags = (p) => {
+    const auto = [getCurr(p), getGrade(p), getSubject(p), getTopic(p)].filter(t => t && t !== "General" && t !== "Other" && t !== "All Grades");
+    const explicit = Array.isArray(p.tags) ? p.tags : [];
+    return Array.from(new Set([...auto, ...explicit]));
+  };
+
+  // Apply ACCESS filter (free/star/all) first to all views
+  const accessFiltered = packs.filter(p => {
+    if (accessFilter === "free") return p.isFree || p.id === previewPackId;
+    if (accessFilter === "star") return !p.isFree;
+    return true;
+  });
+
+  // Build dropdown options for chip filters from accessFiltered packs
+  const allCurricula = useMemo(() => Array.from(new Set(accessFiltered.map(getCurr))).sort(), [accessFiltered]);
+  const allGrades = useMemo(() => Array.from(new Set(accessFiltered.map(getGrade))).sort(), [accessFiltered]);
+  const allSubjects = useMemo(() => Array.from(new Set(accessFiltered.map(getSubject))).sort(), [accessFiltered]);
+  const allTopics = useMemo(() => Array.from(new Set(accessFiltered.map(getTopic))).sort(), [accessFiltered]);
+  const allTags = useMemo(() => {
+    const set = new Set();
+    accessFiltered.forEach(p => getTags(p).forEach(t => set.add(t)));
+    return Array.from(set).sort();
+  }, [accessFiltered]);
+
+  // Final filtered packs (for cards view)
+  const cardFiltered = accessFiltered.filter(p =>
+    (!chipCurr || getCurr(p) === chipCurr) &&
+    (!chipGrade || getGrade(p) === chipGrade) &&
+    (!chipSubject || getSubject(p) === chipSubject) &&
+    (!chipTopic || getTopic(p) === chipTopic)
+  );
+
+  // For tags view: pack matches if it has ALL selected tags
+  const tagFiltered = accessFiltered.filter(p => {
+    if (selectedTags.length === 0) return true;
+    const ts = getTags(p);
+    return selectedTags.every(t => ts.includes(t));
+  });
+
+  // Filter the tag pills shown by user search
+  const visibleTags = allTags.filter(t =>
+    !tagSearch.trim() || t.toLowerCase().includes(tagSearch.toLowerCase())
+  );
+
+  // For folders view: nest by curriculum > grade > subject > topic
+  // We'll display whichever level we're currently at based on folderPath length.
+  const folderItems = useMemo(() => {
+    let items = accessFiltered;
+    const fields = [getCurr, getGrade, getSubject, getTopic];
+    // Apply folder navigation filters cumulatively
+    for (let i = 0; i < folderPath.length; i++) {
+      items = items.filter(p => fields[i](p) === folderPath[i]);
+    }
+    if (folderPath.length >= 4) {
+      // At deepest level — show packs themselves
+      return { type: "packs", items };
+    }
+    // Otherwise show subfolders
+    const fn = fields[folderPath.length];
+    const groups = {};
+    items.forEach(p => {
+      const key = fn(p);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+    return {
+      type: "folders",
+      items: Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([name, ps]) => ({ name, count: ps.length })),
+    };
+  }, [accessFiltered, folderPath]);
+
+  const folderLevels = ["Curriculum", "Grade", "Subject", "Topic"];
+
+  const fileInputRef = useRef(null);
+
+  // Render a single pack card (used by all 3 views)
+  const renderPackCard = (pack) => {
+    const unlocked = isPackUnlocked(pack);
+    const locked = !unlocked;
+    const isPreview = pack.id === previewPackId && !pack.isFree && !isStar;
+    return (
+      <div key={pack.id} style={{
+        background: `${C.card}f0`,
+        borderRadius: 18, padding: "18px 18px",
+        border: `2px solid ${locked ? `${C.fur2}40` : `${pack.isFree || isPreview ? C.green : C.gold}40`}`,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.04)",
+        position: "relative", overflow: "hidden",
+        opacity: locked ? 0.85 : 1,
+        transition: "transform 0.2s, box-shadow 0.2s",
+        cursor: locked ? "default" : "pointer",
+      }}
+      onClick={() => { if (!locked) onPreview(pack); }}
+      onMouseEnter={e => { if (!locked) { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = "0 8px 22px rgba(0,0,0,0.08)"; } }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.04)"; }}>
+        {/* Top right badge */}
+        <div style={{ position: "absolute", top: 12, right: 12 }}>
+          {pack.isFree ? (
+            <span style={{ fontSize: 10, fontWeight: 700, background: `${C.green}20`, color: C.green, padding: "3px 8px", borderRadius: 999, letterSpacing: 0.5 }}>FREE</span>
+          ) : isPreview ? (
+            <span style={{ fontSize: 10, fontWeight: 700, background: `${C.green}20`, color: C.green, padding: "3px 8px", borderRadius: 999, letterSpacing: 0.5 }}>🎁 PREVIEW</span>
+          ) : (
+            <span style={{ fontSize: 10, fontWeight: 700, background: `${C.gold}20`, color: "#a07820", padding: "3px 8px", borderRadius: 999, letterSpacing: 0.5 }}>⭐ STAR</span>
+          )}
+        </div>
+        {/* Icon + title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+          <div style={{
+            fontSize: 32,
+            filter: locked ? "grayscale(0.5)" : "none",
+          }}>{pack.icon || "📚"}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, color: C.text, fontWeight: 700, lineHeight: 1.2, paddingRight: 64 }}>{pack.title}</div>
+            <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>
+              {getSubject(pack)} · {getGrade(pack)}
+              {pack.standardCode && <span style={{ marginLeft: 6, padding: "1px 6px", background: `${C.water1}20`, color: C.water1, borderRadius: 4, fontSize: 10, fontWeight: 700 }}>{pack.standardCode}</span>}
+            </div>
+          </div>
+        </div>
+        {/* Curriculum tag (if specified) */}
+        {pack.curriculum && (
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, background: `${C.accent}15`, color: C.accent, padding: "2px 8px", borderRadius: 999, letterSpacing: 0.3 }}>
+              📐 {pack.curriculum}
+            </span>
+            {pack.topic && (
+              <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, background: `${C.water1}15`, color: C.water1, padding: "2px 8px", borderRadius: 999, letterSpacing: 0.3 }}>
+                {pack.topic}
+              </span>
+            )}
+          </div>
+        )}
+        {/* Description */}
+        <div style={{ fontSize: 13, color: C.textLight, lineHeight: 1.4, marginBottom: 12, minHeight: 36 }}>
+          {pack.description || `${pack.questions?.length || 0} questions`}
+        </div>
+        {/* Footer */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: `1px solid ${C.fur2}30` }}>
+          <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>
+            {pack.questions?.length || 0} questions
+          </span>
+          {locked ? (
+            <button onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${C.gold}, #ffa820)`, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              🔒 Unlock
+            </button>
+          ) : (
+            <button onClick={(e) => { e.stopPropagation(); onPreview(pack); }}
+              style={{ padding: "6px 12px", borderRadius: 8, border: `2px solid ${C.accent}40`, background: `${C.accent}15`, color: C.accent, fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              Preview →
+            </button>
+          )}
+        </div>
+        {isAdmin && (
+          <button onClick={(e) => { e.stopPropagation(); onDeletePack(pack.id); }}
+            style={{
+              position: "absolute", bottom: 8, left: 8, padding: "4px 8px",
+              borderRadius: 6, border: "none", background: "transparent",
+              color: C.accent, fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+            }}
+            title="Delete pack (admin)">
+            🗑 delete
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: C.bg, zIndex: 1500,
+      overflowY: "auto", fontFamily: "'Patrick Hand', cursive",
+    }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 32px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 32 }}>📚</div>
+            <div>
+              <h1 style={{ fontSize: 28, color: C.text, margin: 0, fontWeight: 700 }}>Study Packs</h1>
+              <p style={{ color: C.textLight, fontSize: 14, margin: "2px 0 0" }}>
+                {studentMode ? "Add packs to your missions to play them" : "Premade question sets · Assign as missions to your students"}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {/* VIEW MODE toggle — segmented control */}
+            <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: `2px solid ${C.fur2}40` }}>
+              {[
+                { id: "cards",   label: "📇 Cards",   title: "Browse all packs as cards with filter chips" },
+                { id: "folders", label: "📁 Folders", title: "Drill down by curriculum, grade, subject, topic" },
+                { id: "tags",    label: "🏷 Tags",   title: "Search by tags and keywords" },
+              ].map(v => (
+                <button key={v.id} onClick={() => setViewMode(v.id)} title={v.title}
+                  style={{
+                    padding: "8px 14px", border: "none",
+                    background: viewMode === v.id ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : `${C.card}cc`,
+                    color: viewMode === v.id ? "white" : C.text,
+                    fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 700,
+                    cursor: "pointer", transition: "all 0.2s",
+                  }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {isAdmin && (
+              <>
+                <input ref={fileInputRef} type="file" accept=".csv" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files[0]; if (f) onUploadCSV(f); e.target.value = ""; }} />
+                <button onClick={() => fileInputRef.current?.click()}
+                  style={{ padding: "10px 16px", borderRadius: 12, border: `2px solid ${C.green}50`, background: `${C.green}15`, color: C.green, fontFamily: "'Patrick Hand', cursive", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                  ⬆ Upload CSV
+                </button>
+              </>
+            )}
+            {!isStar && (
+              <button onClick={onUpgrade}
+                style={{
+                  padding: "10px 18px", borderRadius: 12, border: "none",
+                  background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                  color: "white", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 15, fontWeight: 700, cursor: "pointer",
+                  boxShadow: `0 4px 12px ${C.gold}40`,
+                }}>
+                ⭐ Become Star
+              </button>
+            )}
+            <button onClick={onClose}
+              style={{ padding: "10px 16px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 14, cursor: "pointer" }}>
+              ✕ Close
+            </button>
+          </div>
+        </div>
+
+        {/* Star status banner */}
+        {isStar ? (
+          <div style={{
+            background: `linear-gradient(135deg, ${C.gold}20, ${C.gold}08)`,
+            border: `2px solid ${C.gold}50`,
+            borderRadius: 14, padding: "12px 18px", marginBottom: 20,
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <span style={{ fontSize: 24 }}>⭐</span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>You're a Star User!</div>
+              <div style={{ fontSize: 12, color: C.textLight }}>All study packs unlocked.</div>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: `${C.water1}15`,
+            border: `2px solid ${C.water1}40`,
+            borderRadius: 14, padding: "12px 18px", marginBottom: 20,
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 24 }}>🎁</span>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>You get 1 free preview pack</div>
+              <div style={{ fontSize: 12, color: C.textLight }}>
+                Try it out, then upgrade to Star to unlock all {packs.filter(p => !p.isFree).length} packs.
+              </div>
+            </div>
+            <button onClick={onUpgrade}
+              style={{
+                padding: "8px 16px", borderRadius: 10, border: "none",
+                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                color: "white", fontFamily: "'Patrick Hand', cursive",
+                fontSize: 14, fontWeight: 700, cursor: "pointer",
+                boxShadow: `0 3px 10px ${C.gold}40`,
+              }}>
+              ⭐ See plans
+            </button>
+          </div>
+        )}
+
+        {/* ACCESS filter tabs (always visible, applies to all view modes) */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {[
+            { id: "all", label: `All (${packs.length})` },
+            { id: "free", label: `🆓 Free (${packs.filter(p => p.isFree).length})` },
+            { id: "star", label: `⭐ Star (${packs.filter(p => !p.isFree).length})` },
+          ].map(t => (
+            <button key={t.id} onClick={() => setAccessFilter(t.id)}
+              style={{
+                padding: "8px 16px", borderRadius: 999,
+                border: `2px solid ${accessFilter === t.id ? C.accent : `${C.fur2}40`}`,
+                background: accessFilter === t.id ? `${C.accent}15` : `${C.card}cc`,
+                color: accessFilter === t.id ? C.accent : C.text,
+                fontFamily: "'Patrick Hand', cursive",
+                fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ─── VIEW: CARDS (with filter chips) ─── */}
+        {viewMode === "cards" && (
+          <>
+            {/* Filter chips — curriculum, grade, subject, topic */}
+            <div style={{
+              background: `${C.card}80`, borderRadius: 14, padding: "12px 14px",
+              border: `1.5px solid ${C.fur2}30`, marginBottom: 16,
+              display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10,
+            }}>
+              {[
+                { label: "Curriculum", value: chipCurr, set: setChipCurr, options: allCurricula, icon: "📐" },
+                { label: "Grade", value: chipGrade, set: setChipGrade, options: allGrades, icon: "🎓" },
+                { label: "Subject", value: chipSubject, set: setChipSubject, options: allSubjects, icon: "📖" },
+                { label: "Topic", value: chipTopic, set: setChipTopic, options: allTopics, icon: "🏷" },
+              ].map(f => (
+                <div key={f.label}>
+                  <div style={{ fontSize: 11, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 4 }}>
+                    {f.icon} {f.label.toUpperCase()}
+                  </div>
+                  <select value={f.value} onChange={e => f.set(e.target.value)}
+                    style={{
+                      width: "100%", padding: "8px 10px", borderRadius: 10,
+                      border: `2px solid ${f.value ? C.accent : `${C.fur2}40`}`,
+                      background: f.value ? `${C.accent}10` : C.card,
+                      color: C.text, fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    }}>
+                    <option value="">All {f.label.toLowerCase()}s</option>
+                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              ))}
+              {(chipCurr || chipGrade || chipSubject || chipTopic) && (
+                <div style={{ alignSelf: "end" }}>
+                  <button onClick={() => { setChipCurr(""); setChipGrade(""); setChipSubject(""); setChipTopic(""); }}
+                    style={{
+                      width: "100%", padding: "8px 10px", borderRadius: 10,
+                      border: `2px solid ${C.accent}40`, background: `${C.accent}15`,
+                      color: C.accent, fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    }}>
+                    ✕ Clear filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: 13, color: C.textLight, marginBottom: 12 }}>
+              Showing <strong style={{ color: C.text }}>{cardFiltered.length}</strong> pack{cardFiltered.length === 1 ? "" : "s"}
+            </div>
+
+            {cardFiltered.length === 0 ? (
+              <div style={{
+                textAlign: "center", padding: "60px 20px",
+                background: `${C.card}80`, borderRadius: 18, border: `2px dashed ${C.fur2}50`,
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 8 }}>📭</div>
+                <div style={{ fontSize: 18, color: C.text, fontWeight: 700, marginBottom: 4 }}>No matching packs</div>
+                <div style={{ fontSize: 14, color: C.textLight }}>Try clearing some filters above.</div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+                {cardFiltered.map(renderPackCard)}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── VIEW: FOLDERS (drill-down) ─── */}
+        {viewMode === "folders" && (
+          <>
+            {/* Breadcrumb */}
+            <div style={{
+              background: `${C.card}cc`, borderRadius: 12, padding: "10px 14px",
+              border: `1.5px solid ${C.fur2}30`, marginBottom: 16,
+              display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 14,
+            }}>
+              <button onClick={() => setFolderPath([])}
+                style={{
+                  padding: "4px 10px", borderRadius: 8,
+                  border: "none", cursor: "pointer",
+                  background: folderPath.length === 0 ? C.accent : "transparent",
+                  color: folderPath.length === 0 ? "white" : C.accent,
+                  fontFamily: "inherit", fontWeight: 700, fontSize: 13,
+                }}>
+                📁 All
+              </button>
+              {folderPath.map((seg, i) => (
+                <React.Fragment key={i}>
+                  <span style={{ color: C.textLight }}>›</span>
+                  <button onClick={() => setFolderPath(folderPath.slice(0, i + 1))}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8,
+                      border: "none", cursor: "pointer",
+                      background: i === folderPath.length - 1 ? C.accent : "transparent",
+                      color: i === folderPath.length - 1 ? "white" : C.accent,
+                      fontFamily: "inherit", fontWeight: 700, fontSize: 13,
+                    }}>
+                    {seg}
+                  </button>
+                </React.Fragment>
+              ))}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: C.textLight }}>
+                {folderPath.length < 4 ? `Browse by ${folderLevels[folderPath.length]}` : "Packs"}
+              </span>
+            </div>
+
+            {folderItems.type === "folders" ? (
+              folderItems.items.length === 0 ? (
+                <div style={{
+                  textAlign: "center", padding: "60px 20px",
+                  background: `${C.card}80`, borderRadius: 18, border: `2px dashed ${C.fur2}50`,
+                }}>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>📭</div>
+                  <div style={{ fontSize: 18, color: C.text, fontWeight: 700 }}>No packs in this folder yet</div>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+                  {folderItems.items.map(folder => (
+                    <button key={folder.name}
+                      onClick={() => setFolderPath([...folderPath, folder.name])}
+                      style={{
+                        background: `${C.card}f0`, borderRadius: 16,
+                        border: `2px solid ${C.water1}30`,
+                        padding: "20px 18px", cursor: "pointer", textAlign: "left",
+                        fontFamily: "'Patrick Hand', cursive",
+                        boxShadow: "0 4px 14px rgba(0,0,0,0.04)",
+                        transition: "transform 0.2s, box-shadow 0.2s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = `0 8px 22px ${C.water1}25`; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.04)"; }}>
+                      <div style={{ fontSize: 36, marginBottom: 6 }}>📁</div>
+                      <div style={{ fontSize: 17, color: C.text, fontWeight: 700, marginBottom: 4 }}>
+                        {folder.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textLight }}>
+                        {folder.count} pack{folder.count === 1 ? "" : "s"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )
+            ) : (
+              folderItems.items.length === 0 ? (
+                <div style={{
+                  textAlign: "center", padding: "60px 20px",
+                  background: `${C.card}80`, borderRadius: 18, border: `2px dashed ${C.fur2}50`,
+                }}>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>📭</div>
+                  <div style={{ fontSize: 18, color: C.text, fontWeight: 700 }}>No packs here</div>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+                  {folderItems.items.map(renderPackCard)}
+                </div>
+              )
+            )}
+          </>
+        )}
+
+        {/* ─── VIEW: TAGS (multi-select pills + search) ─── */}
+        {viewMode === "tags" && (
+          <>
+            <div style={{
+              background: `${C.card}80`, borderRadius: 14, padding: "14px",
+              border: `1.5px solid ${C.fur2}30`, marginBottom: 16,
+            }}>
+              <input value={tagSearch} onChange={e => setTagSearch(e.target.value)}
+                placeholder="🔎 Search tags... (e.g. 'fractions', 'biology', 'grade 5')"
+                style={{
+                  width: "100%", padding: "10px 14px", borderRadius: 10,
+                  border: `2px solid ${C.fur2}40`, background: C.card,
+                  fontSize: 15, fontFamily: "'Patrick Hand', cursive",
+                  color: C.text, marginBottom: 12, boxSizing: "border-box",
+                }} />
+              {selectedTags.length > 0 && (
+                <div style={{ marginBottom: 10, padding: "8px 10px", background: `${C.accent}10`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>
+                    SELECTED ({selectedTags.length})
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {selectedTags.map(t => (
+                      <button key={t} onClick={() => setSelectedTags(s => s.filter(x => x !== t))}
+                        style={{
+                          padding: "5px 10px", borderRadius: 999, border: "none",
+                          background: C.accent, color: "white",
+                          fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer",
+                        }}>
+                        {t} ✕
+                      </button>
+                    ))}
+                    <button onClick={() => setSelectedTags([])}
+                      style={{
+                        padding: "5px 10px", borderRadius: 999, border: "none",
+                        background: "transparent", color: C.accent,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 700,
+                        cursor: "pointer", textDecoration: "underline",
+                      }}>
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>
+                AVAILABLE TAGS — click to filter
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+                {visibleTags.length === 0 ? (
+                  <span style={{ fontSize: 13, color: C.textLight, fontStyle: "italic", padding: 8 }}>No tags match your search.</span>
+                ) : visibleTags.map(t => {
+                  const isSelected = selectedTags.includes(t);
+                  return (
+                    <button key={t}
+                      onClick={() => isSelected ? setSelectedTags(s => s.filter(x => x !== t)) : setSelectedTags(s => [...s, t])}
+                      style={{
+                        padding: "5px 10px", borderRadius: 999,
+                        border: `1.5px solid ${isSelected ? C.accent : `${C.fur2}40`}`,
+                        background: isSelected ? `${C.accent}20` : C.card,
+                        color: isSelected ? C.accent : C.text,
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 12, fontWeight: 600,
+                        cursor: "pointer", transition: "all 0.15s",
+                      }}>
+                      {isSelected ? "✓ " : ""}{t}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 13, color: C.textLight, marginBottom: 12 }}>
+              Showing <strong style={{ color: C.text }}>{tagFiltered.length}</strong> pack{tagFiltered.length === 1 ? "" : "s"}
+              {selectedTags.length > 0 && ` matching ALL of: ${selectedTags.join(", ")}`}
+            </div>
+
+            {tagFiltered.length === 0 ? (
+              <div style={{
+                textAlign: "center", padding: "60px 20px",
+                background: `${C.card}80`, borderRadius: 18, border: `2px dashed ${C.fur2}50`,
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 8 }}>🔍</div>
+                <div style={{ fontSize: 18, color: C.text, fontWeight: 700, marginBottom: 4 }}>No matches</div>
+                <div style={{ fontSize: 14, color: C.textLight }}>Try removing some tags above.</div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+                {tagFiltered.map(renderPackCard)}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Empty state if NO packs at all */}
+        {packs.length === 0 && (
+          <div style={{
+            textAlign: "center", padding: "60px 20px",
+            background: `${C.card}80`, borderRadius: 18, border: `2px dashed ${C.fur2}50`,
+            marginTop: 20,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>📭</div>
+            <div style={{ fontSize: 18, color: C.text, fontWeight: 700, marginBottom: 4 }}>No packs yet</div>
+            <div style={{ fontSize: 14, color: C.textLight }}>
+              {isAdmin ? "Upload a CSV to create your first study pack." : "Check back soon — new packs are added regularly."}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── PACK PREVIEW MODAL ─── shows the questions + lets teacher assign to students.
+   In studentMode, the student picker is hidden and "Assign" becomes "Add to my missions". */
+function PackPreviewModal({ pack, students, onAssign, onHostLive, onClose, studentMode }) {
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [search, setSearch] = useState("");
+  const filteredStudents = (students || []).filter(s =>
+    !search.trim() || s.name?.toLowerCase().includes(search.toLowerCase())
+  );
+  const toggleStudent = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const selectAll = () => setSelectedIds(filteredStudents.map(s => s.id));
+  const clearAll = () => setSelectedIds([]);
+
+  return (
+    <div onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 2100, padding: 20, backdropFilter: "blur(4px)",
+        animation: "fadeIn 0.2s ease",
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background: `${C.card}fa`, borderRadius: 24, padding: "28px 32px",
+          maxWidth: 720, width: "100%", maxHeight: "92vh", overflowY: "auto",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+          border: `2px solid ${C.fur2}30`,
+          animation: "modalPop 0.25s ease",
+          fontFamily: "'Patrick Hand', cursive",
+        }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: 1 }}>
+            <div style={{ fontSize: 40 }}>{pack.icon || "📚"}</div>
+            <div>
+              <h2 style={{ fontSize: 24, color: C.text, margin: 0, fontWeight: 700 }}>{pack.title}</h2>
+              <p style={{ color: C.textLight, fontSize: 13, margin: "2px 0 0" }}>
+                {pack.subject || "General"} · {pack.gradeLevel || "All Grades"} · {pack.questions?.length || 0} questions
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose}
+            style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+
+        {/* Question preview (first 3) */}
+        <div style={{ background: `${C.snow1}80`, borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 8 }}>SAMPLE QUESTIONS</div>
+          {(pack.questions || []).slice(0, 3).map((q, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 4 }}>
+                {i + 1}. {q.q}
+              </div>
+              <div style={{ fontSize: 12, color: C.textLight, lineHeight: 1.6 }}>
+                {q.options.map((o, j) => (
+                  <span key={j} style={{ marginRight: 12, color: j === q.correct ? C.green : C.textLight, fontWeight: j === q.correct ? 700 : 400 }}>
+                    {"ABCD"[j]}. {o}{j === q.correct ? " ✓" : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(pack.questions?.length || 0) > 3 && (
+            <div style={{ fontSize: 12, color: C.textLight, fontStyle: "italic", marginTop: 4 }}>
+              +{pack.questions.length - 3} more question{pack.questions.length - 3 === 1 ? "" : "s"}
+            </div>
+          )}
+        </div>
+
+        {/* Assign to students — hidden in studentMode (student plays for themselves) */}
+        {!studentMode && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 14, color: C.text, fontWeight: 700 }}>
+                Assign to students {selectedIds.length > 0 && <span style={{ color: C.accent }}>({selectedIds.length} selected)</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={selectAll} style={{ padding: "4px 10px", borderRadius: 8, border: `1.5px solid ${C.water1}50`, background: `${C.water1}10`, color: C.text, fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}>Select all</button>
+                <button onClick={clearAll} style={{ padding: "4px 10px", borderRadius: 8, border: `1.5px solid ${C.fur2}40`, background: `${C.card}cc`, color: C.textLight, fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}>Clear</button>
+              </div>
+            </div>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter students..."
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `2px solid ${C.fur2}40`, background: `${C.card}cc`, fontSize: 14, fontFamily: "inherit", color: C.text, marginBottom: 10, boxSizing: "border-box" }} />
+            <div style={{ maxHeight: 220, overflowY: "auto", border: `1.5px solid ${C.fur2}30`, borderRadius: 10, padding: 8 }}>
+              {filteredStudents.length === 0 ? (
+                <p style={{ color: C.textLight, fontSize: 13, textAlign: "center", padding: 12, margin: 0 }}>No students yet — add some first.</p>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 6 }}>
+                  {filteredStudents.map(s => {
+                    const checked = selectedIds.includes(s.id);
+                    return (
+                      <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: checked ? `${C.accent}15` : "transparent", cursor: "pointer", fontSize: 14, color: C.text }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleStudent(s.id)} />
+                        <span>{s.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button onClick={onClose}
+            style={{ padding: "10px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "inherit", fontSize: 15, cursor: "pointer" }}>
+            Cancel
+          </button>
+          {/* Host live button — only shown when not in studentMode and onHostLive is provided */}
+          {!studentMode && onHostLive && (
+            <button onClick={() => onHostLive(pack)}
+              style={{
+                padding: "10px 18px", borderRadius: 12, border: "none",
+                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                color: "white", fontFamily: "inherit", fontSize: 15, fontWeight: 700,
+                cursor: "pointer", boxShadow: `0 4px 12px ${C.gold}40`,
+              }}>
+              🎮 Host Live →
+            </button>
+          )}
+          <button onClick={() => onAssign(pack, studentMode ? [] : selectedIds)}
+            disabled={!studentMode && selectedIds.length === 0}
+            style={{
+              padding: "10px 22px", borderRadius: 12, border: "none",
+              background: (!studentMode && selectedIds.length === 0) ? `${C.fur2}50` : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+              color: "white", fontFamily: "inherit", fontSize: 15, fontWeight: 700,
+              cursor: (!studentMode && selectedIds.length === 0) ? "default" : "pointer",
+              boxShadow: (studentMode || selectedIds.length > 0) ? `0 4px 12px ${C.accent}40` : "none",
+            }}>
+            {studentMode ? "Add to my missions →" : "Assign as mission →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── LIVE RESTAURANT — GAME CONFIG ─── shared constants */
+const RESTAURANT_QUESTION_TIME_MS = 20000; // 20 seconds per question
+const RESTAURANT_TIPS_FAST    = 5; // < 7s   = 5 tips
+const RESTAURANT_TIPS_NORMAL  = 3; // 7-14s  = 3 tips
+const RESTAURANT_TIPS_SLOW    = 1; // 14-20s = 1 tip
+
+/* Helper: scale tips by speed of correct answer.
+   Faster = bigger tips, encouraging quick recall. */
+function calcTip(elapsedMs) {
+  if (elapsedMs < 7000) return RESTAURANT_TIPS_FAST;
+  if (elapsedMs < 14000) return RESTAURANT_TIPS_NORMAL;
+  return RESTAURANT_TIPS_SLOW;
+}
+
+/* Tiny customer monkey for the queue — uses MonkeySVG with a random variant */
+function CustomerMonkey({ variant, mood = "neutral", size = 60, style = {} }) {
+  return (
+    <div style={{ display: "inline-block", ...style }}>
+      <MonkeySVG size={size} mood={mood} variant={variant} delay={Math.random() * 2} />
+    </div>
+  );
+}
+
+/* ─── RESTAURANT PLAYER VIEW ─── student's view of the live game.
+   Shows the kitchen scene, customer queue, current question, tip jar.
+   When student answers correctly: confetti + customer served + tip animation.
+   When wrong: customer walks out angry. */
+function RestaurantPlayerView({ game, playerId, code, monkeyVariant, onLeave }) {
+  const player = game?.players?.[playerId];
+  const players = game?.players || {};
+  const currentQ = game?.pack?.questions?.[game.currentQuestionIdx];
+  const isPlaying = game?.status === "playing";
+  const isEnded = game?.status === "ended";
+
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(RESTAURANT_QUESTION_TIME_MS / 1000);
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [serveAnimation, setServeAnimation] = useState(false);
+  const [walkOutAnimation, setWalkOutAnimation] = useState(false);
+  const [tipPopup, setTipPopup] = useState(null); // { amount, ts }
+  // Track which question we already answered so we don't double-submit
+  const lastAnsweredIdx = useRef(-1);
+
+  // Reset when question changes
+  useEffect(() => {
+    if (game?.currentQuestionIdx !== undefined) {
+      setSelectedAnswer(null);
+      setServeAnimation(false);
+      setWalkOutAnimation(false);
+    }
+  }, [game?.currentQuestionIdx]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!isPlaying || !game?.questionStartedAt || selectedAnswer !== null) return;
+    const tick = () => {
+      const elapsed = Date.now() - game.questionStartedAt;
+      const remaining = Math.max(0, RESTAURANT_QUESTION_TIME_MS - elapsed);
+      setTimeLeft(Math.ceil(remaining / 1000));
+      // Auto-fail if timer expired and no answer
+      if (remaining === 0 && lastAnsweredIdx.current !== game.currentQuestionIdx && selectedAnswer === null) {
+        lastAnsweredIdx.current = game.currentQuestionIdx;
+        submitLiveAnswer(code, playerId, {
+          correct: false, tipEarned: 0, questionIdx: game.currentQuestionIdx,
+        }).catch(() => {});
+        setWalkOutAnimation(true);
+        setTimeout(() => setWalkOutAnimation(false), 1800);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 200);
+    return () => clearInterval(id);
+  }, [game?.currentQuestionIdx, game?.questionStartedAt, isPlaying, selectedAnswer, code, playerId]);
+
+  const handleAnswer = async (idx) => {
+    if (selectedAnswer !== null || !currentQ) return;
+    if (lastAnsweredIdx.current === game.currentQuestionIdx) return;
+    lastAnsweredIdx.current = game.currentQuestionIdx;
+    const correct = idx === currentQ.correct;
+    const elapsed = Date.now() - (game.questionStartedAt || Date.now());
+    const tipEarned = correct ? calcTip(elapsed) : 0;
+    setSelectedAnswer(idx);
+    if (correct) {
+      SFX.correct();
+      setConfettiTrigger(t => t + 1);
+      setServeAnimation(true);
+      setTipPopup({ amount: tipEarned, ts: Date.now() });
+      setTimeout(() => setServeAnimation(false), 1500);
+      setTimeout(() => setTipPopup(null), 2200);
+    } else {
+      SFX.wrong();
+      setWalkOutAnimation(true);
+      setTimeout(() => setWalkOutAnimation(false), 1800);
+    }
+    try {
+      await submitLiveAnswer(code, playerId, { correct, tipEarned, questionIdx: game.currentQuestionIdx });
+    } catch (e) {
+      console.error("Submit answer failed:", e);
+    }
+  };
+
+  // Build sorted leaderboard
+  const leaderboard = Object.entries(players)
+    .map(([id, p]) => ({ id, ...p }))
+    .filter(p => p.status !== "left")
+    .sort((a, b) => (b.tips || 0) - (a.tips || 0));
+  const myRank = leaderboard.findIndex(p => p.id === playerId) + 1;
+
+  // Loading / lobby state
+  if (!game) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, background: C.bg, zIndex: 2000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: "'Patrick Hand', cursive",
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>⏳</div>
+          <div style={{ fontSize: 22, color: C.text }}>Connecting to game...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (game.status === "lobby") {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, background: C.bg, zIndex: 2000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: "'Patrick Hand', cursive", padding: 24,
+      }}>
+        <div style={{
+          background: C.card, borderRadius: 24, padding: "40px 32px",
+          textAlign: "center", maxWidth: 500, width: "100%",
+          boxShadow: "0 12px 32px rgba(0,0,0,0.12)",
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 8 }}>🍜</div>
+          <h2 style={{ fontSize: 26, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>
+            You're in! 🎉
+          </h2>
+          <p style={{ color: C.textLight, fontSize: 15, margin: "0 0 18px" }}>
+            Game code: <strong style={{ fontSize: 22, color: C.accent, letterSpacing: 4 }}>{code}</strong>
+          </p>
+          <p style={{ fontSize: 14, color: C.textLight, marginBottom: 18 }}>
+            Waiting for your teacher to start the restaurant...
+          </p>
+          <div style={{
+            background: `${C.water1}10`, borderRadius: 14, padding: "16px",
+            border: `1.5px solid ${C.water1}30`, marginBottom: 16,
+          }}>
+            <div style={{ fontSize: 12, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 8 }}>
+              {Object.values(players).filter(p => p.status !== "left").length} PLAYERS WAITING
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+              {Object.values(players).filter(p => p.status !== "left").map((p, i) => (
+                <div key={i} style={{
+                  padding: "6px 12px", borderRadius: 999,
+                  background: p.name === player?.name ? C.accent : `${C.card}cc`,
+                  color: p.name === player?.name ? "white" : C.text,
+                  border: `1.5px solid ${C.fur2}40`, fontSize: 14, fontWeight: 600,
+                }}>
+                  🐵 {p.name}{p.name === player?.name && " (you)"}
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={onLeave}
+            style={{
+              padding: "10px 22px", borderRadius: 12, border: `2px solid ${C.fur2}40`,
+              background: `${C.card}dd`, color: C.text, fontFamily: "inherit",
+              fontSize: 14, cursor: "pointer",
+            }}>
+            Leave game
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEnded) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, background: C.bg, zIndex: 2000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: "'Patrick Hand', cursive", padding: 24, overflowY: "auto",
+      }}>
+        <div style={{
+          background: C.card, borderRadius: 24, padding: "32px",
+          textAlign: "center", maxWidth: 540, width: "100%",
+          boxShadow: "0 12px 32px rgba(0,0,0,0.12)",
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
+          <h2 style={{ fontSize: 26, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>
+            Restaurant closed!
+          </h2>
+          <p style={{ color: C.textLight, fontSize: 15, margin: "0 0 22px" }}>
+            You finished {myRank > 0 ? `#${myRank} of ${leaderboard.length}` : "the game"}
+          </p>
+          <div style={{
+            background: `${C.gold}15`, borderRadius: 16, padding: "20px",
+            border: `2px solid ${C.gold}40`, marginBottom: 18,
+          }}>
+            <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>YOUR TOTAL TIPS</div>
+            <div style={{ fontSize: 48, color: C.gold, fontWeight: 700, lineHeight: 1.1 }}>
+              ★ {player?.tips || 0}
+            </div>
+            <div style={{ fontSize: 13, color: C.textLight, marginTop: 6 }}>
+              {player?.served || 0} customers served · {player?.lost || 0} walked out
+            </div>
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 12, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 8 }}>FINAL LEADERBOARD</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto" }}>
+              {leaderboard.slice(0, 10).map((p, i) => (
+                <div key={p.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 14px", borderRadius: 10,
+                  background: p.id === playerId ? `${C.accent}15` : `${C.card}cc`,
+                  border: p.id === playerId ? `2px solid ${C.accent}` : `1.5px solid ${C.fur2}30`,
+                }}>
+                  <span style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
+                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {p.name}
+                  </span>
+                  <span style={{ fontSize: 14, color: C.gold, fontWeight: 700 }}>★ {p.tips || 0}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={onLeave}
+            style={{
+              padding: "12px 28px", borderRadius: 12, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+              color: "white", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: "pointer",
+            }}>
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // PLAYING STATE — Restaurant view
+  const kitchenLevel = player?.kitchenLevel || 1;
+  const customersInQueue = Math.max(1, 4 - kitchenLevel + 1); // Lower at higher levels (faster service)
+  return (
+    <div style={{
+      position: "fixed", inset: 0,
+      background: `linear-gradient(180deg, #ffe4b8 0%, #ffd098 50%, #f8b870 100%)`,
+      zIndex: 2000, fontFamily: "'Patrick Hand', cursive",
+      overflow: "hidden", display: "flex", flexDirection: "column",
+    }}>
+      <WatercolorFilters />
+      <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+
+      {/* Top status bar */}
+      <div style={{
+        padding: "12px 20px", display: "flex", justifyContent: "space-between",
+        alignItems: "center", background: `${C.card}dd`, borderBottom: `2px solid ${C.fur2}30`,
+        backdropFilter: "blur(6px)", flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 20 }}>🍜</span>
+          <div>
+            <div style={{ fontSize: 12, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>{player?.name}'S RESTAURANT</div>
+            <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
+              Level {kitchenLevel} kitchen · #{myRank} of {leaderboard.length}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>SERVED</div>
+            <div style={{ fontSize: 18, color: C.green, fontWeight: 700 }}>✓ {player?.served || 0}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>WALKED OUT</div>
+            <div style={{ fontSize: 18, color: C.accent, fontWeight: 700 }}>✗ {player?.lost || 0}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>TIPS</div>
+            <div style={{ fontSize: 22, color: C.gold, fontWeight: 700, lineHeight: 1 }}>★ {player?.tips || 0}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Restaurant scene */}
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", minHeight: 240 }}>
+        {/* Counter / floor */}
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: "55%",
+          background: `linear-gradient(180deg, transparent 0%, ${C.water1}20 60%, ${C.water1}40 100%)`,
+        }} />
+        {/* Counter top — wood grain */}
+        <div style={{
+          position: "absolute", left: 0, right: 0, bottom: "30%", height: 8,
+          background: "linear-gradient(90deg, #8b6342, #a07852, #8b6342)",
+          boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+        }} />
+
+        {/* Player's monkey behind counter (left side) */}
+        <div style={{
+          position: "absolute", left: "10%", bottom: "15%",
+          transform: serveAnimation ? "translateY(-8px)" : "translateY(0)",
+          transition: "transform 0.4s",
+        }}>
+          <MonkeySVG size={130} mood={serveAnimation ? "excited" : "happy"} variant={monkeyVariant} delay={0}
+            accessories={kitchenLevel >= 2 ? ["graduationcap"] : []} />
+          {/* Chef hat */}
+          <div style={{
+            position: "absolute", top: -8, left: "50%", transform: "translateX(-50%)",
+            fontSize: 32, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))",
+          }}>👨‍🍳</div>
+        </div>
+        {/* Counter speech bubble when serving */}
+        {serveAnimation && (
+          <div style={{
+            position: "absolute", left: "20%", bottom: "55%",
+            background: "white", padding: "8px 14px", borderRadius: 14,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: 18, fontWeight: 700,
+            color: C.green, animation: "fadeIn 0.3s ease",
+          }}>
+            🍜 Order up!
+          </div>
+        )}
+
+        {/* Customer queue (right side) */}
+        <div style={{
+          position: "absolute", right: "5%", bottom: "15%",
+          display: "flex", alignItems: "flex-end", gap: 8,
+        }}>
+          {Array.from({ length: customersInQueue }).map((_, i) => {
+            const isFirstInLine = i === 0;
+            const variant = ((player?.served || 0) + i) % 4 + 1;
+            return (
+              <div key={i} style={{
+                opacity: isFirstInLine && walkOutAnimation ? 0 : 1,
+                transform: isFirstInLine && walkOutAnimation ? "translateX(80px)" : "translateX(0)",
+                transition: "all 0.8s ease-out",
+              }}>
+                <CustomerMonkey
+                  variant={variant}
+                  mood={isFirstInLine ? (walkOutAnimation ? "neutral" : "neutral") : "neutral"}
+                  size={isFirstInLine ? 90 : 70}
+                />
+                {isFirstInLine && (
+                  <div style={{
+                    position: "absolute", marginTop: -4, fontSize: 24,
+                    background: "white", borderRadius: "50%", width: 32, height: 32,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                    transform: "translate(-50%, -120%)", left: "50%",
+                  }}>{walkOutAnimation ? "😠" : "🤔"}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tip popup animation */}
+        {tipPopup && (
+          <div style={{
+            position: "absolute", left: "50%", top: "30%",
+            transform: "translate(-50%, -50%)",
+            fontSize: 56, fontWeight: 700, color: C.gold,
+            textShadow: "0 4px 12px rgba(0,0,0,0.2)",
+            animation: "tipFloat 2s ease-out forwards",
+            pointerEvents: "none",
+          }}>
+            +{tipPopup.amount} ★
+          </div>
+        )}
+      </div>
+
+      {/* Question panel */}
+      <div style={{
+        background: `${C.card}fa`, padding: "16px 20px",
+        borderTop: `2px solid ${C.fur2}30`, flexShrink: 0,
+        boxShadow: "0 -8px 24px rgba(0,0,0,0.06)",
+        maxHeight: "55%", overflowY: "auto",
+      }}>
+        {currentQ ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>
+                ORDER #{(game.currentQuestionIdx || 0) + 1} OF {game.pack?.questions?.length || 0}
+              </div>
+              <div style={{
+                fontSize: 14, fontWeight: 700,
+                color: timeLeft <= 5 ? C.accent : C.text,
+                background: timeLeft <= 5 ? `${C.accent}20` : `${C.water1}15`,
+                padding: "4px 12px", borderRadius: 999,
+                animation: timeLeft <= 5 ? "pulse 0.5s ease-in-out infinite" : "none",
+              }}>
+                ⏱ {timeLeft}s
+              </div>
+            </div>
+            <div style={{
+              fontSize: 17, color: C.text, fontWeight: 700,
+              marginBottom: 12, lineHeight: 1.3,
+            }}>
+              "{currentQ.q}"
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+              {currentQ.options.map((opt, i) => {
+                const isPicked = selectedAnswer === i;
+                const showResult = selectedAnswer !== null;
+                const isCorrect = showResult && i === currentQ.correct;
+                const isWrongPick = showResult && isPicked && i !== currentQ.correct;
+                let bg = `${C.snow1}80`;
+                let border = `2px solid ${C.fur2}40`;
+                if (isCorrect) { bg = `${C.green}25`; border = `2px solid ${C.green}`; }
+                else if (isWrongPick) { bg = `${C.accent}25`; border = `2px solid ${C.accent}`; }
+                else if (isPicked) { bg = `${C.water1}20`; border = `2px solid ${C.water1}`; }
+                return (
+                  <button key={i} onClick={() => handleAnswer(i)}
+                    disabled={selectedAnswer !== null}
+                    style={{
+                      padding: "12px 14px", borderRadius: 12, background: bg, border,
+                      cursor: selectedAnswer === null ? "pointer" : "default",
+                      fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 15, color: C.text, textAlign: "left", fontWeight: 600,
+                      transition: "all 0.2s",
+                      transform: isCorrect ? "scale(1.04)" : "scale(1)",
+                    }}>
+                    <strong style={{ marginRight: 6, color: C.accent }}>{"ABCD"[i]}.</strong> {opt}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedAnswer !== null && selectedAnswer === currentQ.correct && (
+              <div style={{
+                marginTop: 10, padding: "8px 14px", background: `${C.green}15`,
+                borderRadius: 10, fontSize: 14, color: C.green, fontWeight: 700, textAlign: "center",
+              }}>
+                🎉 Customer served! Waiting for next order...
+              </div>
+            )}
+            {selectedAnswer !== null && selectedAnswer !== currentQ.correct && (
+              <div style={{
+                marginTop: 10, padding: "8px 14px", background: `${C.accent}15`,
+                borderRadius: 10, fontSize: 14, color: C.accent, fontWeight: 700, textAlign: "center",
+              }}>
+                😠 Customer walked out! Stay sharp...
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ textAlign: "center", padding: 24, color: C.textLight }}>
+            Waiting for next order...
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes tipFloat {
+          0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+          20% { opacity: 1; transform: translate(-50%, -60%) scale(1.2); }
+          80% { opacity: 1; transform: translate(-50%, -90%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -120%) scale(0.9); }
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ─── RESTAURANT HOST VIEW ─── teacher's control panel for the live game.
+   Shows the lobby with game code + roster, then a live leaderboard during play
+   with controls to advance question / end game. */
+function RestaurantHostView({ game, code, onAdvance, onEnd, onClose }) {
+  const players = game?.players || {};
+  const sortedPlayers = Object.entries(players)
+    .map(([id, p]) => ({ id, ...p }))
+    .filter(p => p.status !== "left")
+    .sort((a, b) => (b.tips || 0) - (a.tips || 0));
+  const totalQuestions = game?.pack?.questions?.length || 0;
+  const currentIdx = game?.currentQuestionIdx || 0;
+  const currentQ = game?.pack?.questions?.[currentIdx];
+  const isPlaying = game?.status === "playing";
+  const isLobby = game?.status === "lobby";
+  const isEnded = game?.status === "ended";
+
+  // Track how many have answered current question
+  const answeredCount = sortedPlayers.filter(p => p.lastQuestionIdx === currentIdx).length;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: C.bg, zIndex: 2000,
+      fontFamily: "'Patrick Hand', cursive", overflowY: "auto",
+    }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 28px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <span style={{ fontSize: 28 }}>🍜</span>
+              <h1 style={{ fontSize: 26, color: C.text, margin: 0, fontWeight: 700 }}>
+                Live Restaurant
+              </h1>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                background: isPlaying ? `${C.green}25` : isEnded ? `${C.fur2}30` : `${C.water1}25`,
+                color: isPlaying ? C.green : isEnded ? C.textLight : C.water1,
+                letterSpacing: 0.5,
+              }}>
+                {isLobby ? "LOBBY" : isPlaying ? "PLAYING" : "ENDED"}
+              </span>
+            </div>
+            <p style={{ color: C.textLight, fontSize: 14, margin: 0 }}>
+              {game?.pack?.title || "Loading..."}
+            </p>
+          </div>
+          <button onClick={onClose}
+            style={{ padding: "10px 16px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "inherit", fontSize: 14, cursor: "pointer" }}>
+            ✕ Close
+          </button>
+        </div>
+
+        {/* LOBBY STATE — show big code + roster + start button */}
+        {isLobby && (
+          <>
+            <div style={{
+              background: `linear-gradient(135deg, ${C.accent}15, ${C.gold}10)`,
+              borderRadius: 24, padding: "32px",
+              border: `2px solid ${C.accent}30`,
+              textAlign: "center", marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>
+                STUDENTS: JOIN AT
+              </div>
+              <div style={{
+                fontSize: 18, color: C.text, fontWeight: 600, marginBottom: 12,
+              }}>
+                bigastar.com → "Join game"
+              </div>
+              <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>
+                CODE
+              </div>
+              <div style={{
+                fontSize: 64, color: C.accent, fontWeight: 700, letterSpacing: 12,
+                fontFamily: "monospace",
+                textShadow: `0 4px 16px ${C.accent}40`,
+                marginBottom: 6, lineHeight: 1,
+              }}>
+                {code}
+              </div>
+              <div style={{ fontSize: 14, color: C.textLight }}>
+                Share this code with your class
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap" }}>
+              <div style={{ flex: "2 1 300px" }}>
+                <div style={{
+                  background: `${C.card}f0`, borderRadius: 16, padding: "18px",
+                  border: `1.5px solid ${C.fur2}30`, minHeight: 200,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>
+                      PLAYERS WAITING ({sortedPlayers.length})
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textLight }}>Live updates</div>
+                  </div>
+                  {sortedPlayers.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: 30, color: C.textLight }}>
+                      <div style={{ fontSize: 36, marginBottom: 8 }}>👀</div>
+                      <div style={{ fontSize: 14 }}>Waiting for students to join...</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {sortedPlayers.map(p => (
+                        <div key={p.id} style={{
+                          padding: "8px 14px", borderRadius: 999,
+                          background: `${C.water1}15`, border: `1.5px solid ${C.water1}40`,
+                          color: C.text, fontSize: 14, fontWeight: 600,
+                          display: "flex", alignItems: "center", gap: 6,
+                          animation: "fadeIn 0.4s ease",
+                        }}>
+                          🐵 {p.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ flex: "1 1 240px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={onAdvance}
+                  disabled={sortedPlayers.length === 0}
+                  style={{
+                    padding: "16px", borderRadius: 14, border: "none",
+                    background: sortedPlayers.length === 0
+                      ? `${C.fur2}50`
+                      : `linear-gradient(135deg, ${C.green}, #2a9540)`,
+                    color: "white", fontFamily: "inherit",
+                    fontSize: 18, fontWeight: 700,
+                    cursor: sortedPlayers.length === 0 ? "default" : "pointer",
+                    boxShadow: sortedPlayers.length === 0 ? "none" : `0 6px 16px ${C.green}50`,
+                  }}>
+                  ▶ Open the restaurant!
+                </button>
+                <button onClick={onEnd}
+                  style={{
+                    padding: "12px", borderRadius: 12, border: `2px solid ${C.fur2}40`,
+                    background: `${C.card}dd`, color: C.text, fontFamily: "inherit",
+                    fontSize: 14, cursor: "pointer",
+                  }}>
+                  Cancel game
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* PLAYING STATE — current question + leaderboard */}
+        {isPlaying && (
+          <>
+            <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
+              <div style={{
+                flex: "2 1 360px", background: `${C.card}f0`, borderRadius: 16,
+                padding: "16px 18px", border: `1.5px solid ${C.fur2}30`,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>
+                    ORDER {currentIdx + 1} OF {totalQuestions}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.water1, fontWeight: 700 }}>
+                    {answeredCount} / {sortedPlayers.length} answered
+                  </div>
+                </div>
+                <div style={{ fontSize: 18, color: C.text, fontWeight: 700, marginBottom: 10 }}>
+                  "{currentQ?.q}"
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {currentQ?.options?.map((opt, i) => (
+                    <div key={i} style={{
+                      padding: "8px 12px", borderRadius: 8,
+                      background: i === currentQ.correct ? `${C.green}15` : `${C.snow1}80`,
+                      border: i === currentQ.correct ? `2px solid ${C.green}` : `1.5px solid ${C.fur2}30`,
+                      fontSize: 14, color: C.text,
+                    }}>
+                      <strong style={{ color: i === currentQ.correct ? C.green : C.accent, marginRight: 6 }}>{"ABCD"[i]}.</strong>
+                      {opt}
+                      {i === currentQ.correct && <span style={{ marginLeft: 6, color: C.green, fontWeight: 700 }}>✓ correct</span>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <button onClick={onAdvance}
+                    disabled={currentIdx >= totalQuestions - 1}
+                    style={{
+                      flex: 1, padding: "12px", borderRadius: 10, border: "none",
+                      background: currentIdx >= totalQuestions - 1
+                        ? `${C.fur2}50`
+                        : `linear-gradient(135deg, ${C.water1}, ${C.water3})`,
+                      color: "white", fontFamily: "inherit", fontSize: 15, fontWeight: 700,
+                      cursor: currentIdx >= totalQuestions - 1 ? "default" : "pointer",
+                    }}>
+                    {currentIdx >= totalQuestions - 1 ? "Last question" : "→ Next order"}
+                  </button>
+                  <button onClick={onEnd}
+                    style={{
+                      padding: "12px 18px", borderRadius: 10, border: `2px solid ${C.accent}40`,
+                      background: `${C.accent}15`, color: C.accent, fontFamily: "inherit",
+                      fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    }}>
+                    🏁 End game
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: "1 1 240px" }}>
+                <div style={{
+                  background: `${C.gold}10`, borderRadius: 16, padding: "16px",
+                  border: `1.5px solid ${C.gold}40`, height: "100%",
+                  display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+                }}>
+                  <div style={{ fontSize: 13, color: "#a07820", fontWeight: 700, letterSpacing: 0.5 }}>RESTAURANT TOTAL</div>
+                  <div style={{ fontSize: 42, color: C.gold, fontWeight: 700, lineHeight: 1.1 }}>
+                    ★ {sortedPlayers.reduce((sum, p) => sum + (p.tips || 0), 0)}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textLight }}>
+                    {sortedPlayers.reduce((sum, p) => sum + (p.served || 0), 0)} customers served
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live leaderboard */}
+            <div style={{ background: `${C.card}f0`, borderRadius: 16, padding: "16px 18px", border: `1.5px solid ${C.fur2}30` }}>
+              <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 10 }}>
+                LIVE LEADERBOARD
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {sortedPlayers.map((p, i) => {
+                  const justAnswered = p.lastQuestionIdx === currentIdx;
+                  const justCorrect = justAnswered && p.lastAnswerCorrect;
+                  return (
+                    <div key={p.id} style={{
+                      display: "grid", gridTemplateColumns: "30px 1fr auto auto auto", gap: 12,
+                      alignItems: "center", padding: "8px 12px", borderRadius: 10,
+                      background: justCorrect ? `${C.green}15` : justAnswered ? `${C.accent}10` : `${C.snow1}60`,
+                      border: justCorrect ? `2px solid ${C.green}40` : `1.5px solid ${C.fur2}30`,
+                      transition: "all 0.4s",
+                    }}>
+                      <div style={{ fontSize: 14, color: C.text, fontWeight: 700, textAlign: "center" }}>
+                        {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
+                      </div>
+                      <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
+                        🐵 {p.name}
+                        {p.streak >= 3 && <span style={{ marginLeft: 6, fontSize: 11, color: C.gold, fontWeight: 700 }}>🔥 {p.streak}</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>✓ {p.served || 0}</div>
+                      <div style={{ fontSize: 12, color: C.accent, fontWeight: 600 }}>✗ {p.lost || 0}</div>
+                      <div style={{ fontSize: 16, color: C.gold, fontWeight: 700 }}>★ {p.tips || 0}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ENDED STATE — final results */}
+        {isEnded && (
+          <>
+            <div style={{
+              background: `linear-gradient(135deg, ${C.gold}20, ${C.gold}08)`,
+              borderRadius: 20, padding: "28px",
+              border: `2px solid ${C.gold}40`, textAlign: "center", marginBottom: 16,
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
+              <h2 style={{ fontSize: 26, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>
+                Game ended!
+              </h2>
+              <p style={{ color: C.textLight, fontSize: 15, margin: 0 }}>
+                {sortedPlayers[0]?.name || "Nobody"} won with ★ {sortedPlayers[0]?.tips || 0} tips
+              </p>
+            </div>
+            <div style={{ background: `${C.card}f0`, borderRadius: 16, padding: "16px 18px", border: `1.5px solid ${C.fur2}30`, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 10 }}>
+                FINAL STANDINGS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {sortedPlayers.map((p, i) => (
+                  <div key={p.id} style={{
+                    display: "grid", gridTemplateColumns: "30px 1fr auto auto", gap: 12,
+                    alignItems: "center", padding: "10px 12px", borderRadius: 10,
+                    background: i === 0 ? `${C.gold}10` : `${C.snow1}80`,
+                    border: i === 0 ? `2px solid ${C.gold}40` : `1.5px solid ${C.fur2}30`,
+                  }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, textAlign: "center" }}>
+                      {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
+                    </div>
+                    <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>🐵 {p.name}</div>
+                    <div style={{ fontSize: 12, color: C.textLight }}>
+                      ✓{p.served || 0} ✗{p.lost || 0}
+                    </div>
+                    <div style={{ fontSize: 17, color: C.gold, fontWeight: 700 }}>★ {p.tips || 0}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={onClose}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 12, border: "none",
+                background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                color: "white", fontFamily: "inherit", fontSize: 17, fontWeight: 700, cursor: "pointer",
+              }}>
+              Back to dashboard
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── JOIN LIVE GAME MODAL ─── student enters game code + name */
+function JoinGameModal({ defaultName, onJoin, onClose }) {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState(defaultName || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const tryJoin = async () => {
+    setError("");
+    if (code.trim().length !== 6) { setError("Code must be 6 characters"); return; }
+    if (!name.trim()) { setError("Enter your name"); return; }
+    setBusy(true);
+    try {
+      await onJoin(code.trim().toUpperCase(), name.trim());
+    } catch (e) {
+      setError(e.message || "Could not join game");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 2100, padding: 20, backdropFilter: "blur(4px)",
+        animation: "fadeIn 0.2s ease",
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background: C.card, borderRadius: 24, padding: "32px 36px",
+          maxWidth: 420, width: "100%", position: "relative",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.2)",
+          animation: "modalPop 0.25s ease",
+          fontFamily: "'Patrick Hand', cursive",
+        }}>
+        <button onClick={onClose}
+          style={{ position: "absolute", top: 14, right: 16, background: "transparent", border: "none", cursor: "pointer", fontSize: 22, color: C.textLight, padding: 4 }}>✕</button>
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <div style={{ fontSize: 50, marginBottom: 4 }}>🍜</div>
+          <h2 style={{ fontSize: 24, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>
+            Join a live game
+          </h2>
+          <p style={{ color: C.textLight, fontSize: 14, margin: 0 }}>
+            Enter the code your teacher shared
+          </p>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0, 6))}
+            placeholder="ABC123" maxLength={6}
+            onKeyDown={e => e.key === "Enter" && tryJoin()}
+            style={{
+              padding: "14px 18px", borderRadius: 12,
+              border: `2px solid ${C.fur2}40`, background: `${C.card}cc`,
+              fontSize: 28, fontFamily: "monospace", letterSpacing: 6,
+              textAlign: "center", color: C.text, boxSizing: "border-box",
+              fontWeight: 700,
+            }} />
+          <input value={name} onChange={e => setName(e.target.value.slice(0, 20))}
+            placeholder="Your name"
+            onKeyDown={e => e.key === "Enter" && tryJoin()}
+            style={{
+              padding: "12px 16px", borderRadius: 12,
+              border: `2px solid ${C.fur2}40`, background: `${C.card}cc`,
+              fontSize: 16, fontFamily: "inherit", color: C.text,
+              boxSizing: "border-box",
+            }} />
+          {error && <p style={{ color: C.accent, fontSize: 14, margin: 0, textAlign: "center" }}>{error}</p>}
+          <button onClick={tryJoin} disabled={busy}
+            style={{
+              padding: "14px", borderRadius: 12, border: "none",
+              background: busy ? `${C.fur2}80` : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+              color: "white", fontFamily: "inherit", fontSize: 18, fontWeight: 700,
+              cursor: busy ? "wait" : "pointer",
+              boxShadow: busy ? "none" : `0 6px 16px ${C.accent}50`,
+            }}>
+            {busy ? "Joining..." : "Join game →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── TEACHER OVERVIEW ─── yearbook-style summary of every student.
+   Shows each student's monkey + a list of every mission they were assigned,
+   their best score, when they completed it, and the game mode they used. */
+function TeacherOverview({ students, missions, onClose, onViewMissionResults }) {
+  const [tick, setTick] = useState(0);
+  // Refresh once a minute so relative timestamps ("2h ago") stay current
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Relative time formatter — "just now" / "5m ago" / "3h ago" / "2 days ago" / Mar 14
+  const relTime = (ts) => {
+    if (!ts) return "—";
+    const diff = Date.now() - ts;
+    if (diff < 60000) return "just now";
+    if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+    if (diff < 86400000 * 7) return `${Math.round(diff / 86400000)}d ago`;
+    return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  const gameTypeLabel = (gt) => ({
+    blockblast: "🧩 Block Blast",
+    runner: "🏃 Fruit Runner",
+    flappy: "❄️ Icicle Flap",
+    crush: "🌸 Monkey Crush",
+    quiz: "📝 Quiz",
+  })[gt] || gt || "—";
+
+  // Class stats
+  let totalAssigned = 0, totalCompleted = 0;
+  students.forEach(s => {
+    const mList = missions[s.id] || [];
+    totalAssigned += mList.length;
+    mList.forEach(m => {
+      if (s.completions?.[`mission:${m.id}`]?.completed) totalCompleted++;
+    });
+  });
+  const completionPct = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1500,
+      background: C.bg,
+      overflow: "auto",
+    }}>
+      {/* Header */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 5,
+        background: `linear-gradient(180deg, ${C.card}f8, ${C.card}d8)`,
+        backdropFilter: "blur(8px)",
+        padding: "16px 24px",
+        borderBottom: `1px solid ${C.fur2}30`,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexWrap: "wrap", gap: 12,
+      }}>
+        <div>
+          <h1 style={{ margin: 0, color: C.text, fontSize: 28, fontFamily: "'Patrick Hand', cursive" }}>
+            📖 Class Yearbook
+          </h1>
+          <p style={{ margin: "2px 0 0", color: C.textLight, fontSize: 13 }}>
+            {students.length} student{students.length === 1 ? "" : "s"} · {totalCompleted}/{totalAssigned} mission{totalAssigned === 1 ? "" : "s"} done ({completionPct}%)
+          </p>
+        </div>
+        <button onClick={onClose}
+          style={{
+            background: `${C.card}ee`, border: `2px solid ${C.fur2}40`,
+            padding: "8px 18px", borderRadius: 999,
+            fontSize: 16, fontWeight: 700, color: C.text,
+            fontFamily: "'Patrick Hand', cursive", cursor: "pointer",
+          }}>
+          ← Back
+        </button>
+      </div>
+
+      {/* Yearbook grid */}
+      <div style={{
+        padding: "20px 24px 60px",
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))",
+        gap: 16,
+        maxWidth: 1400,
+        margin: "0 auto",
+      }}>
+        {students.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", textAlign: "center", color: C.textLight, padding: 40 }}>
+            No students yet — add some in the Manage panel.
+          </div>
+        )}
+        {students.map((s, idx) => {
+          const studentMissions = missions[s.id] || [];
+          // Sort: completed ones first (by recency), then incomplete
+          const sorted = [...studentMissions].sort((a, b) => {
+            const ca = s.completions?.[`mission:${a.id}`];
+            const cb = s.completions?.[`mission:${b.id}`];
+            const doneA = ca?.completed ? 1 : 0;
+            const doneB = cb?.completed ? 1 : 0;
+            if (doneA !== doneB) return doneB - doneA;
+            // Both done OR both not done — sort by latest attempt time desc
+            const tA = ca?.lastAttempt || 0;
+            const tB = cb?.lastAttempt || 0;
+            return tB - tA;
+          });
+          const completedCount = sorted.filter(m => s.completions?.[`mission:${m.id}`]?.completed).length;
+          const allDone = sorted.length > 0 && completedCount === sorted.length;
+
+          return (
+            <div key={s.id} style={{
+              background: `linear-gradient(135deg, ${C.card}, ${C.snow1}50)`,
+              borderRadius: 18,
+              padding: "16px 16px 14px",
+              border: `2px solid ${C.fur2}25`,
+              boxShadow: `0 4px 14px ${C.fur2}20`,
+              display: "flex", gap: 14,
+              minHeight: 220,
+            }}>
+              {/* Monkey portrait */}
+              <div style={{
+                flex: "0 0 130px",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+              }}>
+                <div style={{
+                  width: 130, height: 130,
+                  background: `radial-gradient(circle, ${C.water1}25, transparent 70%)`,
+                  borderRadius: 999,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  position: "relative",
+                }}>
+                  <MonkeySVG
+                    size={120}
+                    mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
+                    delay={idx * 0.2}
+                    variant={idx}
+                    accessories={s.accessories || []}
+                    pet={s.pet}
+                    petAccessoriesByPet={normalizePetAccessories(s)}
+                    ownedPets={s.ownedPets || []}
+                    streakLevel={getStreakLevel(getEffectiveStreak(s)).id}
+                  />
+                  {allDone && (
+                    <div style={{
+                      position: "absolute", top: -2, right: -2,
+                      background: C.gold, color: "white",
+                      padding: "3px 8px", borderRadius: 999,
+                      fontSize: 11, fontWeight: 700,
+                      boxShadow: `0 2px 8px ${C.gold}80`,
+                      fontFamily: "'Patrick Hand', cursive",
+                    }}>🏆 All done</div>
+                  )}
+                </div>
+                <div style={{
+                  fontSize: 16, fontWeight: 700, color: C.text,
+                  fontFamily: "'Patrick Hand', cursive",
+                  textAlign: "center", lineHeight: 1.1,
+                }}>
+                  {s.name}
+                </div>
+                <div style={{
+                  display: "flex", gap: 6, alignItems: "center",
+                  fontSize: 13, color: C.gold, fontWeight: 700,
+                }}>
+                  <span>★ {s.points}</span>
+                  {getEffectiveStreak(s) > 0 && (
+                    <span style={{ color: C.green, fontSize: 11 }}>🔥 {getEffectiveStreak(s)}d</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Mission list */}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <div style={{
+                  fontSize: 12, color: C.textLight, fontWeight: 700,
+                  marginBottom: 6, letterSpacing: 0.4,
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <span>MISSIONS · {completedCount}/{sorted.length} done</span>
+                </div>
+                {sorted.length === 0 ? (
+                  <div style={{
+                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                    color: C.textLight, fontSize: 13, fontStyle: "italic",
+                    background: `${C.snow1}40`, borderRadius: 10, padding: 12,
+                  }}>
+                    No missions assigned yet
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, overflowY: "auto", maxHeight: 200 }}>
+                    {sorted.map(m => {
+                      const cd = s.completions?.[`mission:${m.id}`];
+                      const isDone = !!cd?.completed;
+                      const score = cd?.bestScore;
+                      const scoreTotal = cd?.scoreTotal;
+                      const completedAt = cd?.latestAttempt?.completedAt || cd?.lastAttempt;
+                      const gt = cd?.latestAttempt?.gameType;
+                      return (
+                        <div key={m.id}
+                          onClick={() => isDone && onViewMissionResults && onViewMissionResults(s.id, m.id)}
+                          style={{
+                            background: isDone ? `${C.green}15` : `${C.fur2}10`,
+                            border: `1px solid ${isDone ? C.green + "40" : C.fur2 + "30"}`,
+                            borderRadius: 8, padding: "6px 10px",
+                            cursor: isDone ? "pointer" : "default",
+                            transition: "background 0.2s",
+                            display: "flex", flexDirection: "column", gap: 1,
+                          }}
+                          onMouseEnter={e => { if (isDone) e.currentTarget.style.background = `${C.green}25`; }}
+                          onMouseLeave={e => { if (isDone) e.currentTarget.style.background = `${C.green}15`; }}>
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 6, justifyContent: "space-between",
+                            fontSize: 13, color: C.text, fontWeight: 600,
+                          }}>
+                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {isDone ? "✓" : "⏳"} {m.name}
+                            </span>
+                            {isDone && score !== undefined && score !== null && (
+                              <span style={{
+                                background: C.card, padding: "1px 8px", borderRadius: 999,
+                                fontSize: 11, fontWeight: 700, color: C.green,
+                                whiteSpace: "nowrap",
+                              }}>
+                                {score}{scoreTotal ? `/${scoreTotal}` : ""}
+                              </span>
+                            )}
+                            <span style={{
+                              fontSize: 10, color: C.gold, fontWeight: 700, whiteSpace: "nowrap",
+                            }}>
+                              ★ {m.points}
+                            </span>
+                          </div>
+                          {isDone && (
+                            <div style={{
+                              fontSize: 11, color: C.textLight,
+                              display: "flex", gap: 8, flexWrap: "wrap",
+                            }}>
+                              {gt && <span>{gameTypeLabel(gt)}</span>}
+                              {completedAt && <span>· {relTime(completedAt)}</span>}
+                            </div>
+                          )}
+                          {!isDone && (
+                            <div style={{ fontSize: 11, color: C.textLight, fontStyle: "italic" }}>
+                              {m.questions.length} question{m.questions.length === 1 ? "" : "s"} · not started
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ─── MY POOL ─── personal Tamagotchi-style scene where the student cares for their pet */
 function MyPool({ student, onClose, onFeed, onWalk, onShop, onPetMart, onTogglePetAcc, onBuyPetAcc, onClearPetAcc }) {
   // Live tick for stat updates
@@ -4917,1107 +7103,101 @@ function MonkeySVG({ size = 120, mood = "happy", label, points, onClick, delay =
         )}
 
         {/* ─── ACCESSORIES ─── rendered on top of face */}
-        {accessories.includes("scarf") && (
-          <g filter="url(#watercolorSoft)">
-            <path d="M -22 14 Q 0 22 22 14 Q 24 22 22 28 Q 0 36 -22 28 Q -24 22 -22 14 Z"
-              fill="#c94c4c" stroke="#a02828" strokeWidth="0.5" />
-            <path d="M -22 17 L -16 32 L -10 28 L -14 17"
-              fill="#a02828" opacity="0.8" />
-            {/* stripes */}
-            <line x1="-18" y1="20" x2="18" y2="18" stroke="white" strokeWidth="1" opacity="0.4" />
-            <line x1="-18" y1="24" x2="18" y2="22" stroke="white" strokeWidth="1" opacity="0.3" />
-          </g>
-        )}
-        {accessories.includes("sunglasses") && (
-          <g>
-            <ellipse cx="-9" cy="-16" rx="7" ry="5" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
-            <ellipse cx="9" cy="-16" rx="7" ry="5" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
-            <line x1="-2" y1="-16" x2="2" y2="-16" stroke="#444" strokeWidth="1.5" />
-            <line x1="-16" y1="-15" x2="-19" y2="-13" stroke="#444" strokeWidth="1" />
-            <line x1="16" y1="-15" x2="19" y2="-13" stroke="#444" strokeWidth="1" />
-            {/* lens shine */}
-            <ellipse cx="-11" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
-            <ellipse cx="7" cy="-18" rx="2" ry="1.5" fill="white" opacity="0.4" />
-          </g>
-        )}
-        {accessories.includes("hat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* hat brim */}
-            <ellipse cx="0" cy="-38" rx="28" ry="5" fill="#3a4f6a" />
-            {/* hat top */}
-            <path d="M -18 -38 Q -16 -55 0 -57 Q 16 -55 18 -38 Z"
-              fill="#4a6080" stroke="#2a3a50" strokeWidth="0.8" />
-            {/* band */}
-            <ellipse cx="0" cy="-40" rx="19" ry="2.5" fill="#2a3a50" />
-            {/* small accent */}
-            <circle cx="-10" cy="-40" r="1.5" fill="#edb830" />
-          </g>
-        )}
-        {accessories.includes("beanie") && (
-          <g filter="url(#watercolorSoft)">
-            {/* beanie body */}
-            <path d="M -26 -32 Q -28 -52 0 -56 Q 28 -52 26 -32 Q 13 -30 0 -30 Q -13 -30 -26 -32 Z"
-              fill="#d96666" stroke="#a04040" strokeWidth="0.5" />
-            {/* fold */}
-            <path d="M -26 -32 Q 0 -28 26 -32 L 26 -28 Q 0 -24 -26 -28 Z"
-              fill="#a04040" />
-            {/* pom pom */}
-            <circle cx="0" cy="-58" r="6" fill="#f5f0ea" filter="url(#furTexture)" />
-            <circle cx="-2" cy="-60" r="2" fill="white" opacity="0.5" />
-          </g>
-        )}
-        {accessories.includes("crown") && (
-          <g filter="url(#watercolorSoft)">
-            {/* crown base */}
-            <path d="M -22 -38 L -22 -45 L -14 -52 L -7 -45 L 0 -55 L 7 -45 L 14 -52 L 22 -45 L 22 -38 Z"
-              fill="#edb830" stroke="#b88810" strokeWidth="0.8" />
-            <rect x="-22" y="-40" width="44" height="3" fill="#b88810" />
-            {/* gems */}
-            <circle cx="-14" cy="-45" r="2" fill="#e06060" />
-            <circle cx="0" cy="-48" r="2.5" fill="#5a8fc7" />
-            <circle cx="14" cy="-45" r="2" fill="#5caa5e" />
-            {/* shine */}
-            <path d="M -20 -42 L -20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
-            <path d="M 20 -42 L 20 -39" stroke="white" strokeWidth="1" opacity="0.5" />
-          </g>
-        )}
-        {accessories.includes("flower") && (
-          <g filter="url(#watercolorSoft)">
-            {/* flower petals */}
-            {[0, 72, 144, 216, 288].map((angle, i) => {
-              const rad = angle * Math.PI / 180;
-              const x = -22 + Math.cos(rad) * 5;
-              const y = -32 + Math.sin(rad) * 5;
-              return <ellipse key={i} cx={x} cy={y} rx="4" ry="3" fill="#ffb6d9"
-                transform={`rotate(${angle} ${x} ${y})`} />;
-            })}
-            <circle cx="-22" cy="-32" r="3" fill="#edb830" />
-            <ellipse cx="-23" cy="-33" rx="1" ry="0.8" fill="white" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("bowtie") && (
-          <g filter="url(#watercolorSoft)">
-            <path d="M -10 8 L -16 4 L -16 14 Z" fill="#c94c4c" />
-            <path d="M 10 8 L 16 4 L 16 14 Z" fill="#c94c4c" />
-            <rect x="-3" y="6" width="6" height="6" rx="1" fill="#a02828" />
-            <circle cx="0" cy="9" r="1" fill="#edb830" />
-          </g>
-        )}
-        {accessories.includes("headphones") && (
-          <g>
-            {/* band */}
-            <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#1a1a1a" strokeWidth="3" strokeLinecap="round" />
-            <path d="M -28 -28 Q 0 -52 28 -28" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" />
-            {/* ear cups */}
-            <circle cx="-28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
-            <circle cx="28" cy="-22" r="7" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
-            <circle cx="-28" cy="-22" r="3" fill="#e06060" />
-            <circle cx="28" cy="-22" r="3" fill="#e06060" />
-          </g>
-        )}
-        {accessories.includes("earphones") && (
-          <g>
-            {/* Wired earphones - small earbuds with cable hanging down */}
-            <ellipse cx="-28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
-            <ellipse cx="28" cy="-15" rx="4" ry="5" fill="#fafafa" stroke="#888" strokeWidth="0.7" />
-            <ellipse cx="-28" cy="-15" rx="2" ry="2.5" fill="#444" />
-            <ellipse cx="28" cy="-15" rx="2" ry="2.5" fill="#444" />
-            {/* Wires hanging down */}
-            <path d="M -28 -10 Q -30 0 -22 12 Q -12 18 -2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
-            <path d="M 28 -10 Q 30 0 22 12 Q 12 18 2 16" fill="none" stroke="#fafafa" strokeWidth="1.5" />
-            <path d="M -2 16 L 2 16 L 0 22" fill="none" stroke="#fafafa" strokeWidth="1.5" />
-            <rect x="-2" y="20" width="4" height="6" rx="1" fill="#444" />
-          </g>
-        )}
-        {accessories.includes("vrheadset") && (
-          <g>
-            {/* Strap */}
-            <path d="M -28 -22 Q 0 -45 28 -22" fill="none" stroke="#2a2a2a" strokeWidth="4" strokeLinecap="round" />
-            {/* Main headset block */}
-            <rect x="-22" y="-22" width="44" height="16" rx="3" fill="#1a1a1a" stroke="#444" strokeWidth="1" />
-            {/* Lens area */}
-            <rect x="-19" y="-19" width="38" height="10" rx="2" fill="#0a0a0a" />
-            {/* Glow eyes through lens */}
-            <ellipse cx="-10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
-            <ellipse cx="10" cy="-14" rx="5" ry="3" fill="#5a8fc7" opacity="0.7" />
-            <ellipse cx="-10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
-            <ellipse cx="10" cy="-14" rx="2" ry="1.5" fill="#a0d4ff" />
-            {/* Brand strip */}
-            <rect x="-8" y="-21" width="16" height="2" fill="#5a8fc7" />
-          </g>
-        )}
-        {accessories.includes("halo") && (
-          <g>
-            {/* Glowing halo */}
-            <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#fff8b0" strokeWidth="3" opacity="0.9" />
-            <ellipse cx="0" cy="-50" rx="22" ry="6" fill="none" stroke="#edb830" strokeWidth="1.5" />
-            <ellipse cx="0" cy="-50" rx="20" ry="4" fill="none" stroke="white" strokeWidth="1" opacity="0.8" />
-            {/* Twinkles */}
-            <text x="-22" y="-46" fontSize="10" fill="#fff8b0">✦</text>
-            <text x="18" y="-46" fontSize="10" fill="#fff8b0">✦</text>
-            <text x="-2" y="-58" fontSize="8" fill="#fff8b0">✧</text>
-          </g>
-        )}
+        {accessories.includes("scarf") && renderMonkeyAccessoryArt("scarf")}
+        {accessories.includes("sunglasses") && renderMonkeyAccessoryArt("sunglasses")}
+        {accessories.includes("hat") && renderMonkeyAccessoryArt("hat")}
+        {accessories.includes("beanie") && renderMonkeyAccessoryArt("beanie")}
+        {accessories.includes("crown") && renderMonkeyAccessoryArt("crown")}
+        {accessories.includes("flower") && renderMonkeyAccessoryArt("flower")}
+        {accessories.includes("bowtie") && renderMonkeyAccessoryArt("bowtie")}
+        {accessories.includes("headphones") && renderMonkeyAccessoryArt("headphones")}
+        {accessories.includes("earphones") && renderMonkeyAccessoryArt("earphones")}
+        {accessories.includes("vrheadset") && renderMonkeyAccessoryArt("vrheadset")}
+        {accessories.includes("halo") && renderMonkeyAccessoryArt("halo")}
 
         {/* HELD ITEMS - rendered after arms but visible from front */}
-        {accessories.includes("tennis") && (
-          <g transform="translate(28, 18) rotate(-20)">
-            {/* Handle */}
-            <rect x="-1.5" y="-5" width="3" height="14" rx="1" fill="#3a2810" />
-            <rect x="-1.5" y="-5" width="3" height="3" fill="#7a5818" />
-            {/* Head */}
-            <ellipse cx="0" cy="-15" rx="9" ry="11" fill="none" stroke="#1a1a1a" strokeWidth="1.8" />
-            <ellipse cx="0" cy="-15" rx="9" ry="11" fill="#fffabf" opacity="0.9" stroke="#1a1a1a" strokeWidth="0.5" />
-            {/* String pattern */}
-            {[-6, -3, 0, 3, 6].map((x, i) => <line key={`v${i}`} x1={x} y1="-25" x2={x} y2="-5" stroke="#bbb" strokeWidth="0.5" />)}
-            {[-22, -18, -14, -10].map((y, i) => <line key={`h${i}`} x1="-9" y1={y} x2="9" y2={y} stroke="#bbb" strokeWidth="0.5" />)}
-          </g>
-        )}
-        {accessories.includes("basketball") && (
-          <g transform="translate(30, 20)">
-            <circle cx="0" cy="0" r="9" fill="#e07020" stroke="#a04010" strokeWidth="1" />
-            <circle cx="-2" cy="-2" r="4" fill="#ff9050" opacity="0.6" />
-            {/* Ball lines */}
-            <path d="M -9 0 Q 0 3 9 0" stroke="#1a1a1a" strokeWidth="1" fill="none" />
-            <path d="M 0 -9 Q 3 0 0 9" stroke="#1a1a1a" strokeWidth="1" fill="none" />
-            <path d="M -7 -6 Q 0 0 7 -6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
-            <path d="M -7 6 Q 0 0 7 6" stroke="#1a1a1a" strokeWidth="0.8" fill="none" />
-          </g>
-        )}
-        {accessories.includes("controller") && (
-          <g transform="translate(28, 22) rotate(-15)">
-            {/* Body */}
-            <rect x="-12" y="-5" width="24" height="11" rx="6" fill="#1a1a1a" stroke="#444" strokeWidth="0.5" />
-            {/* D-pad */}
-            <rect x="-9" y="-3" width="2" height="6" fill="#fafafa" />
-            <rect x="-11" y="-1" width="6" height="2" fill="#fafafa" />
-            {/* Buttons */}
-            <circle cx="6" cy="-2" r="1.5" fill="#e06060" />
-            <circle cx="9" cy="1" r="1.5" fill="#5a8fc7" />
-            <circle cx="3" cy="1" r="1.5" fill="#edb830" />
-            <circle cx="6" cy="4" r="1.5" fill="#5caa5e" />
-          </g>
-        )}
-        {accessories.includes("guitar") && (
-          <g transform="translate(26, 12) rotate(20)">
-            {/* Body - figure 8 */}
-            <ellipse cx="0" cy="6" rx="9" ry="11" fill="#a04010" stroke="#5a2008" strokeWidth="0.8" />
-            <ellipse cx="-2" cy="4" rx="6" ry="7" fill="#c05028" opacity="0.6" />
-            {/* Sound hole */}
-            <circle cx="0" cy="6" r="2.5" fill="#1a1a1a" />
-            <circle cx="0" cy="6" r="3.2" fill="none" stroke="#3a1810" strokeWidth="0.6" />
-            {/* Neck */}
-            <rect x="-1.5" y="-15" width="3" height="13" fill="#5a3818" />
-            {/* Frets */}
-            {[-13, -10, -7, -4].map((y, i) => <line key={i} x1="-1.5" y1={y} x2="1.5" y2={y} stroke="#fafafa" strokeWidth="0.4" />)}
-            {/* Headstock */}
-            <rect x="-2" y="-19" width="4" height="4" fill="#5a3818" />
-            {/* Strings */}
-            {[-1, 0, 1].map((x, i) => <line key={i} x1={x * 0.5} y1="-15" x2={x * 0.5} y2="15" stroke="#fff8b0" strokeWidth="0.3" />)}
-          </g>
-        )}
-        {accessories.includes("microphone") && (
-          <g transform="translate(28, 14) rotate(-15)">
-            {/* Head */}
-            <ellipse cx="0" cy="-10" rx="5" ry="6" fill="#5a5a5a" stroke="#2a2a2a" strokeWidth="0.8" />
-            {/* Grill texture */}
-            {[-8, -6, -4].map((y, i) => <line key={i} x1="-4" y1={y} x2="4" y2={y} stroke="#2a2a2a" strokeWidth="0.4" />)}
-            <ellipse cx="-1" cy="-13" rx="2" ry="2" fill="#9a9a9a" opacity="0.6" />
-            {/* Body/handle */}
-            <rect x="-1.5" y="-4" width="3" height="14" fill="#2a2a2a" />
-            <rect x="-1.5" y="-4" width="3" height="2" fill="#5a5a5a" />
-          </g>
-        )}
-        {accessories.includes("umbrella") && (
-          <g transform="translate(28, 16)">
-            {/* Canopy */}
-            <path d="M -14 -8 Q 0 -22 14 -8 Q 12 -10 8 -10 Q 4 -12 0 -10 Q -4 -12 -8 -10 Q -12 -10 -14 -8 Z"
-              fill="#e06060" stroke="#a02828" strokeWidth="0.8" />
-            <path d="M 0 -22 L 0 -8" stroke="#a02828" strokeWidth="0.5" />
-            <path d="M -7 -14 L -4 -10 M 7 -14 L 4 -10" stroke="#a02828" strokeWidth="0.5" />
-            {/* Handle */}
-            <path d="M 0 -8 L 0 12 Q 0 16 4 16 Q 8 16 8 12" stroke="#5a3818" strokeWidth="2" fill="none" strokeLinecap="round" />
-            <circle cx="0" cy="-22" r="1.5" fill="#5a3818" />
-          </g>
-        )}
-        {accessories.includes("lightsaber") && (
-          <g transform="translate(28, 18) rotate(-25)">
-            {/* Hilt */}
-            <rect x="-2" y="0" width="4" height="14" rx="0.5" fill="#5a5a5a" stroke="#1a1a1a" strokeWidth="0.5" />
-            <rect x="-2" y="2" width="4" height="2" fill="#1a1a1a" />
-            <rect x="-2" y="6" width="4" height="2" fill="#1a1a1a" />
-            <circle cx="0" cy="13" r="1.5" fill="#e06060" />
-            {/* Glow blade */}
-            <rect x="-2" y="-26" width="4" height="26" fill="#a0d4ff" opacity="0.5" />
-            <rect x="-1" y="-26" width="2" height="26" fill="#ffffff" opacity="0.9" />
-            <rect x="-3" y="-26" width="6" height="3" fill="#5a8fc7" opacity="0.4" />
-            {/* Tip glow */}
-            <circle cx="0" cy="-26" r="3" fill="#a0d4ff" opacity="0.5" />
-          </g>
-        )}
-        {accessories.includes("magicwand") && (
-          <g transform="translate(28, 16) rotate(-20)">
-            {/* Wand */}
-            <rect x="-1" y="-2" width="2" height="18" rx="1" fill="#5a3818" />
-            <rect x="-1.5" y="14" width="3" height="3" fill="#3a2010" />
-            {/* Star tip */}
-            <path d="M 0 -10 L 2 -4 L 8 -4 L 3 0 L 5 6 L 0 2 L -5 6 L -3 0 L -8 -4 L -2 -4 Z"
-              fill="#fff8b0" stroke="#edb830" strokeWidth="0.6" />
-            <path d="M 0 -8 L 1 -4 L 5 -4 L 2 -1 L 3 3 L 0 1 L -3 3 L -2 -1 L -5 -4 L -1 -4 Z"
-              fill="#edb830" />
-            {/* Sparkles */}
-            <text x="-14" y="-8" fontSize="6" fill="#fff8b0">✦</text>
-            <text x="10" y="-12" fontSize="5" fill="#fff8b0">✧</text>
-            <text x="6" y="6" fontSize="4" fill="#fff8b0">✦</text>
-          </g>
-        )}
-        {accessories.includes("icecream") && (
-          <g transform="translate(28, 18)">
-            {/* Cone */}
-            <path d="M -4 -3 L 4 -3 L 0 12 Z" fill="#d4a060" stroke="#7a5818" strokeWidth="0.5" />
-            <path d="M -4 -3 L 4 -3 M -3 0 L 3 0 M -2 3 L 2 3" stroke="#7a5818" strokeWidth="0.4" />
-            {/* Scoops */}
-            <circle cx="0" cy="-5" r="5" fill="#ff9080" />
-            <circle cx="-1" cy="-7" r="2.5" fill="#ffb0a0" opacity="0.7" />
-            <circle cx="-2" cy="-12" r="4" fill="#fff5d0" />
-            <circle cx="-3" cy="-13" r="2" fill="#ffeebb" opacity="0.7" />
-            {/* Cherry on top */}
-            <circle cx="-2" cy="-16" r="1.5" fill="#e84050" />
-            <path d="M -2 -17 L -1 -19" stroke="#3a7a3c" strokeWidth="0.5" />
-          </g>
-        )}
+        {accessories.includes("tennis") && renderMonkeyAccessoryArt("tennis")}
+        {accessories.includes("basketball") && renderMonkeyAccessoryArt("basketball")}
+        {accessories.includes("controller") && renderMonkeyAccessoryArt("controller")}
+        {accessories.includes("guitar") && renderMonkeyAccessoryArt("guitar")}
+        {accessories.includes("microphone") && renderMonkeyAccessoryArt("microphone")}
+        {accessories.includes("umbrella") && renderMonkeyAccessoryArt("umbrella")}
+        {accessories.includes("lightsaber") && renderMonkeyAccessoryArt("lightsaber")}
+        {accessories.includes("magicwand") && renderMonkeyAccessoryArt("magicwand")}
+        {accessories.includes("icecream") && renderMonkeyAccessoryArt("icecream")}
 
         {/* BACK ITEMS - rendered behind body, but we put them here for simplicity */}
-        {accessories.includes("backpack") && (
-          <g>
-            {/* Straps */}
-            <path d="M -18 -2 Q -22 8 -20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
-            <path d="M 18 -2 Q 22 8 20 22" stroke="#3a4f6a" strokeWidth="3" fill="none" />
-            {/* Body of pack peeking from sides */}
-            <ellipse cx="-30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
-            <ellipse cx="30" cy="14" rx="6" ry="10" fill="#5a8fc7" stroke="#3a4f6a" strokeWidth="0.8" />
-            <rect x="-32" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
-            <rect x="29" y="10" width="3" height="6" fill="#fafafa" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("wings") && (
-          <g filter="url(#watercolorSoft)">
-            {/* Left wing */}
-            <path d="M -28 4 Q -52 -8 -56 14 Q -50 14 -42 14 Q -36 18 -28 12 Z"
-              fill="#a060c0" opacity="0.85" />
-            <path d="M -28 8 Q -50 4 -54 22 Q -46 22 -38 20 Q -32 22 -28 18 Z"
-              fill="#c080d8" opacity="0.7" />
-            <ellipse cx="-46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
-            <ellipse cx="-42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
-            {/* Right wing */}
-            <path d="M 28 4 Q 52 -8 56 14 Q 50 14 42 14 Q 36 18 28 12 Z"
-              fill="#a060c0" opacity="0.85" />
-            <path d="M 28 8 Q 50 4 54 22 Q 46 22 38 20 Q 32 22 28 18 Z"
-              fill="#c080d8" opacity="0.7" />
-            <ellipse cx="46" cy="10" rx="3" ry="3" fill="#fff8b0" opacity="0.7" />
-            <ellipse cx="42" cy="18" rx="2" ry="2" fill="#fff8b0" opacity="0.7" />
-          </g>
-        )}
-        {accessories.includes("cape") && (
-          <g filter="url(#watercolorSoft)">
-            {/* Left cape edge */}
-            <path d="M -18 0 Q -32 8 -34 28 Q -28 24 -22 20 Q -18 12 -18 0 Z"
-              fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
-            {/* Right cape edge */}
-            <path d="M 18 0 Q 32 8 34 28 Q 28 24 22 20 Q 18 12 18 0 Z"
-              fill="#c94c4c" stroke="#a02828" strokeWidth="0.6" />
-            {/* Inside lining */}
-            <path d="M -16 2 Q -22 14 -22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
-            <path d="M 16 2 Q 22 14 22 20" stroke="#fff5d0" strokeWidth="0.5" fill="none" opacity="0.5" />
-          </g>
-        )}
+        {accessories.includes("backpack") && renderMonkeyAccessoryArt("backpack")}
+        {accessories.includes("wings") && renderMonkeyAccessoryArt("wings")}
+        {accessories.includes("cape") && renderMonkeyAccessoryArt("cape")}
 
         {/* ─── 50+ NEW ACCESSORY RENDERS ─── hand-drawn watercolor style */}
 
         {/* === FREE HEAD ITEMS === */}
-        {accessories.includes("partyhat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* cone */}
-            <path d="M -13 -32 L 0 -58 L 13 -32 Z" fill="#ff5c87" stroke="#c83870" strokeWidth="0.8" />
-            {/* stripes */}
-            <path d="M -7 -44 L 7 -44" stroke="#ffd140" strokeWidth="2" />
-            <path d="M -10 -38 L 10 -38" stroke="#5caa5e" strokeWidth="2" />
-            {/* pom-pom */}
-            <circle cx="0" cy="-58" r="3.5" fill="#ffd140" />
-            <circle cx="-1" cy="-59" r="1" fill="white" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("graduationcap") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base cap */}
-            <ellipse cx="0" cy="-34" rx="14" ry="4" fill="#1a1a1a" />
-            {/* mortarboard square */}
-            <path d="M -22 -38 L 0 -42 L 22 -38 L 0 -34 Z" fill="#2a2a2a" stroke="#000" strokeWidth="0.6" />
-            {/* button */}
-            <circle cx="0" cy="-39" r="1.5" fill="#edb830" />
-            {/* tassel */}
-            <path d="M 0 -39 Q 18 -36 20 -28" stroke="#edb830" strokeWidth="1.2" fill="none" />
-            <ellipse cx="20" cy="-26" rx="1.5" ry="3" fill="#edb830" />
-          </g>
-        )}
-        {accessories.includes("leaf") && (
-          <g filter="url(#watercolorSoft)">
-            {/* leaf crown */}
-            <path d="M -18 -34 Q -22 -42 -14 -42 Q -10 -38 -10 -34" fill="#5caa5e" />
-            <path d="M -8 -36 Q -10 -46 -2 -46 Q 0 -40 0 -36" fill="#7ac87c" />
-            <path d="M 8 -36 Q 6 -46 14 -46 Q 16 -42 14 -36" fill="#5caa5e" />
-            <path d="M 18 -34 Q 22 -42 14 -42 Q 10 -38 10 -34" fill="#7ac87c" />
-            {/* stem */}
-            <path d="M -18 -34 Q 0 -36 18 -34" stroke="#3a7a3c" strokeWidth="1" fill="none" />
-            {/* dewdrop */}
-            <ellipse cx="-2" cy="-44" rx="1" ry="1.5" fill="white" opacity="0.7" />
-          </g>
-        )}
-        {accessories.includes("rainbow") && (
-          <g filter="url(#watercolorSoft)">
-            {/* headband base */}
-            <path d="M -20 -34 Q 0 -44 20 -34" stroke="#a8c8d4" strokeWidth="2.5" fill="none" />
-            {/* rainbow arches */}
-            <path d="M -14 -34 Q 0 -44 14 -34" stroke="#e06060" strokeWidth="2" fill="none" />
-            <path d="M -12 -34 Q 0 -42 12 -34" stroke="#edb830" strokeWidth="1.5" fill="none" />
-            <path d="M -10 -34 Q 0 -40 10 -34" stroke="#5caa5e" strokeWidth="1.5" fill="none" />
-            <path d="M -8 -34 Q 0 -38 8 -34" stroke="#5a8fc7" strokeWidth="1.5" fill="none" />
-            <path d="M -6 -34 Q 0 -36 6 -34" stroke="#a060c0" strokeWidth="1.5" fill="none" />
-          </g>
-        )}
+        {accessories.includes("partyhat") && renderMonkeyAccessoryArt("partyhat")}
+        {accessories.includes("graduationcap") && renderMonkeyAccessoryArt("graduationcap")}
+        {accessories.includes("leaf") && renderMonkeyAccessoryArt("leaf")}
+        {accessories.includes("rainbow") && renderMonkeyAccessoryArt("rainbow")}
 
         {/* === PAID HEAD ITEMS === */}
-        {accessories.includes("cowboyhat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* brim - wide curved */}
-            <path d="M -28 -34 Q -14 -38 0 -38 Q 14 -38 28 -34 Q 24 -32 0 -32 Q -24 -32 -28 -34 Z"
-              fill="#8b6342" stroke="#553928" strokeWidth="0.7" />
-            {/* crown of hat */}
-            <path d="M -12 -38 Q -14 -50 0 -52 Q 14 -50 12 -38 Z" fill="#a3796a" stroke="#553928" strokeWidth="0.7" />
-            {/* dent in top */}
-            <path d="M -6 -50 Q 0 -47 6 -50" stroke="#553928" strokeWidth="0.6" fill="none" />
-            {/* band */}
-            <ellipse cx="0" cy="-40" rx="13" ry="2" fill="#3a2a1a" />
-            {/* star */}
-            <text x="0" y="-39" fontSize="4" textAnchor="middle" fill="#edb830">★</text>
-          </g>
-        )}
-        {accessories.includes("tophat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* wizard hat - tall pointed */}
-            <path d="M -14 -32 Q 0 -34 14 -32 L 4 -54 Q 0 -60 -4 -54 Z"
-              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
-            {/* tip droops a bit */}
-            <path d="M 0 -60 Q 5 -56 4 -54" fill="none" stroke="#3a1a5a" strokeWidth="0.5" />
-            {/* stars */}
-            <text x="-5" y="-40" fontSize="3" fill="#ffd140">✦</text>
-            <text x="6" y="-46" fontSize="2.5" fill="#ffd140">✦</text>
-            <text x="0" y="-52" fontSize="2" fill="white">✦</text>
-            {/* moon */}
-            <path d="M -2 -38 Q -6 -36 -2 -34 Q 0 -36 -2 -38" fill="#edb830" />
-          </g>
-        )}
-        {accessories.includes("vikinghelm") && (
-          <g filter="url(#watercolorSoft)">
-            {/* helmet body - rounded dome */}
-            <path d="M -16 -32 Q -16 -50 0 -52 Q 16 -50 16 -32 Z" fill="#888a90" stroke="#404248" strokeWidth="0.8" />
-            {/* highlight */}
-            <path d="M -10 -46 Q -8 -50 -4 -50" stroke="#c0c2c8" strokeWidth="2" fill="none" />
-            {/* nose guard */}
-            <rect x="-1.5" y="-32" width="3" height="6" fill="#666870" />
-            {/* horns */}
-            <path d="M -16 -36 Q -28 -40 -28 -32 Q -22 -34 -16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
-            <path d="M 16 -36 Q 28 -40 28 -32 Q 22 -34 16 -32" fill="#f4ebd0" stroke="#a8956a" strokeWidth="0.8" />
-          </g>
-        )}
-        {accessories.includes("policehat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base brim */}
-            <ellipse cx="0" cy="-32" rx="20" ry="3" fill="#1a2a4a" />
-            {/* main body */}
-            <path d="M -16 -34 Q -16 -48 0 -48 Q 16 -48 16 -34 Z" fill="#2a3a6a" stroke="#0a1a3a" strokeWidth="0.7" />
-            {/* center band */}
-            <rect x="-16" y="-38" width="32" height="3" fill="#1a2a4a" />
-            {/* badge */}
-            <text x="0" y="-41" fontSize="6" textAnchor="middle" fill="#edb830">★</text>
-            {/* visor strap */}
-            <ellipse cx="0" cy="-31" rx="14" ry="1.5" fill="#0a1a3a" />
-          </g>
-        )}
-        {accessories.includes("chefhat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* band */}
-            <rect x="-14" y="-36" width="28" height="4" fill="#f5f0ea" stroke="#c0b8a8" strokeWidth="0.6" />
-            {/* puff body */}
-            <path d="M -16 -36 Q -22 -56 -8 -54 Q -4 -60 4 -56 Q 8 -62 14 -54 Q 22 -54 16 -36 Z"
-              fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.6" />
-            {/* puff bumps */}
-            <circle cx="-8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
-            <circle cx="0" cy="-54" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
-            <circle cx="8" cy="-50" r="3" fill="#fffefa" stroke="#d8d0c0" strokeWidth="0.4" />
-          </g>
-        )}
-        {accessories.includes("santahat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* white fur band */}
-            <ellipse cx="0" cy="-34" rx="18" ry="3.5" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
-            {/* red cone */}
-            <path d="M -16 -36 Q -10 -54 14 -52 Q 18 -42 16 -36 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.6" />
-            {/* fluffy fur dots */}
-            <circle cx="-10" cy="-34" r="2" fill="#fffefa" />
-            <circle cx="0" cy="-32" r="2.5" fill="#fffefa" />
-            <circle cx="10" cy="-34" r="2" fill="#fffefa" />
-            {/* white ball at tip */}
-            <circle cx="14" cy="-52" r="3" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
-          </g>
-        )}
-        {accessories.includes("witchhat") && (
-          <g filter="url(#watercolorSoft)">
-            {/* wide brim */}
-            <ellipse cx="0" cy="-32" rx="24" ry="4" fill="#2a1a3a" stroke="#0a0a1a" strokeWidth="0.6" />
-            {/* tall pointed cone, slightly tilted */}
-            <path d="M -12 -34 Q 0 -36 12 -34 L 18 -56 Q 14 -60 8 -54 Z"
-              fill="#3a1a5a" stroke="#1a0a2a" strokeWidth="0.7" />
-            {/* purple band */}
-            <ellipse cx="0" cy="-36" rx="13" ry="2" fill="#5a3a8a" />
-            {/* gold buckle */}
-            <rect x="-3" y="-37.5" width="6" height="3" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
-            {/* tip curl + star */}
-            <text x="20" y="-54" fontSize="3" fill="#edb830">✦</text>
-          </g>
-        )}
-        {accessories.includes("antlers") && (
-          <g filter="url(#watercolorSoft)">
-            {/* left antler */}
-            <path d="M -10 -32 Q -14 -42 -18 -50 M -16 -46 Q -22 -48 -24 -42 M -16 -50 Q -22 -52 -22 -46"
-              stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-            {/* right antler */}
-            <path d="M 10 -32 Q 14 -42 18 -50 M 16 -46 Q 22 -48 24 -42 M 16 -50 Q 22 -52 22 -46"
-              stroke="#8b6342" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-            {/* bows on antlers (festive) */}
-            <path d="M -12 -36 Q -14 -38 -16 -36 Q -14 -34 -12 -36" fill="#c94c4c" />
-            <path d="M 12 -36 Q 14 -38 16 -36 Q 14 -34 12 -36" fill="#c94c4c" />
-          </g>
-        )}
-        {accessories.includes("starcrown") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base */}
-            <rect x="-22" y="-38" width="44" height="4" fill="#edb830" stroke="#b88810" strokeWidth="0.7" />
-            {/* star points */}
-            <path d="M -20 -40 L -18 -50 L -16 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
-            <path d="M -8 -40 L -6 -54 L -4 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
-            <path d="M -2 -40 L 0 -58 L 2 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
-            <path d="M 4 -40 L 6 -54 L 8 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
-            <path d="M 16 -40 L 18 -50 L 20 -40 Z" fill="#edb830" stroke="#b88810" strokeWidth="0.6" />
-            {/* star tips with sparkles */}
-            <circle cx="-6" cy="-54" r="1.2" fill="white" />
-            <circle cx="0" cy="-58" r="1.5" fill="white" />
-            <circle cx="6" cy="-54" r="1.2" fill="white" />
-          </g>
-        )}
-        {accessories.includes("fireheadband") && (
-          <g filter="url(#watercolorSoft)">
-            {/* headband */}
-            <path d="M -22 -32 Q 0 -38 22 -32 L 22 -28 Q 0 -34 -22 -28 Z"
-              fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
-            {/* flames */}
-            <path d="M -16 -34 Q -14 -42 -10 -38 Q -8 -44 -4 -38 Q -2 -46 2 -40 Q 4 -46 8 -40 Q 10 -44 14 -38 Q 16 -42 18 -36"
-              fill="#ff5500" stroke="#aa3300" strokeWidth="0.5" />
-            {/* yellow flame core */}
-            <path d="M -10 -40 Q -8 -42 -6 -40 M 0 -42 Q 2 -44 4 -42 M 8 -40 Q 10 -42 12 -40"
-              stroke="#ffd140" strokeWidth="1.5" fill="none" />
-          </g>
-        )}
-        {accessories.includes("alien") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base band */}
-            <ellipse cx="0" cy="-32" rx="13" ry="2.5" fill="#3a3a5a" />
-            {/* left antenna */}
-            <path d="M -10 -34 Q -16 -44 -14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
-            <circle cx="-14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
-            {/* right antenna */}
-            <path d="M 10 -34 Q 16 -44 14 -52" stroke="#3a3a5a" strokeWidth="1.5" fill="none" />
-            <circle cx="14" cy="-54" r="3.5" fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" />
-            {/* glow on balls */}
-            <circle cx="-15" cy="-55" r="1" fill="white" opacity="0.7" />
-            <circle cx="13" cy="-55" r="1" fill="white" opacity="0.7" />
-          </g>
-        )}
+        {accessories.includes("cowboyhat") && renderMonkeyAccessoryArt("cowboyhat")}
+        {accessories.includes("tophat") && renderMonkeyAccessoryArt("tophat")}
+        {accessories.includes("vikinghelm") && renderMonkeyAccessoryArt("vikinghelm")}
+        {accessories.includes("policehat") && renderMonkeyAccessoryArt("policehat")}
+        {accessories.includes("chefhat") && renderMonkeyAccessoryArt("chefhat")}
+        {accessories.includes("santahat") && renderMonkeyAccessoryArt("santahat")}
+        {accessories.includes("witchhat") && renderMonkeyAccessoryArt("witchhat")}
+        {accessories.includes("antlers") && renderMonkeyAccessoryArt("antlers")}
+        {accessories.includes("starcrown") && renderMonkeyAccessoryArt("starcrown")}
+        {accessories.includes("fireheadband") && renderMonkeyAccessoryArt("fireheadband")}
+        {accessories.includes("alien") && renderMonkeyAccessoryArt("alien")}
 
         {/* === FACE ITEMS === */}
-        {accessories.includes("smile") && (
-          <g>
-            {/* extra-big curved smile drawn over normal mouth */}
-            <path d="M -10 -2 Q 0 8 10 -2" fill="none" stroke="#3a2a1a" strokeWidth="2" strokeLinecap="round" />
-            {/* tooth highlight */}
-            <path d="M -3 2 L -3 5 M 0 2 L 0 5 M 3 2 L 3 5" stroke="white" strokeWidth="1.5" />
-          </g>
-        )}
-        {accessories.includes("monocle") && (
-          <g filter="url(#watercolorSoft)">
-            {/* monocle ring (right eye) */}
-            <circle cx="8" cy="-15" r="6" fill="rgba(180,210,230,0.3)" stroke="#444" strokeWidth="1.2" />
-            <circle cx="8" cy="-15" r="6" fill="none" stroke="#edb830" strokeWidth="0.6" />
-            {/* chain */}
-            <path d="M 14 -13 Q 18 -8 18 -2" stroke="#edb830" strokeWidth="0.7" fill="none" strokeDasharray="1,1" />
-            {/* shine */}
-            <path d="M 5 -18 Q 7 -19 9 -18" stroke="white" strokeWidth="0.8" fill="none" opacity="0.7" />
-          </g>
-        )}
-        {accessories.includes("mustache") && (
-          <g filter="url(#watercolorSoft)">
-            {/* curly mustache below nose */}
-            <path d="M -10 -4 Q -14 -2 -12 2 Q -8 0 -4 -2 Q 0 -4 4 -2 Q 8 0 12 2 Q 14 -2 10 -4 Q 6 -2 0 -3 Q -6 -2 -10 -4 Z"
-              fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.5" />
-            {/* curly tips */}
-            <path d="M -12 -2 Q -16 -4 -14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
-            <path d="M 12 -2 Q 16 -4 14 -6" stroke="#3a1a0a" strokeWidth="1.2" fill="none" />
-          </g>
-        )}
-        {accessories.includes("eyepatch") && (
-          <g filter="url(#watercolorSoft)">
-            {/* patch over right eye */}
-            <ellipse cx="8" cy="-16" rx="6" ry="5" fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
-            {/* strap going around head */}
-            <path d="M 14 -14 Q 24 -12 22 -22 Q 12 -22 4 -20" stroke="#1a1a1a" strokeWidth="1.2" fill="none" />
-            {/* skull */}
-            <text x="8" y="-14" fontSize="4" textAnchor="middle" fill="white">☠</text>
-          </g>
-        )}
-        {accessories.includes("facepaint") && (
-          <g filter="url(#watercolorSoft)">
-            {/* warrior stripes under each eye */}
-            <path d="M -12 -10 L -4 -8" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
-            <path d="M 4 -8 L 12 -10" stroke="#c94c4c" strokeWidth="2" strokeLinecap="round" />
-            {/* zigzag on cheeks */}
-            <path d="M -10 -6 L -8 -4 L -6 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
-            <path d="M 6 -6 L 8 -4 L 10 -6" stroke="#5caa5e" strokeWidth="1.2" fill="none" />
-            {/* dot on forehead */}
-            <circle cx="0" cy="-22" r="2" fill="#edb830" />
-          </g>
-        )}
-        {accessories.includes("ninjamask") && (
-          <g filter="url(#watercolorSoft)">
-            {/* wide black band across eyes */}
-            <path d="M -22 -18 Q 0 -16 22 -18 L 22 -12 Q 0 -10 -22 -12 Z"
-              fill="#1a1a1a" stroke="#000" strokeWidth="0.5" />
-            {/* tied tails on the side */}
-            <path d="M -22 -16 Q -28 -14 -30 -8 Q -28 -10 -22 -12" fill="#1a1a1a" />
-            <path d="M -28 -10 L -32 -2" stroke="#1a1a1a" strokeWidth="1.5" />
-            {/* eye holes */}
-            <ellipse cx="-8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
-            <ellipse cx="8" cy="-15" rx="3" ry="2.5" fill="white" opacity="0.95" />
-            <circle cx="-7.5" cy="-15" r="1.8" fill="#1a1a1a" />
-            <circle cx="8.5" cy="-15" r="1.8" fill="#1a1a1a" />
-          </g>
-        )}
-        {accessories.includes("starshades") && (
-          <g filter="url(#watercolorSoft)">
-            {/* star-shaped sunglasses (5-pointed star outline x2) */}
-            <path d="M -8 -19 L -6 -14 L -1 -14 L -5 -11 L -3 -16 L -8 -13 L -8 -19 Z"
-              fill="#edb830" stroke="#b88810" strokeWidth="0.5" />
-            <path d="M -14 -16 L -8 -16 L -3 -13 L -8 -10 L -14 -13 Z"
-              fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
-            <path d="M 3 -13 L 8 -16 L 14 -16 L 14 -13 L 8 -10 Z"
-              fill="rgba(50,50,80,0.85)" stroke="#1a1a3a" strokeWidth="0.6" />
-            {/* star sparkles */}
-            <text x="-9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
-            <text x="9" y="-15" fontSize="6" fill="#edb830" textAnchor="middle">★</text>
-            {/* bridge */}
-            <path d="M -3 -13 L 3 -13" stroke="#1a1a3a" strokeWidth="1" />
-          </g>
-        )}
-        {accessories.includes("diamondeyes") && (
-          <g filter="url(#watercolorSoft)">
-            {/* sparkly diamond eyes */}
-            <path d="M -8 -19 L -5 -16 L -8 -12 L -11 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
-            <path d="M 8 -19 L 11 -16 L 8 -12 L 5 -16 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.6" />
-            {/* shines */}
-            <path d="M -9 -17 L -7 -15" stroke="white" strokeWidth="0.8" />
-            <path d="M 7 -17 L 9 -15" stroke="white" strokeWidth="0.8" />
-            {/* sparkle around */}
-            <text x="-14" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
-            <text x="13" y="-20" fontSize="3" fill="#a0e0ff">✦</text>
-          </g>
-        )}
+        {accessories.includes("smile") && renderMonkeyAccessoryArt("smile")}
+        {accessories.includes("monocle") && renderMonkeyAccessoryArt("monocle")}
+        {accessories.includes("mustache") && renderMonkeyAccessoryArt("mustache")}
+        {accessories.includes("eyepatch") && renderMonkeyAccessoryArt("eyepatch")}
+        {accessories.includes("facepaint") && renderMonkeyAccessoryArt("facepaint")}
+        {accessories.includes("ninjamask") && renderMonkeyAccessoryArt("ninjamask")}
+        {accessories.includes("starshades") && renderMonkeyAccessoryArt("starshades")}
+        {accessories.includes("diamondeyes") && renderMonkeyAccessoryArt("diamondeyes")}
 
         {/* === NECK ITEMS === */}
-        {accessories.includes("leafnecklace") && (
-          <g filter="url(#watercolorSoft)">
-            {/* string */}
-            <path d="M -16 4 Q 0 12 16 4" stroke="#7a5a3a" strokeWidth="0.8" fill="none" />
-            {/* leaves */}
-            <ellipse cx="-12" cy="6" rx="2.5" ry="3.5" fill="#5caa5e" transform="rotate(-30 -12 6)" />
-            <ellipse cx="-4" cy="9" rx="2.5" ry="3.5" fill="#7ac87c" />
-            <ellipse cx="4" cy="9" rx="2.5" ry="3.5" fill="#5caa5e" />
-            <ellipse cx="12" cy="6" rx="2.5" ry="3.5" fill="#7ac87c" transform="rotate(30 12 6)" />
-            {/* center leaf - bigger */}
-            <ellipse cx="0" cy="11" rx="3" ry="4" fill="#3a7a3c" />
-            <path d="M 0 8 L 0 14" stroke="#1a4a1c" strokeWidth="0.4" />
-          </g>
-        )}
-        {accessories.includes("tie") && (
-          <g filter="url(#watercolorSoft)">
-            {/* knot */}
-            <path d="M -3 4 L 3 4 L 4 8 L -4 8 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
-            {/* tie body */}
-            <path d="M -4 8 L 4 8 L 6 22 L 0 28 L -6 22 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.5" />
-            {/* stripes */}
-            <path d="M -4 12 L 4 12 M -5 18 L 5 18" stroke="#7a2828" strokeWidth="0.6" />
-          </g>
-        )}
-        {accessories.includes("pearls") && (
-          <g filter="url(#watercolorSoft)">
-            {/* string */}
-            <path d="M -16 4 Q 0 14 16 4" stroke="#c0b8a8" strokeWidth="0.4" fill="none" />
-            {/* pearls */}
-            {[-14,-10,-6,-2,2,6,10,14].map((x, i) => (
-              <g key={i}>
-                <circle cx={x} cy={4 + Math.abs(x) * 0.3} r="2" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.3" />
-                <circle cx={x - 0.5} cy={3.5 + Math.abs(x) * 0.3} r="0.6" fill="white" opacity="0.8" />
-              </g>
-            ))}
-            {/* center pearl - bigger */}
-            <circle cx="0" cy="12" r="2.8" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
-            <circle cx="-0.8" cy="11" r="0.9" fill="white" opacity="0.9" />
-          </g>
-        )}
-        {accessories.includes("medal") && (
-          <g filter="url(#watercolorSoft)">
-            {/* ribbon */}
-            <path d="M -8 -2 L -4 8 L 0 8 L -4 -2 Z" fill="#c94c4c" stroke="#7a2828" strokeWidth="0.4" />
-            <path d="M 8 -2 L 4 8 L 0 8 L 4 -2 Z" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
-            {/* medal disc */}
-            <circle cx="0" cy="14" r="6" fill="#edb830" stroke="#a87810" strokeWidth="0.8" />
-            {/* engraved star */}
-            <text x="0" y="16" fontSize="6" textAnchor="middle" fill="#a87810">★</text>
-            {/* shine */}
-            <path d="M -3 11 Q -2 9 0 9" stroke="white" strokeWidth="0.7" fill="none" opacity="0.7" />
-          </g>
-        )}
-        {accessories.includes("diamond") && (
-          <g filter="url(#watercolorSoft)">
-            {/* chain */}
-            <path d="M -14 4 Q 0 10 14 4" stroke="#c0c0c0" strokeWidth="0.5" fill="none" />
-            {/* pendant diamond */}
-            <path d="M 0 8 L 5 12 L 0 22 L -5 12 Z" fill="#a0e0ff" stroke="#4080a0" strokeWidth="0.7" />
-            {/* facet lines */}
-            <path d="M -5 12 L 5 12 M 0 8 L 0 22" stroke="#4080a0" strokeWidth="0.4" opacity="0.6" />
-            {/* shine */}
-            <path d="M -3 11 L -1 13" stroke="white" strokeWidth="1.2" />
-            {/* sparkles */}
-            <text x="-8" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
-            <text x="6" y="14" fontSize="2.5" fill="#a0e0ff">✦</text>
-          </g>
-        )}
-        {accessories.includes("amulet") && (
-          <g filter="url(#watercolorSoft)">
-            {/* chain */}
-            <path d="M -14 4 Q 0 10 14 4" stroke="#a85ac0" strokeWidth="0.6" fill="none" />
-            {/* gem holder - circle frame */}
-            <circle cx="0" cy="14" r="6" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.8" />
-            {/* purple gem center */}
-            <circle cx="0" cy="14" r="3.5" fill="#a060c0" stroke="#5a30b8" strokeWidth="0.4" />
-            {/* magical glow */}
-            <circle cx="0" cy="14" r="1.5" fill="#e0a8ff" />
-            <circle cx="-1" cy="13" r="0.6" fill="white" opacity="0.9" />
-            {/* runes around frame */}
-            <text x="-5" y="9" fontSize="2.5" fill="#edb830">✦</text>
-            <text x="3" y="9" fontSize="2.5" fill="#edb830">✦</text>
-          </g>
-        )}
+        {accessories.includes("leafnecklace") && renderMonkeyAccessoryArt("leafnecklace")}
+        {accessories.includes("tie") && renderMonkeyAccessoryArt("tie")}
+        {accessories.includes("pearls") && renderMonkeyAccessoryArt("pearls")}
+        {accessories.includes("medal") && renderMonkeyAccessoryArt("medal")}
+        {accessories.includes("diamond") && renderMonkeyAccessoryArt("diamond")}
+        {accessories.includes("amulet") && renderMonkeyAccessoryArt("amulet")}
 
         {/* === HOLD ITEMS === (right hand at ~28, 22) */}
-        {accessories.includes("book") && (
-          <g filter="url(#watercolorSoft)">
-            {/* book back cover */}
-            <rect x="22" y="14" width="14" height="16" fill="#5a3a2a" stroke="#3a1a1a" strokeWidth="0.6" />
-            {/* pages */}
-            <rect x="23" y="15" width="13" height="14" fill="#fffafa" stroke="#c0b8a8" strokeWidth="0.4" />
-            {/* page lines */}
-            <path d="M 25 18 L 34 18 M 25 21 L 34 21 M 25 24 L 34 24 M 25 27 L 32 27" stroke="#c0b8a8" strokeWidth="0.3" />
-            {/* spine details */}
-            <rect x="22" y="14" width="2" height="16" fill="#3a1a1a" />
-            <text x="23" y="22" fontSize="3" fill="#edb830">★</text>
-          </g>
-        )}
-        {accessories.includes("pencil") && (
-          <g filter="url(#watercolorSoft)">
-            {/* pencil body */}
-            <path d="M 22 26 L 36 12 L 38 14 L 24 28 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
-            {/* tip */}
-            <path d="M 36 12 L 38 14 L 40 12 L 38 10 Z" fill="#3a2a1a" />
-            <path d="M 38 12 L 39 12.5" stroke="#1a1a1a" strokeWidth="1.2" />
-            {/* eraser */}
-            <path d="M 22 26 L 24 28 L 22 30 L 20 28 Z" fill="#ff8090" stroke="#aa4050" strokeWidth="0.4" />
-            {/* metal band */}
-            <path d="M 23 27 L 25 29" stroke="#888" strokeWidth="1.5" />
-            {/* shading */}
-            <path d="M 25 25 L 35 15" stroke="#a87810" strokeWidth="0.4" />
-          </g>
-        )}
-        {accessories.includes("leafhold") && (
-          <g filter="url(#watercolorSoft)">
-            {/* maple leaf */}
-            <path d="M 30 12 L 32 16 L 36 14 L 34 18 L 38 20 L 33 22 L 36 26 L 30 24 L 28 30 L 26 24 L 20 26 L 23 22 L 18 20 L 22 18 L 20 14 L 24 16 L 26 12 L 28 14 Z"
-              fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
-            {/* veins */}
-            <path d="M 28 16 L 28 26" stroke="#a82828" strokeWidth="0.4" />
-            <path d="M 28 18 L 32 16 M 28 20 L 34 22 M 28 18 L 24 16 M 28 20 L 22 22"
-              stroke="#a82828" strokeWidth="0.3" />
-            {/* stem */}
-            <path d="M 28 26 L 28 32" stroke="#5a3a1a" strokeWidth="1.5" />
-          </g>
-        )}
-        {accessories.includes("balloon") && (
-          <g filter="url(#watercolorSoft)">
-            {/* balloon */}
-            <ellipse cx="32" cy="6" rx="6" ry="7" fill="#e06060" stroke="#a82828" strokeWidth="0.6" />
-            {/* knot */}
-            <path d="M 30 12 L 32 14 L 34 12 Z" fill="#a82828" />
-            {/* string going to hand */}
-            <path d="M 32 14 Q 30 18 28 22" stroke="#1a1a1a" strokeWidth="0.5" fill="none" />
-            {/* shine */}
-            <ellipse cx="29" cy="3" rx="1.5" ry="2.5" fill="white" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("trophy") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base */}
-            <rect x="22" y="26" width="12" height="3" fill="#a87810" />
-            <rect x="24" y="22" width="8" height="4" fill="#c89018" />
-            {/* cup */}
-            <path d="M 22 22 Q 22 12 28 12 Q 34 12 34 22 Z" fill="#edb830" stroke="#a87810" strokeWidth="0.6" />
-            {/* handles */}
-            <path d="M 22 16 Q 18 14 20 18 Q 22 18 22 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
-            <path d="M 34 16 Q 38 14 36 18 Q 34 18 34 16" fill="#edb830" stroke="#a87810" strokeWidth="0.5" />
-            {/* shine */}
-            <path d="M 24 14 Q 26 12 28 14" stroke="white" strokeWidth="1" opacity="0.7" />
-            {/* star */}
-            <text x="28" y="20" fontSize="5" textAnchor="middle" fill="#a87810">★</text>
-          </g>
-        )}
-        {accessories.includes("lollipop") && (
-          <g filter="url(#watercolorSoft)">
-            {/* stick */}
-            <rect x="27" y="14" width="2" height="14" fill="#fffefa" stroke="#c0b8a8" strokeWidth="0.4" />
-            {/* candy circle */}
-            <circle cx="28" cy="10" r="6" fill="#ff5c87" stroke="#c83870" strokeWidth="0.6" />
-            {/* swirl */}
-            <path d="M 28 10 Q 30 8 32 10 Q 30 12 28 12 Q 26 10 28 8 Q 30 8 32 10"
-              fill="none" stroke="white" strokeWidth="0.8" />
-            <path d="M 24 10 Q 26 6 30 6" stroke="white" strokeWidth="0.6" fill="none" />
-            {/* shine */}
-            <ellipse cx="26" cy="7" rx="1.5" ry="2" fill="white" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("cupcake") && (
-          <g filter="url(#watercolorSoft)">
-            {/* base wrapper */}
-            <path d="M 22 18 L 26 28 L 32 28 L 36 18 Z" fill="#c83870" stroke="#7a2050" strokeWidth="0.5" />
-            <path d="M 24 22 L 24 28 M 28 22 L 28 28 M 32 22 L 32 28" stroke="#7a2050" strokeWidth="0.4" />
-            {/* frosting swirl */}
-            <path d="M 22 18 Q 22 10 28 10 Q 34 10 34 18 Q 30 14 28 16 Q 26 14 22 18 Z"
-              fill="#fffafa" stroke="#c0a8b8" strokeWidth="0.5" />
-            {/* sprinkles */}
-            <rect x="25" y="13" width="0.8" height="2" fill="#ff5c87" transform="rotate(20 25 13)" />
-            <rect x="29" y="11" width="0.8" height="2" fill="#7ac87c" />
-            <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-20 32 14)" />
-            {/* cherry */}
-            <circle cx="28" cy="9" r="1.5" fill="#c94c4c" />
-          </g>
-        )}
-        {accessories.includes("donut") && (
-          <g filter="url(#watercolorSoft)">
-            {/* donut */}
-            <circle cx="28" cy="18" r="7" fill="#d8a060" stroke="#8a5028" strokeWidth="0.6" />
-            <circle cx="28" cy="18" r="2.5" fill={C.face} />
-            {/* pink frosting on top */}
-            <path d="M 21 18 Q 21 12 28 11 Q 35 12 35 18 Q 32 14 28 16 Q 24 14 21 18 Z"
-              fill="#ff9bb8" stroke="#c83870" strokeWidth="0.4" />
-            {/* sprinkles */}
-            <rect x="24" y="14" width="0.8" height="2" fill="#5caa5e" transform="rotate(15 24 14)" />
-            <rect x="28" y="12" width="0.8" height="2" fill="#edb830" />
-            <rect x="32" y="14" width="0.8" height="2" fill="#5a8fc7" transform="rotate(-15 32 14)" />
-            <rect x="26" y="16" width="0.8" height="2" fill="#a060c0" transform="rotate(30 26 16)" />
-          </g>
-        )}
-        {accessories.includes("fishingrod") && (
-          <g filter="url(#watercolorSoft)">
-            {/* rod */}
-            <path d="M 22 26 L 40 -8" stroke="#5a3a1a" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M 22 26 L 40 -8" stroke="#8b6342" strokeWidth="0.8" strokeLinecap="round" />
-            {/* reel */}
-            <circle cx="24" cy="22" r="2" fill="#888" stroke="#444" strokeWidth="0.4" />
-            {/* line */}
-            <path d="M 40 -8 Q 42 4 38 16" stroke="#fff" strokeWidth="0.4" fill="none" opacity="0.8" />
-            {/* hook + fish */}
-            <path d="M 38 16 Q 40 18 38 19" stroke="#666" strokeWidth="0.5" fill="none" />
-            <ellipse cx="40" cy="22" rx="3" ry="1.8" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.4" />
-            <path d="M 43 22 L 45 20 L 45 24 Z" fill="#5a8fc7" />
-          </g>
-        )}
-        {accessories.includes("paintbrush") && (
-          <g filter="url(#watercolorSoft)">
-            {/* handle */}
-            <path d="M 22 26 L 36 12" stroke="#5a3a1a" strokeWidth="2" strokeLinecap="round" />
-            {/* metal ferrule */}
-            <path d="M 35 11 L 39 15" stroke="#888" strokeWidth="2.5" />
-            {/* bristles */}
-            <path d="M 38 8 L 42 12 L 39 16 L 35 12 Z" fill="#c0a080" stroke="#7a5a3a" strokeWidth="0.4" />
-            <path d="M 38 8 L 42 12" stroke="#5a3a1a" strokeWidth="0.4" />
-            {/* paint drip */}
-            <ellipse cx="42" cy="14" rx="2" ry="3" fill="#c94c4c" opacity="0.85" />
-            <ellipse cx="42" cy="18" rx="0.8" ry="1.5" fill="#c94c4c" opacity="0.7" />
-          </g>
-        )}
-        {accessories.includes("flute") && (
-          <g filter="url(#watercolorSoft)">
-            {/* flute */}
-            <rect x="22" y="22" width="22" height="3" fill="#c0b090" stroke="#5a4a2a" strokeWidth="0.4" rx="1.5" />
-            {/* metal bands */}
-            <rect x="26" y="22" width="0.6" height="3" fill="#5a4a2a" />
-            <rect x="32" y="22" width="0.6" height="3" fill="#5a4a2a" />
-            <rect x="38" y="22" width="0.6" height="3" fill="#5a4a2a" />
-            {/* finger holes */}
-            <circle cx="29" cy="23.5" r="0.5" fill="#3a2a0a" />
-            <circle cx="35" cy="23.5" r="0.5" fill="#3a2a0a" />
-            {/* music notes floating */}
-            <text x="40" y="14" fontSize="6" fill={C.text}>♪</text>
-            <text x="34" y="10" fontSize="5" fill={C.textLight}>♫</text>
-          </g>
-        )}
-        {accessories.includes("violin") && (
-          <g filter="url(#watercolorSoft)">
-            {/* body */}
-            <path d="M 22 26 Q 18 22 22 18 Q 26 14 30 18 Q 34 14 38 18 Q 42 22 38 26 Q 34 30 30 26 Q 26 30 22 26 Z"
-              fill="#a85a2a" stroke="#5a2a0a" strokeWidth="0.7" />
-            {/* center waist */}
-            <path d="M 26 22 L 34 22" stroke="#5a2a0a" strokeWidth="0.5" />
-            {/* neck */}
-            <rect x="23" y="8" width="2" height="12" fill="#3a1a0a" stroke="#1a0a00" strokeWidth="0.3" transform="rotate(20 24 14)" />
-            {/* strings */}
-            <path d="M 22 26 L 27 8" stroke="#fff" strokeWidth="0.3" />
-            <path d="M 24 26 L 29 8" stroke="#fff" strokeWidth="0.3" />
-            <path d="M 26 26 L 31 8" stroke="#fff" strokeWidth="0.3" />
-            {/* f-holes */}
-            <path d="M 27 20 Q 28 22 27 24 M 33 20 Q 32 22 33 24" stroke="#3a1a0a" strokeWidth="0.5" fill="none" />
-          </g>
-        )}
-        {accessories.includes("telescope") && (
-          <g filter="url(#watercolorSoft)">
-            {/* tube */}
-            <rect x="20" y="14" width="20" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" rx="1" transform="rotate(-20 30 16.5)" />
-            {/* far end (bigger) */}
-            <ellipse cx="42" cy="9" rx="3" ry="4" fill="#3a1a5a" stroke="#1a0a3a" strokeWidth="0.5" />
-            {/* near end (smaller) */}
-            <ellipse cx="20" cy="22" rx="2.5" ry="3" fill="#1a0a3a" stroke="#000" strokeWidth="0.4" />
-            {/* gold rings */}
-            <rect x="26" y="14" width="0.8" height="5" fill="#edb830" transform="rotate(-20 26 16.5)" />
-            <rect x="34" y="11" width="0.8" height="5" fill="#edb830" transform="rotate(-20 34 13.5)" />
-            {/* star at end */}
-            <text x="48" y="6" fontSize="3" fill="#edb830">✦</text>
-          </g>
-        )}
-        {accessories.includes("potion") && (
-          <g filter="url(#watercolorSoft)">
-            {/* bottle body */}
-            <path d="M 24 14 L 24 18 Q 22 22 24 26 L 32 26 Q 34 22 32 18 L 32 14 Z"
-              fill="#7c4ee0" stroke="#3a1a8a" strokeWidth="0.6" opacity="0.85" />
-            {/* neck */}
-            <rect x="26" y="10" width="4" height="5" fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.5" />
-            {/* cork */}
-            <rect x="25" y="8" width="6" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" />
-            {/* bubble inside */}
-            <circle cx="27" cy="20" r="1" fill="white" opacity="0.6" />
-            <circle cx="29" cy="22" r="1.3" fill="white" opacity="0.5" />
-            {/* shine */}
-            <path d="M 25 17 Q 25 21 26 23" stroke="white" strokeWidth="0.5" fill="none" opacity="0.7" />
-            {/* sparkles */}
-            <text x="34" y="14" fontSize="3" fill="#a060c0">✦</text>
-          </g>
-        )}
-        {accessories.includes("sword") && (
-          <g filter="url(#watercolorSoft)">
-            {/* blade */}
-            <path d="M 24 26 L 42 4 L 40 2 L 22 24 Z" fill="#d0d8e0" stroke="#5a6878" strokeWidth="0.5" />
-            {/* center groove */}
-            <path d="M 23 25 L 41 3" stroke="#888" strokeWidth="0.4" />
-            {/* shine */}
-            <path d="M 35 9 L 39 5" stroke="white" strokeWidth="1.2" opacity="0.7" />
-            {/* crossguard */}
-            <rect x="20" y="22" width="8" height="3" fill="#a87810" stroke="#5a4810" strokeWidth="0.4" transform="rotate(45 24 23.5)" />
-            {/* handle */}
-            <rect x="20" y="26" width="3" height="6" fill="#5a3a1a" stroke="#3a1a0a" strokeWidth="0.4" />
-            {/* pommel */}
-            <circle cx="21.5" cy="33" r="1.5" fill="#edb830" stroke="#a87810" strokeWidth="0.4" />
-          </g>
-        )}
-        {accessories.includes("shield") && (
-          <g filter="url(#watercolorSoft)">
-            {/* shield shape */}
-            <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
-              fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.8" />
-            {/* metal rim */}
-            <path d="M 22 12 L 38 12 L 38 22 Q 38 30 30 32 Q 22 30 22 22 Z"
-              fill="none" stroke="#888" strokeWidth="0.6" />
-            {/* cross emblem */}
-            <rect x="29" y="15" width="2.5" height="14" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
-            <rect x="24" y="20" width="13" height="2.5" fill="#edb830" stroke="#a87810" strokeWidth="0.3" />
-            {/* shine */}
-            <path d="M 26 14 Q 24 18 24 22" stroke="white" strokeWidth="0.8" fill="none" opacity="0.6" />
-          </g>
-        )}
-        {accessories.includes("phone") && (
-          <g filter="url(#watercolorSoft)">
-            {/* phone body */}
-            <rect x="23" y="10" width="10" height="18" rx="2" fill="#1a1a2a" stroke="#000" strokeWidth="0.5" />
-            {/* screen */}
-            <rect x="24.5" y="12" width="7" height="13" fill="#5a8fc7" />
-            {/* gradient app blocks */}
-            <rect x="25" y="13" width="2" height="2" fill="#edb830" rx="0.4" />
-            <rect x="28" y="13" width="2" height="2" fill="#5caa5e" rx="0.4" />
-            <rect x="25" y="16" width="2" height="2" fill="#c94c4c" rx="0.4" />
-            <rect x="28" y="16" width="2" height="2" fill="#a060c0" rx="0.4" />
-            {/* home button */}
-            <circle cx="28" cy="26.5" r="0.8" fill="#3a3a4a" stroke="#888" strokeWidth="0.3" />
-            {/* shine */}
-            <path d="M 24.5 12 L 26 14" stroke="white" strokeWidth="0.5" opacity="0.4" />
-          </g>
-        )}
-        {accessories.includes("camera") && (
-          <g filter="url(#watercolorSoft)">
-            {/* body */}
-            <rect x="20" y="14" width="18" height="12" rx="2" fill="#2a2a3a" stroke="#000" strokeWidth="0.5" />
-            {/* top viewfinder bump */}
-            <rect x="26" y="11" width="6" height="3" fill="#1a1a2a" />
-            {/* lens */}
-            <circle cx="29" cy="20" r="4.5" fill="#1a1a2a" stroke="#444" strokeWidth="0.6" />
-            <circle cx="29" cy="20" r="3" fill="#5a8fc7" stroke="#222" strokeWidth="0.4" />
-            <circle cx="29" cy="20" r="1.5" fill="#1a1a2a" />
-            {/* shine on lens */}
-            <circle cx="27.5" cy="18.5" r="0.8" fill="white" opacity="0.7" />
-            {/* flash */}
-            <rect x="22" y="15" width="2" height="2" fill="#edb830" />
-            {/* shutter button */}
-            <circle cx="36" cy="13" r="0.8" fill="#c94c4c" />
-          </g>
-        )}
+        {accessories.includes("book") && renderMonkeyAccessoryArt("book")}
+        {accessories.includes("pencil") && renderMonkeyAccessoryArt("pencil")}
+        {accessories.includes("leafhold") && renderMonkeyAccessoryArt("leafhold")}
+        {accessories.includes("balloon") && renderMonkeyAccessoryArt("balloon")}
+        {accessories.includes("trophy") && renderMonkeyAccessoryArt("trophy")}
+        {accessories.includes("lollipop") && renderMonkeyAccessoryArt("lollipop")}
+        {accessories.includes("cupcake") && renderMonkeyAccessoryArt("cupcake")}
+        {accessories.includes("donut") && renderMonkeyAccessoryArt("donut")}
+        {accessories.includes("fishingrod") && renderMonkeyAccessoryArt("fishingrod")}
+        {accessories.includes("paintbrush") && renderMonkeyAccessoryArt("paintbrush")}
+        {accessories.includes("flute") && renderMonkeyAccessoryArt("flute")}
+        {accessories.includes("violin") && renderMonkeyAccessoryArt("violin")}
+        {accessories.includes("telescope") && renderMonkeyAccessoryArt("telescope")}
+        {accessories.includes("potion") && renderMonkeyAccessoryArt("potion")}
+        {accessories.includes("sword") && renderMonkeyAccessoryArt("sword")}
+        {accessories.includes("shield") && renderMonkeyAccessoryArt("shield")}
+        {accessories.includes("phone") && renderMonkeyAccessoryArt("phone")}
+        {accessories.includes("camera") && renderMonkeyAccessoryArt("camera")}
 
         {/* === BACK ITEMS === (anchored on back, behind monkey approximately) */}
-        {accessories.includes("leafback") && (
-          <g filter="url(#watercolorSoft)">
-            {/* leaves bundled */}
-            <ellipse cx="-22" cy="6" rx="5" ry="8" fill="#5caa5e" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-30 -22 6)" />
-            <ellipse cx="-26" cy="10" rx="5" ry="8" fill="#7ac87c" stroke="#3a7a3c" strokeWidth="0.5" transform="rotate(-50 -26 10)" />
-            <ellipse cx="-20" cy="14" rx="5" ry="8" fill="#3a7a3c" stroke="#1a4a1c" strokeWidth="0.5" transform="rotate(-10 -20 14)" />
-            {/* veins */}
-            <path d="M -22 0 L -22 12" stroke="#1a4a1c" strokeWidth="0.4" transform="rotate(-30 -22 6)" />
-          </g>
-        )}
-        {accessories.includes("jetpack") && (
-          <g filter="url(#watercolorSoft)">
-            {/* tank */}
-            <rect x="-30" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
-            {/* second tank */}
-            <rect x="-20" y="-2" width="6" height="20" rx="2" fill="#5a8fc7" stroke="#2a4a7a" strokeWidth="0.6" />
-            {/* connector */}
-            <rect x="-24" y="6" width="4" height="3" fill="#444" />
-            {/* nozzles */}
-            <rect x="-29" y="18" width="4" height="2" fill="#444" />
-            <rect x="-19" y="18" width="4" height="2" fill="#444" />
-            {/* flames */}
-            <path d="M -27 20 Q -28 26 -25 24 Q -23 28 -22 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
-            <path d="M -17 20 Q -18 26 -15 24 Q -13 28 -12 22" fill="#ff5500" stroke="#aa2200" strokeWidth="0.4" />
-            <path d="M -25 22 Q -23 26 -22 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
-            <path d="M -15 22 Q -13 26 -12 22" stroke="#ffd140" strokeWidth="1.5" fill="none" />
-          </g>
-        )}
-        {accessories.includes("angelwings") && (
-          <g filter="url(#watercolorSoft)">
-            {/* left wing */}
-            <path d="M -16 0 Q -32 -10 -36 6 Q -32 18 -22 14 Q -18 8 -16 0 Z"
-              fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
-            {/* feather lines */}
-            <path d="M -32 -4 Q -28 4 -22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            <path d="M -32 4 Q -28 8 -22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            <path d="M -30 10 Q -26 12 -22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            {/* right wing */}
-            <path d="M 16 0 Q 32 -10 36 6 Q 32 18 22 14 Q 18 8 16 0 Z"
-              fill="#fffefa" stroke="#c0c8d8" strokeWidth="0.6" />
-            <path d="M 32 -4 Q 28 4 22 6" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            <path d="M 32 4 Q 28 8 22 8" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            <path d="M 30 10 Q 26 12 22 12" stroke="#c0c8d8" strokeWidth="0.4" fill="none" />
-            {/* glow shimmer */}
-            <ellipse cx="-26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
-            <ellipse cx="26" cy="6" rx="3" ry="6" fill="#fff" opacity="0.3" />
-          </g>
-        )}
-        {accessories.includes("demonwings") && (
-          <g filter="url(#watercolorSoft)">
-            {/* left bat wing */}
-            <path d="M -16 0 Q -34 -8 -38 6 L -34 6 L -36 12 L -30 10 L -32 16 L -26 12 L -22 14 Q -18 8 -16 0 Z"
-              fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
-            {/* membrane lines */}
-            <path d="M -16 0 Q -22 4 -26 12 M -16 0 Q -28 4 -32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
-            {/* right bat wing */}
-            <path d="M 16 0 Q 34 -8 38 6 L 34 6 L 36 12 L 30 10 L 32 16 L 26 12 L 22 14 Q 18 8 16 0 Z"
-              fill="#3a1a3a" stroke="#1a0a1a" strokeWidth="0.6" />
-            <path d="M 16 0 Q 22 4 26 12 M 16 0 Q 28 4 32 16" stroke="#5a2a5a" strokeWidth="0.4" fill="none" />
-          </g>
-        )}
-        {accessories.includes("rainbowcape") && (
-          <g filter="url(#watercolorSoft)">
-            {/* rainbow stripes */}
-            <path d="M -20 0 Q -34 12 -34 30 L -28 28 Q -28 14 -16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
-            <path d="M -16 4 Q -28 14 -28 28 L -22 26 Q -22 16 -12 8 Z" fill="#ff8030" />
-            <path d="M -12 8 Q -22 16 -22 26 L -16 24 Q -16 18 -8 12 Z" fill="#edb830" />
-            <path d="M -8 12 Q -16 18 -16 24 L -10 22 Q -10 18 -4 14 Z" fill="#5caa5e" />
-            <path d="M -4 14 Q -10 18 -10 22 L -2 18 Z" fill="#5a8fc7" />
-            {/* right side mirror */}
-            <path d="M 20 0 Q 34 12 34 30 L 28 28 Q 28 14 16 4 Z" fill="#e06060" stroke="#a82828" strokeWidth="0.4" />
-            <path d="M 16 4 Q 28 14 28 28 L 22 26 Q 22 16 12 8 Z" fill="#ff8030" />
-            <path d="M 12 8 Q 22 16 22 26 L 16 24 Q 16 18 8 12 Z" fill="#edb830" />
-            <path d="M 8 12 Q 16 18 16 24 L 10 22 Q 10 18 4 14 Z" fill="#5caa5e" />
-            <path d="M 4 14 Q 10 18 10 22 L 2 18 Z" fill="#5a8fc7" />
-          </g>
-        )}
-        {accessories.includes("dragoncape") && (
-          <g filter="url(#watercolorSoft)">
-            {/* left dragon wing - membranous */}
-            <path d="M -14 -2 Q -36 -4 -40 12 L -36 14 L -38 20 L -32 18 L -34 24 L -28 22 Q -22 16 -14 -2 Z"
-              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
-            {/* wing bones */}
-            <path d="M -14 -2 Q -28 4 -38 14 M -14 -2 Q -24 6 -34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
-            {/* spikes on top edge */}
-            <path d="M -28 0 L -26 -4 L -24 0 Z M -34 4 L -32 0 L -30 4 Z" fill="#3a1a5a" />
-            {/* right wing */}
-            <path d="M 14 -2 Q 36 -4 40 12 L 36 14 L 38 20 L 32 18 L 34 24 L 28 22 Q 22 16 14 -2 Z"
-              fill="#5a3a8a" stroke="#3a1a5a" strokeWidth="0.7" />
-            <path d="M 14 -2 Q 28 4 38 14 M 14 -2 Q 24 6 34 22" stroke="#a060c0" strokeWidth="0.5" fill="none" />
-            <path d="M 28 0 L 26 -4 L 24 0 Z M 34 4 L 32 0 L 30 4 Z" fill="#3a1a5a" />
-            {/* glow */}
-            <ellipse cx="-30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
-            <ellipse cx="30" cy="10" rx="3" ry="6" fill="#a060c0" opacity="0.4" />
-          </g>
-        )}
-        {accessories.includes("bowarrow") && (
-          <g filter="url(#watercolorSoft)">
-            {/* bow arc on the back */}
-            <path d="M -32 -4 Q -38 12 -32 28" stroke="#8b6342" strokeWidth="2.5" fill="none" />
-            {/* string */}
-            <path d="M -32 -4 L -32 28" stroke="#fff" strokeWidth="0.4" />
-            {/* arrow */}
-            <path d="M -34 12 L -22 12" stroke="#5a3a1a" strokeWidth="1.2" />
-            {/* arrowhead */}
-            <path d="M -22 12 L -18 9 L -18 15 Z" fill="#888" stroke="#444" strokeWidth="0.4" />
-            {/* fletching */}
-            <path d="M -34 12 L -36 9 L -36 15 Z" fill="#c94c4c" />
-            {/* bow tips */}
-            <circle cx="-32" cy="-4" r="1" fill="#5a3a1a" />
-            <circle cx="-32" cy="28" r="1" fill="#5a3a1a" />
-          </g>
-        )}
+        {accessories.includes("leafback") && renderMonkeyAccessoryArt("leafback")}
+        {accessories.includes("jetpack") && renderMonkeyAccessoryArt("jetpack")}
+        {accessories.includes("angelwings") && renderMonkeyAccessoryArt("angelwings")}
+        {accessories.includes("demonwings") && renderMonkeyAccessoryArt("demonwings")}
+        {accessories.includes("rainbowcape") && renderMonkeyAccessoryArt("rainbowcape")}
+        {accessories.includes("dragoncape") && renderMonkeyAccessoryArt("dragoncape")}
+        {accessories.includes("bowarrow") && renderMonkeyAccessoryArt("bowarrow")}
 
         {/* Arms */}
         <ellipse cx="-28" cy="22" rx="10" ry="5" fill={C.fur2} opacity="0.7" filter="url(#watercolorSoft)" />
@@ -6433,7 +7613,7 @@ function SpeechBubble({ text }) {
   );
 }
 
-function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused, message }) {
+function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused, message, yRange }) {
   const [pos, setPos] = useState({ x: startX, y: startY });
   const [waddle, setWaddle] = useState(0);
   const [direction, setDirection] = useState(variant % 2 === 0 ? 1 : -1); // 1 = right, -1 = left
@@ -6459,12 +7639,16 @@ function Penguin({ startX, startY, baseSize = 22, speed = 1, variant = 0, paused
         s.x += s.dir * speed * 12 * dt;
         // Wrap around the screen — fly fully off-screen, then re-enter from the opposite side.
         // Pick a fresh vertical "lane" each time they wrap so flights look varied, not on rails.
+        // If yRange is provided ([min, max]), wrap within that range — used by homepage to keep
+        // penguins waddling along the bottom snowbank.
+        const yLo = yRange ? yRange[0] : 8;
+        const yHi = yRange ? yRange[1] : 26;
         if (s.x > 112) {
           s.x = -12;
-          s.baseY = 8 + Math.random() * 18; // 8-26% from top (sky/upper area)
+          s.baseY = yLo + Math.random() * (yHi - yLo);
         } else if (s.x < -12) {
           s.x = 112;
-          s.baseY = 8 + Math.random() * 18;
+          s.baseY = yLo + Math.random() * (yHi - yLo);
         }
         // Occasional random direction reversal (mid-flight) so they're not too predictable
         if (Math.random() < 0.001) { s.dir = -s.dir; setDirection(s.dir); }
@@ -7338,6 +8522,7 @@ function FoodReward({ onComplete }) {
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
 function QuizGame({ studentId, studentName, quiz, mission, onClose, onComplete, onShop }) {
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
@@ -7996,6 +9181,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
 
   // Seed from saved progress if the student lost previously and is resuming
   const initial = savedProgress || {};
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [showQuestion, setShowQuestion] = useState(false);
   const [questionIdx, setQuestionIdx] = useState(0);
   const [questionsAnswered, setQuestionsAnswered] = useState(initial.questionsAnswered || 0);
@@ -8279,7 +9465,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     if (selectedAns !== null) return;
     setSelectedAns(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) SFX.correct();
+    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
     else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
@@ -8520,6 +9706,9 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
         </div>
 
         {/* Question modal */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 60 }}>
+          <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+        </div>
         {showQuestion && currentQ && (
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
@@ -8606,6 +9795,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     flapAnim: 0,
   });
 
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [showQuestion, setShowQuestion] = useState(false);
   const [questionIdx, setQuestionIdx] = useState(0);
   const [questionsAnswered, setQuestionsAnswered] = useState(initial.questionsAnswered || 0);
@@ -8971,7 +10161,7 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     if (selectedAns !== null) return;
     setSelectedAns(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) SFX.correct();
+    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
     else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
@@ -9208,6 +10398,9 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
         </div>
 
         {/* Question modal */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 60 }}>
+          <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+        </div>
         {showQuestion && currentQ && (
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
@@ -9456,7 +10649,110 @@ function applyCrushGravity(grid) {
   return newGrid;
 }
 
+/* ─── CONFETTI BURST ─── celebratory animation for correct answers in mission games.
+   Drops a one-shot burst of colored particles from the center that scatter outward
+   with gravity. Auto-removes itself after the animation completes (~1.6s).
+   Usage: render <ConfettiBurst trigger={someStateNumber} /> and bump the trigger
+   number to fire a new burst. */
+function ConfettiBurst({ trigger, count = 60, intensity = "normal" }) {
+  const [bursts, setBursts] = useState([]);
+  const lastTrigger = useRef(trigger);
+
+  useEffect(() => {
+    if (trigger === lastTrigger.current) return;
+    lastTrigger.current = trigger;
+    // Build a fresh batch of particles each time trigger changes
+    const colors = ["#ff6878", "#ffc428", "#48c060", "#5dd4c8", "#ff90b8", "#a060c0", "#ffa820"];
+    const shapes = ["circle", "square", "triangle", "star"];
+    const gravity = intensity === "epic" ? 700 : 480;
+    const speedBase = intensity === "epic" ? 700 : 540;
+    const numParticles = intensity === "epic" ? Math.round(count * 1.5) : count;
+    const newParticles = Array.from({ length: numParticles }, (_, i) => {
+      const angle = (Math.PI * 2 * i) / numParticles + (Math.random() - 0.5) * 0.4;
+      const speed = speedBase + Math.random() * 280;
+      return {
+        id: `${trigger}-${i}-${Math.random()}`,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        shape: shapes[Math.floor(Math.random() * shapes.length)],
+        size: 6 + Math.random() * 8,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 220, // initial upward bias
+        rotation: Math.random() * 360,
+        rotSpeed: (Math.random() - 0.5) * 720,
+        gravity,
+      };
+    });
+    const burstId = trigger + "-" + Date.now();
+    setBursts(prev => [...prev, { id: burstId, particles: newParticles, startTime: Date.now() }]);
+    // Clean up burst after animation
+    setTimeout(() => {
+      setBursts(prev => prev.filter(b => b.id !== burstId));
+    }, 1800);
+  }, [trigger, count, intensity]);
+
+  // Animate particles via requestAnimationFrame
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (bursts.length === 0) return;
+    let raf;
+    const animate = () => {
+      setTick(t => t + 1);
+      raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [bursts.length]);
+
+  if (bursts.length === 0) return null;
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0, pointerEvents: "none",
+      overflow: "visible", zIndex: 50,
+    }}>
+      {bursts.map(burst => {
+        const elapsed = (Date.now() - burst.startTime) / 1000; // seconds
+        return burst.particles.map(p => {
+          const x = p.vx * elapsed;
+          const y = p.vy * elapsed + 0.5 * p.gravity * elapsed * elapsed;
+          const opacity = Math.max(0, 1 - elapsed / 1.6);
+          const rot = p.rotation + p.rotSpeed * elapsed;
+          return (
+            <div key={p.id} style={{
+              position: "absolute", left: "50%", top: "50%",
+              width: p.size, height: p.size,
+              transform: `translate(${x - p.size / 2}px, ${y - p.size / 2}px) rotate(${rot}deg)`,
+              opacity,
+              willChange: "transform, opacity",
+            }}>
+              {p.shape === "circle" ? (
+                <div style={{ width: "100%", height: "100%", background: p.color, borderRadius: "50%" }} />
+              ) : p.shape === "square" ? (
+                <div style={{ width: "100%", height: "100%", background: p.color, borderRadius: 2 }} />
+              ) : p.shape === "triangle" ? (
+                <div style={{
+                  width: 0, height: 0,
+                  borderLeft: `${p.size / 2}px solid transparent`,
+                  borderRight: `${p.size / 2}px solid transparent`,
+                  borderBottom: `${p.size}px solid ${p.color}`,
+                }} />
+              ) : (
+                // Star — 5-point CSS clip-path
+                <div style={{
+                  width: "100%", height: "100%", background: p.color,
+                  clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+                }} />
+              )}
+            </div>
+          );
+        });
+      })}
+    </div>
+  );
+}
+
 function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
   const [selected, setSelected] = useState(null); // {r, c}
   const [crushing, setCrushing] = useState(new Set()); // Set of "r,c" being animated
@@ -9621,7 +10917,7 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
     const correct = idx === q.correct;
     setQuestionAnswer(idx);
     setQuestionResult(correct ? "correct" : "wrong");
-    if (correct) SFX.correct(); else SFX.wrong();
+    if (correct) { SFX.correct(); setConfettiTrigger(t => t + 1); } else SFX.wrong();
     if (!correct) {
       setWrongAnswers(w => [...w, {
         questionIdx,
@@ -9855,6 +11151,9 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
         )}
 
         {/* Question modal */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 60 }}>
+          <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+        </div>
         {showQuestion && currentQ && (
           <div style={{
             position: "absolute", inset: 0,
@@ -9930,7 +11229,480 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
   );
 }
 
+/* ─── TETRIS GAME ─── classic falling-block Tetris with question gates.
+   Standard 10×20 board. Every 2 line clears unlocks a question. Answer all
+   questions correctly to complete the mission. */
+const TETRIS_W = 10;
+const TETRIS_H = 20;
+const TETRIS_PIECES = {
+  I: { color: "#5ac8e8", glow: "#a0e8f0", cells: [[1,0],[1,1],[1,2],[1,3]] },
+  O: { color: "#ffd040", glow: "#fff080", cells: [[0,1],[0,2],[1,1],[1,2]] },
+  T: { color: "#a060c0", glow: "#c890e0", cells: [[0,1],[1,0],[1,1],[1,2]] },
+  S: { color: "#7cc080", glow: "#a8e8b8", cells: [[0,1],[0,2],[1,0],[1,1]] },
+  Z: { color: "#ff6080", glow: "#ffb0c8", cells: [[0,0],[0,1],[1,1],[1,2]] },
+  J: { color: "#5a8fc7", glow: "#90b8e0", cells: [[0,0],[1,0],[1,1],[1,2]] },
+  L: { color: "#ff9050", glow: "#ffc890", cells: [[0,2],[1,0],[1,1],[1,2]] },
+};
+const TETRIS_TYPES = Object.keys(TETRIS_PIECES);
+function randomTetrisPiece() {
+  const type = TETRIS_TYPES[Math.floor(Math.random() * TETRIS_TYPES.length)];
+  return { type, ...TETRIS_PIECES[type], r: 0, c: 3 };
+}
+// Rotate cells 90° clockwise around (1.5, 1.5) — center of 4x4 bounding box.
+// O-piece doesn't rotate (would look identical).
+function rotateTetrisCells(cells, type) {
+  if (type === "O") return cells;
+  // For I piece, rotate around (1.5, 1.5). For others, around (1, 1).
+  const cx = (type === "I") ? 1.5 : 1;
+  const cy = (type === "I") ? 1.5 : 1;
+  return cells.map(([r, c]) => {
+    const dr = r - cy, dc = c - cx;
+    return [Math.round(cy + dc), Math.round(cx - dr)];
+  });
+}
+function tetrisCollides(grid, piece) {
+  for (const [dr, dc] of piece.cells) {
+    const r = piece.r + dr, c = piece.c + dc;
+    if (c < 0 || c >= TETRIS_W || r >= TETRIS_H) return true;
+    if (r >= 0 && grid[r][c]) return true;
+  }
+  return false;
+}
+
+function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+  const questions = mission?.questions || [];
+  const totalReward = mission?.points || 5;
+  const targetQuestions = questions.length;
+
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
+  const [grid, setGrid] = useState(() =>
+    savedProgress?.grid || Array(TETRIS_H).fill(null).map(() => Array(TETRIS_W).fill(null))
+  );
+  const [piece, setPiece] = useState(() => randomTetrisPiece());
+  const [nextPiece, setNextPiece] = useState(() => randomTetrisPiece());
+  const [linesCleared, setLinesCleared] = useState(savedProgress?.linesCleared || 0);
+  const [score, setScore] = useState(savedProgress?.score || 0);
+  const [questionsAnswered, setQuestionsAnswered] = useState(savedProgress?.questionsAnswered || 0);
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [questionResult, setQuestionResult] = useState(null);
+  const [questionAnswer, setQuestionAnswer] = useState(null);
+  const [gameOver, setGameOver] = useState(false);
+  const [won, setWon] = useState(false);
+  const [rewarded, setRewarded] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [flashRows, setFlashRows] = useState([]); // rows currently animating
+  const [wrongAnswers, setWrongAnswers] = useState([]);
+
+  // Save progress as the player makes progress (on line clear)
+  useEffect(() => {
+    if (gameOver || showQuestion) return;
+    onComplete && onComplete({
+      pointsEarned: 0,
+      won: false,
+      partial: true,
+      progress: { grid, score, linesCleared, questionsAnswered },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linesCleared]);
+
+  // Refs for game loop access
+  const pieceRef = useRef(piece);
+  const gridRef = useRef(grid);
+  const pausedRef = useRef(paused || showQuestion || gameOver);
+  useEffect(() => { pieceRef.current = piece; }, [piece]);
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { pausedRef.current = paused || showQuestion || gameOver; }, [paused, showQuestion, gameOver]);
+
+  // Lock the current piece into the grid and spawn a new one.
+  // Also handle line clears + question triggers.
+  const lockPieceAndAdvance = useCallback(() => {
+    const cur = pieceRef.current;
+    const grd = gridRef.current.map(row => [...row]);
+    for (const [dr, dc] of cur.cells) {
+      const r = cur.r + dr, c = cur.c + dc;
+      if (r >= 0 && r < TETRIS_H && c >= 0 && c < TETRIS_W) grd[r][c] = cur.color;
+    }
+    // find full rows
+    const fullRows = [];
+    for (let r = 0; r < TETRIS_H; r++) {
+      if (grd[r].every(cell => cell !== null)) fullRows.push(r);
+    }
+
+    // Helper: spawn next piece, check game over, and trigger a question
+    // (one question per piece placement)
+    const spawnAndAsk = (gridAfter, scoreAfter, linesAfter) => {
+      const np = randomTetrisPiece();
+      setPiece(nextPiece);
+      setNextPiece(np);
+      // Check game over: new piece collides immediately
+      if (tetrisCollides(gridAfter, nextPiece)) {
+        setGameOver(true);
+        if (!rewarded) {
+          setRewarded(true);
+          SFX.gameOver();
+          onComplete && onComplete({
+            pointsEarned: 0, won: false,
+            questionsAnswered,
+            scoreCorrect: questionsAnswered,
+            scoreTotal: targetQuestions,
+            wrongAnswers,
+            progress: { grid: gridAfter, score: scoreAfter, linesCleared: linesAfter, questionsAnswered },
+          });
+        }
+        return;
+      }
+      // Always ask a question after locking a piece, until all questions answered
+      if (questionsAnswered < targetQuestions) {
+        setQuestionIdx(questionsAnswered);
+        setQuestionAnswer(null);
+        setQuestionResult(null);
+        setShowQuestion(true);
+      }
+    };
+
+    if (fullRows.length > 0) {
+      // Flash the rows briefly, then clear
+      setFlashRows(fullRows);
+      setTimeout(() => {
+        const cleared = grd.filter((_, r) => !fullRows.includes(r));
+        const newRows = Array(fullRows.length).fill(null).map(() => Array(TETRIS_W).fill(null));
+        const newGrid = [...newRows, ...cleared];
+        setGrid(newGrid);
+        setFlashRows([]);
+        const earnedPts = [0, 100, 300, 500, 800][fullRows.length] || 0;
+        setScore(s => s + earnedPts);
+        const newLines = linesCleared + fullRows.length;
+        setLinesCleared(newLines);
+        spawnAndAsk(newGrid, score + earnedPts, newLines);
+      }, 280);
+    } else {
+      // No lines cleared — spawn next piece + question right away
+      setGrid(grd);
+      spawnAndAsk(grd, score, linesCleared);
+    }
+    SFX.click();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextPiece, linesCleared, questionsAnswered, targetQuestions, rewarded, score, wrongAnswers]);
+
+  const tryMove = useCallback((dr, dc) => {
+    if (pausedRef.current) return false;
+    const cur = pieceRef.current;
+    const moved = { ...cur, r: cur.r + dr, c: cur.c + dc };
+    if (!tetrisCollides(gridRef.current, moved)) {
+      setPiece(moved);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const tryRotate = useCallback(() => {
+    if (pausedRef.current) return;
+    const cur = pieceRef.current;
+    const rotated = { ...cur, cells: rotateTetrisCells(cur.cells, cur.type) };
+    if (!tetrisCollides(gridRef.current, rotated)) {
+      setPiece(rotated);
+      return;
+    }
+    // Wall kicks: try shifted ±1 left/right
+    for (const dx of [-1, 1, -2, 2]) {
+      const kicked = { ...rotated, c: rotated.c + dx };
+      if (!tetrisCollides(gridRef.current, kicked)) {
+        setPiece(kicked);
+        return;
+      }
+    }
+  }, []);
+
+  const dropOne = useCallback(() => {
+    if (pausedRef.current) return;
+    const cur = pieceRef.current;
+    const moved = { ...cur, r: cur.r + 1 };
+    if (tetrisCollides(gridRef.current, moved)) {
+      lockPieceAndAdvance();
+    } else {
+      setPiece(moved);
+    }
+  }, [lockPieceAndAdvance]);
+
+  const hardDrop = useCallback(() => {
+    if (pausedRef.current) return;
+    let cur = pieceRef.current;
+    let next = { ...cur, r: cur.r + 1 };
+    while (!tetrisCollides(gridRef.current, next)) {
+      cur = next;
+      next = { ...cur, r: cur.r + 1 };
+    }
+    setPiece(cur);
+    pieceRef.current = cur;
+    setTimeout(() => lockPieceAndAdvance(), 30);
+  }, [lockPieceAndAdvance]);
+
+  // Auto-drop loop. Speed increases with lines cleared.
+  useEffect(() => {
+    if (gameOver || showQuestion || paused) return;
+    const dropMs = Math.max(140, 800 - linesCleared * 20);
+    const id = setInterval(() => dropOne(), dropMs);
+    return () => clearInterval(id);
+  }, [linesCleared, gameOver, showQuestion, paused, dropOne]);
+
+  // Keyboard controls
+  useEffect(() => {
+    const handler = (e) => {
+      if (gameOver || showQuestion) return;
+      if (e.key === "ArrowLeft")  { e.preventDefault(); tryMove(0, -1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); tryMove(0,  1); }
+      if (e.key === "ArrowDown")  { e.preventDefault(); dropOne(); }
+      if (e.key === "ArrowUp")    { e.preventDefault(); tryRotate(); }
+      if (e.key === " ")          { e.preventDefault(); hardDrop(); }
+      if (e.key === "p" || e.key === "P") setPaused(p => !p);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [tryMove, tryRotate, dropOne, hardDrop, gameOver, showQuestion]);
+
+  const answerQuestion = (idx) => {
+    if (questionAnswer !== null) return;
+    const q = questions[questionIdx];
+    const correct = idx === q.correct;
+    setQuestionAnswer(idx);
+    setQuestionResult(correct ? "correct" : "wrong");
+    if (correct) { SFX.correct(); setConfettiTrigger(t => t + 1); } else SFX.wrong();
+    if (!correct) {
+      setWrongAnswers(w => [...w, {
+        questionIdx,
+        question: q.q,
+        chosen: idx,
+        chosenText: q.options[idx],
+        correct: q.correct,
+        correctText: q.options[q.correct],
+      }]);
+    }
+    setTimeout(() => {
+      setShowQuestion(false);
+      const newAnswered = questionsAnswered + (correct ? 1 : 0);
+      setQuestionsAnswered(newAnswered);
+      // Check win
+      if (newAnswered >= targetQuestions && !rewarded) {
+        setRewarded(true);
+        setWon(true);
+        setGameOver(true);
+        SFX.victory();
+        onComplete && onComplete({
+          pointsEarned: totalReward,
+          won: true,
+          scoreCorrect: newAnswered,
+          scoreTotal: targetQuestions,
+          wrongAnswers,
+        });
+      }
+    }, 1400);
+  };
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={modalBackdropStyle} onClick={onClose}>
+        <div style={{ ...modalCardStyle, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <h2 style={{ color: C.text, margin: "0 0 12px" }}>🎮 No Mission</h2>
+          <p style={{ color: C.textLight, fontSize: 16 }}>Your teacher hasn't assigned this mission yet!</p>
+          <button onClick={onClose} style={primaryBtnStyle}>Okay</button>
+        </div>
+      </div>
+    );
+  }
+
+  const cellSize = 22;
+  const boardW = TETRIS_W * cellSize;
+  const boardH = TETRIS_H * cellSize;
+
+  // Build display grid (current piece overlaid)
+  const displayGrid = grid.map(row => [...row]);
+  for (const [dr, dc] of piece.cells) {
+    const r = piece.r + dr, c = piece.c + dc;
+    if (r >= 0 && r < TETRIS_H && c >= 0 && c < TETRIS_W) {
+      displayGrid[r][c] = piece.color;
+    }
+  }
+
+  return (
+    <div style={modalBackdropStyle} onClick={(e) => { if (gameOver) onClose(); }}>
+      <div style={{
+        ...modalCardStyle, width: 540, maxWidth: "95vw",
+        maxHeight: "95vh", overflowY: "auto",
+        padding: "16px 20px",
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h2 style={{ margin: 0, color: C.text, fontSize: 20 }}>🎮 {mission.name}</h2>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textLight }}>
+              {questionsAnswered}/{targetQuestions} done · ❓ after every piece
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start", justifyContent: "center", flexWrap: "wrap" }}>
+          {/* Board */}
+          <div style={{
+            position: "relative",
+            width: boardW + 6, height: boardH + 6,
+            background: `${C.snow1}cc`,
+            border: `3px solid ${C.fur2}50`,
+            borderRadius: 8,
+            padding: 3,
+          }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${TETRIS_W}, ${cellSize}px)`,
+              gridTemplateRows: `repeat(${TETRIS_H}, ${cellSize}px)`,
+              gap: 0,
+              width: boardW, height: boardH,
+            }}>
+              {displayGrid.flatMap((row, r) =>
+                row.map((cell, c) => (
+                  <div key={`${r}-${c}`} style={{
+                    width: cellSize, height: cellSize,
+                    background: cell || "transparent",
+                    border: cell ? `1px solid ${cell}cc` : `1px solid ${C.fur2}10`,
+                    borderRadius: cell ? 3 : 0,
+                    boxShadow: cell ? `inset 1px 1px 2px rgba(255,255,255,0.4), inset -1px -1px 2px rgba(0,0,0,0.15)` : "none",
+                    transition: flashRows.includes(r) ? "all 0.25s" : "none",
+                    opacity: flashRows.includes(r) ? 0.3 : 1,
+                  }} />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Side panel */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 110 }}>
+            {/* Score */}
+            <div style={{ background: `${C.gold}20`, padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${C.gold}50` }}>
+              <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>SCORE</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.gold }}>{score}</div>
+            </div>
+            {/* Lines */}
+            <div style={{ background: `${C.green}15`, padding: "8px 10px", borderRadius: 8, border: `1.5px solid ${C.green}40` }}>
+              <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5 }}>LINES</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{linesCleared}</div>
+            </div>
+            {/* Next piece */}
+            <div style={{ background: `${C.snow1}80`, padding: "6px 10px", borderRadius: 8 }}>
+              <div style={{ fontSize: 10, color: C.textLight, fontWeight: 700, letterSpacing: 0.5, marginBottom: 4 }}>NEXT</div>
+              <div style={{
+                position: "relative", width: 64, height: 48, margin: "0 auto",
+              }}>
+                {nextPiece.cells.map(([r, c], i) => (
+                  <div key={i} style={{
+                    position: "absolute",
+                    left: c * 14 + 4, top: r * 14 + 4,
+                    width: 12, height: 12,
+                    background: nextPiece.color,
+                    borderRadius: 2,
+                    boxShadow: "inset 1px 1px 1px rgba(255,255,255,0.4)",
+                  }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile / on-screen controls */}
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
+          {[
+            { label: "←", fn: () => tryMove(0, -1) },
+            { label: "↻", fn: tryRotate },
+            { label: "→", fn: () => tryMove(0, 1) },
+            { label: "↓", fn: dropOne },
+            { label: "⤓ Drop", fn: hardDrop },
+          ].map((btn, i) => (
+            <button key={i} onClick={btn.fn}
+              style={{
+                padding: "10px 16px", borderRadius: 10,
+                border: `2px solid ${C.water1}50`,
+                background: `${C.card}ee`, color: C.text,
+                fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700,
+                cursor: "pointer", minWidth: 44,
+              }}>
+              {btn.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: C.textLight }}>
+          Keyboard: ← → ↓ to move · ↑ to rotate · Space to hard drop
+        </div>
+
+        {/* CONFETTI BURST — fires on correct answers for celebration */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 60 }}>
+          <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+        </div>
+        {/* Question popup */}
+        {showQuestion && questions[questionIdx] && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 18, padding: 16,
+          }}>
+            <div style={{
+              background: C.card, padding: "20px 22px", borderRadius: 16,
+              maxWidth: 420, width: "100%",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.3)",
+            }}>
+              <div style={{ fontSize: 14, color: C.textLight, marginBottom: 6 }}>
+                Question {questionsAnswered + 1} of {targetQuestions}
+              </div>
+              <div style={{ fontSize: 18, color: C.text, fontWeight: 700, marginBottom: 14, lineHeight: 1.3 }}>
+                {questions[questionIdx].q}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {questions[questionIdx].options.map((opt, i) => {
+                  const isPicked = questionAnswer === i;
+                  const isCorrect = questionResult && i === questions[questionIdx].correct;
+                  const isWrongPick = questionResult === "wrong" && isPicked;
+                  let bg = `${C.snow1}80`, border = `2px solid ${C.fur2}40`;
+                  if (isCorrect) { bg = `${C.green}30`; border = `2px solid ${C.green}`; }
+                  else if (isWrongPick) { bg = `${C.accent}30`; border = `2px solid ${C.accent}`; }
+                  return (
+                    <button key={i} onClick={() => answerQuestion(i)} disabled={questionAnswer !== null}
+                      style={{
+                        padding: "10px 14px", borderRadius: 10, background: bg, border,
+                        cursor: questionAnswer === null ? "pointer" : "default",
+                        fontFamily: "'Patrick Hand', cursive", fontSize: 15, color: C.text,
+                        textAlign: "left", fontWeight: 600,
+                      }}>
+                      {"ABCD"[i]}. {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Game over screen */}
+        {gameOver && (
+          <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: 12, textAlign: "center",
+            background: won ? `${C.green}20` : `${C.accent}15`,
+            border: `2px solid ${won ? C.green : C.accent}50`,
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: won ? C.green : C.accent }}>
+              {won ? "🏆 Mission Complete!" : "💪 Game Over — try again later!"}
+            </div>
+            {won && <div style={{ marginTop: 4, fontSize: 14, color: C.text }}>+{totalReward} ★ earned</div>}
+            <div style={{ marginTop: 6, fontSize: 12, color: C.textLight }}>
+              Score: {score} · Lines: {linesCleared} · Q: {questionsAnswered}/{targetQuestions}
+            </div>
+            <button onClick={onClose} style={{ ...primaryBtnStyle, marginTop: 12 }}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
+  const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
   const [tray, setTray] = useState(() => [generateShape(), generateShape(), generateShape()]);
   const [selectedShapeIdx, setSelectedShapeIdx] = useState(null);
@@ -10031,7 +11803,7 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
     if (selected !== null) return;
     setSelected(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) SFX.correct();
+    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
     else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
@@ -10214,6 +11986,9 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
         )}
 
         {/* Question modal overlay */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 60 }}>
+          <ConfettiBurst trigger={confettiTrigger} intensity="epic" count={70} />
+        </div>
         {showQuestion && currentQ && (
           <div style={{
             position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)",
@@ -10277,6 +12052,7 @@ function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
 
 /* ─── MAIN APP ─── */
 export default function SnowMonkeyTracker() {
+  const isMobile = useIsMobile(640); // portrait phone breakpoint
   const [anyHovering, setAnyHovering] = useState(false);
   return (
     <HoverContext.Provider value={{ anyHovering, setAnyHovering }}>
@@ -10289,6 +12065,14 @@ function SnowMonkeyTrackerInner() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("login");
   const [loginTab, setLoginTab] = useState("student");
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const [signupRole, setSignupRole] = useState("teacher"); // "teacher" or "student"
+  const [signupName, setSignupName] = useState("");
+  const [signupUser, setSignupUser] = useState("");
+  const [signupPass, setSignupPass] = useState("");
+  const [signupError, setSignupError] = useState("");
+  const [signupBusy, setSignupBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [user, setUser] = useState(null);
   const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
@@ -10304,6 +12088,7 @@ function SnowMonkeyTrackerInner() {
   const [pointAmount, setPointAmount] = useState(1);
   const [notification, setNotification] = useState(null);
   const [showManage, setShowManage] = useState(false);
+  const [showOverview, setShowOverview] = useState(false); // teacher yearbook view
   const [showWordle, setShowWordle] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
   const [showMission, setShowMission] = useState(false);
@@ -10321,11 +12106,24 @@ function SnowMonkeyTrackerInner() {
   const [showWalk, setShowWalk] = useState(false);
   const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
+  const [petNicknameInput, setPetNicknameInput] = useState(""); // student-typed nickname for new pet
   const [showCustomize, setShowCustomize] = useState(false);
   const [customizeTab, setCustomizeTab] = useState("all"); // "all" | "owned" | "shop"
   const [customizeTarget, setCustomizeTarget] = useState("monkey"); // "monkey" | "pet"
   const [quizzes, setQuizzes] = useState({}); // { studentId: [{id, subject, name, points, questions[]}] }
   const [missions, setMissions] = useState({}); // { studentId: [{id, name, points, questions[]}] }
+  const [studyPacks, setStudyPacks] = useState([]);     // premade packs from Firestore
+  const [showStudyPacks, setShowStudyPacks] = useState(false); // study packs browser modal
+  const [showStarUpgrade, setShowStarUpgrade] = useState(false); // upgrade-to-Star modal
+  const [previewPack, setPreviewPack] = useState(null);  // pack being previewed
+
+  // ── LIVE GAMES (multiplayer restaurant)
+  const [liveGameCode, setLiveGameCode] = useState(null);   // current code (host or player)
+  const [livePlayerId, setLivePlayerId] = useState(null);   // player's ID (student only)
+  const [liveGame, setLiveGame] = useState(null);           // live game state (RTDB synced)
+  const [showHostGame, setShowHostGame] = useState(false);  // teacher: host modal open
+  const [showJoinGame, setShowJoinGame] = useState(false);  // student: join modal open
+  const [hostingPack, setHostingPack] = useState(null);     // pack the teacher is hosting
   const [showQuizUpload, setShowQuizUpload] = useState(false);
   const [showMissionUpload, setShowMissionUpload] = useState(false);
   // Mission results modal — { studentId, missionId } or null
@@ -10407,15 +12205,46 @@ function SnowMonkeyTrackerInner() {
         const s = await getStudents();
         const q = await getQuizzes();
         const m = await getMissions();
+        const sp = await getStudyPacks();
         setTeachers(t);
         setStudents(s);
         setQuizzes(q || {});
         setMissions(m || {});
+        setStudyPacks(sp || []);
       } catch (error) {
         console.error("Failed to load data:", error);
       }
       setLoading(false);
     })();
+  }, []);
+
+  /* ─── Stripe checkout return handler ───
+     When a teacher returns from a successful Stripe Checkout, the URL contains
+     `?starPaid=success`. We show a celebration toast and refresh teacher data.
+     The actual upgrade happens in the Stripe Firebase Extension webhook. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("starPaid") === "success") {
+      notify("🎉 Welcome to Star! You now have access to all study packs.", "success");
+      // Wait a few seconds for the webhook to fire, then refresh teacher data
+      setTimeout(async () => {
+        try {
+          const t = await getTeachers();
+          setTeachers(t);
+          // Also refresh the current user if they're a teacher
+          if (user?.id) {
+            const me = t.find(x => x.id === user.id);
+            if (me) setUser(me);
+          }
+        } catch {}
+      }, 4000);
+      // Clean the URL
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("starPaid") === "cancel") {
+      notify("Star upgrade cancelled — you can subscribe anytime.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persist = useCallback(async (newT, newS, newQ, newM) => {
@@ -10719,12 +12548,104 @@ function SnowMonkeyTrackerInner() {
     setLoginError("");
     if (loginTab === "teacher") {
       const t = teachers.find(t => t.username === username && t.password === password);
-      if (t) { setUser(t); setScreen("teacher"); setUsername(""); setPassword(""); }
+      if (t) { setUser(t); setScreen("teacher"); setUsername(""); setPassword(""); setShowLoginModal(false); }
       else setLoginError("Invalid teacher credentials");
     } else {
       const s = students.find(s => s.username === username && s.password === password);
-      if (s) { setUser(s); setScreen("student"); setUsername(""); setPassword(""); }
+      if (s) { setUser(s); setScreen("student"); setUsername(""); setPassword(""); setShowLoginModal(false); }
       else setLoginError("Invalid student credentials");
+    }
+  };
+
+  /* ─── Sign-up handlers ───
+     Both teachers and students can sign up. Manual signup creates the right
+     record type; Google signup uses Firebase Auth and routes through firebase.js
+     to the right collection. */
+  const handleManualSignup = async () => {
+    setSignupError("");
+    if (!signupName.trim() || !signupUser.trim() || !signupPass.trim()) {
+      setSignupError("Please fill in all fields"); return;
+    }
+    if (signupPass.length < 4) {
+      setSignupError("Password must be at least 4 characters"); return;
+    }
+    if (teachers.find(t => t.username === signupUser) || students.find(s => s.username === signupUser)) {
+      setSignupError("Username already taken"); return;
+    }
+    setSignupBusy(true);
+    try {
+      if (signupRole === "student") {
+        const newStudent = await addStudentToDB({
+          username: signupUser.trim(),
+          password: signupPass.trim(),
+          name: signupName.trim(),
+          authMethod: "manual",
+          createdAt: new Date().toISOString(),
+          points: 0,
+          accessories: [],
+          ownedPets: [],
+          pet: null,
+        });
+        setStudents([...students, newStudent]);
+        setUser(newStudent);
+        setScreen("student");
+        setShowSignupModal(false);
+        setSignupName(""); setSignupUser(""); setSignupPass("");
+        notify(`Welcome, ${newStudent.name}! 🐵`);
+      } else {
+        const newTeacher = await addTeacherToDB({
+          username: signupUser.trim(),
+          password: signupPass.trim(),
+          name: signupName.trim(),
+          authMethod: "manual",
+          createdAt: new Date().toISOString(),
+        });
+        setTeachers([...teachers, newTeacher]);
+        setUser(newTeacher);
+        setScreen("teacher");
+        setShowSignupModal(false);
+        setSignupName(""); setSignupUser(""); setSignupPass("");
+        notify(`Welcome, ${newTeacher.name}! 🎉`);
+      }
+    } catch (e) {
+      console.error("Manual signup failed:", e);
+      setSignupError("Sign up failed. Try again.");
+    } finally {
+      setSignupBusy(false);
+    }
+  };
+
+  const handleGoogleSignIn = async (role) => {
+    // role: "teacher" (default) or "student"
+    const targetRole = role || signupRole || "teacher";
+    setSignupError(""); setLoginError("");
+    setSignupBusy(true);
+    try {
+      const { user: signedInUser, role: actualRole } = await signInWithGoogle(targetRole);
+      // Refresh the right list to include the new record
+      if (actualRole === "student") {
+        const updated = await getStudents();
+        setStudents(updated);
+        setUser(signedInUser);
+        setScreen("student");
+      } else {
+        const updated = await getTeachers();
+        setTeachers(updated);
+        setUser(signedInUser);
+        setScreen("teacher");
+      }
+      setShowSignupModal(false);
+      setShowLoginModal(false);
+      notify(`Welcome, ${signedInUser.name}! 🎉`);
+    } catch (e) {
+      console.error("Google sign-in failed:", e);
+      const msg = e?.code === "auth/popup-closed-by-user"
+        ? "Sign-in cancelled"
+        : "Google sign-in failed. Make sure Google auth is enabled in your Firebase project.";
+      setSignupError(msg);
+      setLoginError(msg);
+    } finally {
+      setSignupBusy(false);
     }
   };
 
@@ -11006,6 +12927,26 @@ function SnowMonkeyTrackerInner() {
   };
 
   // Open a mystery pack
+  // Save a custom nickname for a pet. Stored on the student record as
+  // `petNicknames: { [petId]: "Sparkles" }`. Falls back to default species name.
+  const setPetNickname = (studentId, petId, nickname) => {
+    const trimmed = (nickname || "").trim().slice(0, 20);
+    const newS = students.map(s => {
+      if (s.id !== studentId) return s;
+      const nicknames = { ...(s.petNicknames || {}) };
+      if (trimmed) nicknames[petId] = trimmed;
+      else delete nicknames[petId];
+      return { ...s, petNicknames: nicknames };
+    });
+    persist(null, newS);
+  };
+
+  // Returns the display name for a pet (nickname if set, else species name)
+  const petDisplayName = (student, pet) => {
+    if (!pet) return "";
+    return student?.petNicknames?.[pet.id] || pet.name;
+  };
+
   const openPack = (studentId, packId) => {
     const pack = MYSTERY_PACKS.find(p => p.id === packId);
     const st = students.find(s => s.id === studentId);
@@ -11048,27 +12989,17 @@ function SnowMonkeyTrackerInner() {
     } : s);
     persist(null, newS);
     SFX.reward();
-    notify(`🎁 Your ${getPet(st.pet)?.name || "pet"} brought you +${pending} ★!`);
+    const pet = getPet(st.pet);
+    notify(`🎁 Your ${petDisplayName(st, pet) || "pet"} brought you +${pending} ★!`);
     return pending;
   };
 
-  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); setShowAddExam(false); setExamTargetStudentId(null); setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝"); setShowFoodShop(false); setShowMyPool(false); setShowWalk(false); setActiveGameType(null); setGameTypeChoiceMission(null); setCustomizeTarget("monkey"); };
+  const logout = () => { setUser(null); setScreen("login"); setSelectedStudent(null); setShowManage(false); setShowOverview(false); setShowAddStudent(false); setShowWordle(false); setShowQuiz(false); setShowMission(false); setShowQuizPicker(false); setShowMissionPicker(false); setShowQuizUpload(false); setShowMissionUpload(false); setShowAccessories(false); setShowPetMart(false); setShowCustomize(false); setShowAddExam(false); setExamTargetStudentId(null); setExamName(""); setExamDate(""); setExamTime("09:00"); setExamEmoji("📝"); setShowFoodShop(false); setShowMyPool(false); setShowWalk(false); setActiveGameType(null); setGameTypeChoiceMission(null); setCustomizeTarget("monkey"); };
 
   const todayKey = getTodayKey();
   const hasCompletedChallenge = (studentId) => {
     const s = students.find(st => st.id === studentId);
     return s?.lastChallengeDate === todayKey;
-  };
-
-  // Effective streak: returns 0 if student missed a day (broken streak)
-  const getEffectiveStreak = (student) => {
-    if (!student?.streak) return 0;
-    if (!student.lastChallengeDate) return 0;
-    const last = new Date(student.lastChallengeDate);
-    const today = new Date(todayKey);
-    const diffDays = Math.floor((today - last) / (1000 * 60 * 60 * 24));
-    if (diffDays > 1) return 0; // Missed a day - streak broken
-    return student.streak;
   };
 
   const handleWordleWin = () => {
@@ -11213,81 +13144,883 @@ function SnowMonkeyTrackerInner() {
 
   /* ── LOGIN ── */
   if (screen === "login") {
+    // Homepage gradient: starts with a refreshing watery cyan tint at the top,
+    // softens through a clean white middle, then picks up another teal hint at
+    // the bottom for the hot-spring feel. Dark + rainbow modes keep their own
+    // atmospheric gradients.
     const loginBg = themeMode === "rainbow"
-      ? C.bg // direct rainbow gradient
-      : `linear-gradient(160deg, ${C.snow1} 0%, ${C.bg} 40%, ${themeMode === "dark" ? "#0a0c14" : "#e2d0c0"} 100%)`;
+      ? C.bg
+      : themeMode === "dark"
+        ? `linear-gradient(160deg, ${C.snow1} 0%, ${C.bg} 40%, #0a0c14 100%)`
+        : `linear-gradient(180deg, ${C.water2}55 0%, ${C.water2}25 18%, #fcfdfd 50%, #ffffff 75%, ${C.water2}28 100%)`;
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: loginBg, backgroundSize: themeMode === "rainbow" ? "400% 400%" : undefined, animation: themeMode === "rainbow" ? "rainbowShift 18s ease infinite" : undefined, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: loginBg, backgroundSize: themeMode === "rainbow" ? "400% 400%" : undefined, animation: themeMode === "rainbow" ? "rainbowShift 18s ease infinite" : undefined, fontFamily: "'Patrick Hand', cursive", position: "relative", overflowX: "hidden" }}>
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
         <WatercolorFilters /><GlobalKeyframes /><SnowParticles />
-        {/* Theme toggle in top-right corner */}
-        <button onClick={toggleTheme}
-          title={themeTitle}
-          style={{
-            position: "absolute", top: 18, right: 18, zIndex: 50,
-            padding: "10px 14px", borderRadius: 999, border: `2px solid ${C.fur2}40`,
-            background: `${C.card}ee`, color: C.text, fontFamily: "'Patrick Hand', cursive",
-            fontSize: 20, cursor: "pointer", lineHeight: 1, minWidth: 48,
-            boxShadow: "0 4px 14px rgba(0,0,0,0.1)",
-          }}>
-          {themeIcon}
-        </button>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "35%", background: `linear-gradient(to top, ${C.water1}30, transparent)`, borderRadius: "50% 50% 0 0" }} />
-        <div style={{ position: "absolute", left: "4%", bottom: "8%", opacity: 0.5 }}><MonkeySVG size={90} mood="happy" delay={0} variant={1} /></div>
-        <div style={{ position: "absolute", right: "6%", bottom: "12%", opacity: 0.5 }}><MonkeySVG size={75} mood="excited" delay={1.2} variant={2} /></div>
-        <div style={{ position: "absolute", left: "20%", top: "8%", opacity: 0.3 }}><MonkeySVG size={55} mood="neutral" delay={2.5} variant={3} /></div>
 
-        <div style={{ background: `${C.card}ee`, borderRadius: 28, padding: "44px 52px", boxShadow: "0 24px 64px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.05)", maxWidth: 430, width: "90%", position: "relative", zIndex: 10, border: `2px solid ${C.fur2}30` }}>
-          <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{ fontSize: 52, marginBottom: 4 }}>♨️</div>
-            <h1 style={{ fontSize: 34, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>Monkey Hot Spring</h1>
-            <p style={{ color: C.textLight, fontSize: 17, margin: 0 }}>Student Point Tracker</p>
-          </div>
-          <div style={{ display: "flex", gap: 0, marginBottom: 24, borderRadius: 14, overflow: "hidden", border: `2px solid ${C.accent}30` }}>
-            {["teacher", "student"].map(tab => (
-              <button key={tab} onClick={() => { setLoginTab(tab); setLoginError(""); }}
-                style={{ flex: 1, padding: "13px 0", border: "none", cursor: "pointer", background: loginTab === tab ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : "transparent", color: loginTab === tab ? "white" : C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 18, fontWeight: 600, transition: "all 0.3s" }}>
-                {tab === "teacher" ? "🍎 Teacher" : "🐵 Student"}
-              </button>
+        {/* HOT SPRING BACKGROUND — water pool with steam, decorative rocks.
+            Sits behind the hero content (zIndex 1) but above the page background. */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 1, pointerEvents: "none", overflow: "hidden" }}>
+          {/* Hot spring water pool — large rounded basin filling bottom 38% of screen */}
+          <svg width="100%" height="100%" viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid slice"
+            style={{ position: "absolute", inset: 0 }}>
+            <defs>
+              <radialGradient id="poolGrad" cx="50%" cy="100%" r="80%">
+                <stop offset="0%" stopColor={C.water2} stopOpacity="0.55" />
+                <stop offset="55%" stopColor={C.water1} stopOpacity="0.4" />
+                <stop offset="100%" stopColor={C.water3} stopOpacity="0.15" />
+              </radialGradient>
+              <linearGradient id="poolRim" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.water3} stopOpacity="0.5" />
+                <stop offset="100%" stopColor={C.water1} stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+            {/* Pool basin — wide soft ellipse */}
+            <ellipse cx="700" cy="950" rx="900" ry="320" fill="url(#poolGrad)" filter="url(#watercolor)" />
+            {/* Pool rim/edge highlight */}
+            <ellipse cx="700" cy="660" rx="850" ry="40" fill="url(#poolRim)" opacity="0.6" filter="url(#watercolorSoft)" />
+            {/* Subtle ripples */}
+            {[
+              { cx: 240, cy: 720, rx: 110, ry: 14 },
+              { cx: 1170, cy: 740, rx: 130, ry: 16 },
+              { cx: 700, cy: 800, rx: 220, ry: 22 },
+              { cx: 480, cy: 810, rx: 90, ry: 12 },
+              { cx: 980, cy: 820, rx: 100, ry: 14 },
+            ].map((r, i) => (
+              <ellipse key={i} cx={r.cx} cy={r.cy} rx={r.rx} ry={r.ry}
+                fill="none" stroke={C.water3} strokeWidth="1.5" opacity="0.3"
+                filter="url(#watercolorSoft)" />
             ))}
+            {/* Decorative rocks at pool edge — like the actual hot spring scene */}
+            {[
+              { x: 60,   y: 640, rw: 130, rh: 75,  c: C.rock1 },
+              { x: 1230, y: 630, rw: 150, rh: 85,  c: C.rock2 },
+              { x: 320,  y: 670, rw: 90,  rh: 50,  c: C.rock3 },
+              { x: 1050, y: 680, rw: 100, rh: 55,  c: C.rock4 },
+              { x: 660,  y: 695, rw: 80,  rh: 42,  c: C.rock1 },
+            ].map((r, i) => (
+              <g key={`rock${i}`} filter="url(#rockTexture)">
+                <ellipse cx={r.x + r.rw/2} cy={r.y + r.rh/2} rx={r.rw/2} ry={r.rh/2} fill={r.c} />
+                <ellipse cx={r.x + r.rw*0.4} cy={r.y + r.rh*0.3} rx={r.rw*0.28} ry={r.rh*0.18}
+                  fill={C.snow1} opacity="0.7" filter="url(#watercolorSoft)" />
+              </g>
+            ))}
+          </svg>
+
+          {/* Steam particles rising from the pool */}
+          <SteamParticles count={14} />
+        </div>
+
+        {/* TOP BAR: brand left, controls right.
+            On mobile, brand and controls share less padding and the Log in button
+            shows just an arrow icon to save space. */}
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: isMobile ? "12px 16px" : "20px 32px",
+          position: "relative", zIndex: 30,
+          gap: isMobile ? 8 : 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <WatercolorIcon name="brand_monkey" size={isMobile ? 36 : 48} />
+            <span style={{
+              fontSize: isMobile ? 18 : 26, fontWeight: 700, color: C.text,
+              fontFamily: "'Patrick Hand', cursive", letterSpacing: 0.4,
+            }}>Big A Star</span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" onKeyDown={e => e.key === "Enter" && handleLogin()} style={inputStyle} />
-            <div style={{ position: "relative" }}>
-              <input value={password} onChange={e => setPassword(e.target.value)}
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                onKeyDown={e => e.key === "Enter" && handleLogin()}
-                style={{ ...inputStyle, paddingRight: 48, width: "100%", boxSizing: "border-box" }} />
-              <button type="button"
-                onClick={() => setShowPassword(v => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                style={{
-                  position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
-                  background: "transparent", border: "none", cursor: "pointer",
-                  fontSize: 20, color: C.textLight, padding: "6px 10px",
-                  lineHeight: 1,
-                }}>
-                {showPassword ? "🙈" : "👁️"}
-              </button>
-            </div>
-            {loginError && <p style={{ color: C.accentDark, fontSize: 15, margin: 0, textAlign: "center" }}>{loginError}</p>}
-            <button onClick={handleLogin}
-              style={{ padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 21, fontWeight: 700, boxShadow: `0 6px 16px ${C.accent}50`, transition: "transform 0.2s", marginTop: 4 }}
-              onMouseEnter={e => e.target.style.transform = "translateY(-2px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}>
-              Enter the Hot Spring →
+          <div style={{ display: "flex", gap: isMobile ? 6 : 10, alignItems: "center", flexShrink: 0 }}>
+            <button onClick={toggleTheme}
+              title={themeTitle}
+              style={{
+                padding: isMobile ? "8px 10px" : "10px 14px",
+                borderRadius: 999, border: `2px solid ${C.fur2}40`,
+                background: `${C.card}ee`, color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: isMobile ? 14 : 18, cursor: "pointer", lineHeight: 1,
+                minWidth: isMobile ? 36 : 44,
+                boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+              }}>
+              {themeIcon}
+            </button>
+            <button onClick={() => { SFX.click(); setShowLoginModal(true); }}
+              style={{
+                padding: isMobile ? "8px 14px" : "10px 22px",
+                borderRadius: 999,
+                border: `2px solid ${C.fur2}50`, background: `${C.card}ee`,
+                color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: isMobile ? 14 : 18, fontWeight: 600, cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+                whiteSpace: "nowrap",
+              }}>
+              ▶ Log in
+            </button>
+            <button onClick={() => { SFX.click(); setShowSignupModal(true); }}
+              style={{
+                padding: isMobile ? "8px 14px" : "10px 22px",
+                borderRadius: 999,
+                border: `2px solid ${C.accent}`,
+                background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                color: "white", fontFamily: "'Patrick Hand', cursive",
+                fontSize: isMobile ? 14 : 18, fontWeight: 700, cursor: "pointer",
+                boxShadow: `0 4px 14px ${C.accent}50`,
+                whiteSpace: "nowrap",
+              }}>
+              Sign up
             </button>
           </div>
-          <p style={{ textAlign: "center", color: C.textLight, fontSize: 13, marginTop: 18, marginBottom: 0 }}>
-            {loginTab === "teacher" ? "Use your teacher credentials to log in" : "Ask your teacher for login details"}
-          </p>
         </div>
+
+        {/* HERO: 3-column layout, monkey-illustration left & right with tagline center.
+            On mobile (≤640px portrait phone), stacks vertically with smaller assets and
+            the CTA placed first for easy thumb access. Desktop layout is unchanged. */}
+        <div style={{
+          minHeight: isMobile ? "auto" : "calc(100vh - 100px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: isMobile ? "16px 18px 32px" : "20px 40px",
+          gap: isMobile ? 18 : 30, flexWrap: "wrap",
+          flexDirection: isMobile ? "column" : "row",
+          position: "relative", zIndex: 10,
+        }}>
+          {/* LEFT: scholar monkey + big golden star floating beside */}
+          <div style={{
+            flex: isMobile ? "0 0 auto" : "1 1 280px",
+            display: "flex", justifyContent: "center",
+            minWidth: isMobile ? 0 : 220,
+            order: isMobile ? 2 : 1,
+          }}>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <MonkeySVG size={isMobile ? 140 : 220} mood="happy" delay={0.2} variant={1}
+                accessories={["graduationcap"]} />
+              {/* Big golden watercolor star tucked beside the monkey */}
+              <svg width={isMobile ? 70 : 100} height={isMobile ? 70 : 100} viewBox="-50 -50 100 100"
+                style={{
+                  position: "absolute", top: isMobile ? -6 : -10, right: isMobile ? -16 : -28,
+                  animation: "starBob 3.2s ease-in-out infinite",
+                  filter: `drop-shadow(0 4px 8px ${C.gold}50)`,
+                }}>
+                <defs>
+                  <radialGradient id="heroStarGrad" cx="35%" cy="30%">
+                    <stop offset="0%" stopColor="#fff080" />
+                    <stop offset="60%" stopColor={C.gold} />
+                    <stop offset="100%" stopColor="#c08018" />
+                  </radialGradient>
+                </defs>
+                <g filter="url(#watercolorSoft)">
+                  <path d="M 0 -36 L 11 -11 L 36 -11 L 16 6 L 22 30 L 0 16 L -22 30 L -16 6 L -36 -11 L -11 -11 Z"
+                    fill="url(#heroStarGrad)" stroke="#a07820" strokeWidth="1.5" />
+                  <path d="M -8 -16 Q -14 -22 -10 -28 Q -3 -25 -5 -18 Z"
+                    fill="white" opacity="0.55" />
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          {/* CENTER: tagline + CTA */}
+          <div style={{
+            flex: isMobile ? "0 0 auto" : "1 1 320px",
+            maxWidth: 420, textAlign: "center",
+            order: isMobile ? 1 : 2,
+            width: isMobile ? "100%" : undefined,
+          }}>
+            <h1 style={{
+              fontSize: isMobile ? 28 : 42, color: C.text,
+              margin: isMobile ? "8px 0 10px" : "0 0 16px",
+              fontWeight: 700, lineHeight: 1.15,
+            }}>
+              Turn classwork into hot spring rewards.
+            </h1>
+            <p style={{
+              fontSize: isMobile ? 15 : 17, color: C.textLight,
+              margin: isMobile ? "0 0 18px" : "0 0 24px", lineHeight: 1.45,
+            }}>
+              Earn ★ stars, customize your monkey, and soak in the hot spring with your class.
+            </p>
+            <button onClick={() => { SFX.click(); setShowSignupModal(true); }}
+              style={{
+                padding: isMobile ? "14px 32px" : "16px 44px",
+                borderRadius: 16, border: "none", cursor: "pointer",
+                background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                color: "white", fontFamily: "'Patrick Hand', cursive",
+                fontSize: isMobile ? 18 : 22, fontWeight: 700,
+                boxShadow: `0 8px 22px ${C.accent}55`,
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px) scale(1.02)"}
+              onMouseLeave={e => e.currentTarget.style.transform = "translateY(0) scale(1)"}>
+              Sign up free →
+            </button>
+            <p style={{ fontSize: 13, color: C.textLight, marginTop: 14, marginBottom: 0 }}>
+              Pronounced ("Big · A · Star") 🌟
+            </p>
+          </div>
+
+          {/* RIGHT: cute mascot soaking in the hot spring */}
+          <div style={{
+            flex: isMobile ? "0 0 auto" : "1 1 280px",
+            display: "flex", justifyContent: "center",
+            alignItems: "center", position: "relative",
+            minWidth: isMobile ? 0 : 220, maxWidth: 460,
+            order: isMobile ? 3 : 3,
+            width: isMobile ? "92%" : undefined,
+          }}>
+            <img src="/mascot-soak.png" alt="Cute creature soaking in a turquoise hot spring with a lily pad"
+              style={{
+                width: "100%", maxWidth: isMobile ? 280 : 420, height: "auto",
+                borderRadius: isMobile ? 20 : 28,
+                boxShadow: "0 16px 40px rgba(60, 100, 110, 0.18)",
+                animation: "starBob 4s ease-in-out infinite",
+              }}
+              onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          </div>
+        </div>
+
+        {/* WADDLING PENGUINS — fixed overlay so they stay visible while you scroll.
+            Lanes constrained to lower half of viewport using yRange so they waddle along
+            the snowbank/pool edge instead of flying through the sky. */}
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 5 }}>
+          {[
+            { x: 14, y: 78, size: 26, speed: 0.7, variant: 0 },
+            { x: 38, y: 82, size: 22, speed: 0.9, variant: 1 },
+            { x: 62, y: 80, size: 28, speed: 0.6, variant: 2 },
+            { x: 84, y: 84, size: 24, speed: 0.8, variant: 3 },
+          ].map((p, i) => (
+            <Penguin key={`waddle-${i}`} startX={p.x} startY={p.y}
+              baseSize={p.size} speed={p.speed} variant={p.variant}
+              paused={false} yRange={[76, 88]} />
+          ))}
+        </div>
+
+        {/* ─── SECTION: How it works (3 steps) ─── */}
+        <section style={{ padding: isMobile ? "48px 20px" : "80px 40px", position: "relative", zIndex: 10, background: `${C.card}40` }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+            <h2 style={{ fontSize: isMobile ? 28 : 40, color: C.text, margin: "0 0 8px", fontWeight: 700 }}>How it works</h2>
+            <p style={{ fontSize: 18, color: C.textLight, margin: "0 0 48px" }}>Three simple steps to a happier classroom</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 32 }}>
+              {[
+                { num: "1", title: "Earn ★ stars in class", desc: "Teachers reward great work with stars. Students see their points grow live on a beautiful watercolor leaderboard.", monkeyAcc: [], mood: "happy", variant: 1, useImage: false },
+                { num: "2", title: "Customize your monkey", desc: "Spend stars on accessories, mystery pet packs, and food. 22 hats and outfits, 9 collectible pets.", monkeyAcc: ["crown"], mood: "excited", variant: 2, useImage: false },
+                { num: "3", title: "Soak in the hot spring", desc: "Hang out with classmates, play missions, build daily streaks for special rainbow auras.", image: "/mascot-splash.png", useImage: true },
+              ].map((s, i) => (
+                <div key={i} style={{
+                  background: `${C.card}cc`, borderRadius: 24, padding: "32px 24px",
+                  border: `2px solid ${C.fur2}30`, boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
+                  display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+                }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 999,
+                    background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                    color: "white", fontSize: 24, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    marginBottom: 12, boxShadow: `0 4px 12px ${C.accent}40`,
+                  }}>{s.num}</div>
+                  <div style={{ marginBottom: 12, height: 130, display: "flex", alignItems: "center" }}>
+                    {s.useImage ? (
+                      <img src={s.image} alt="Cute creature splashing joyfully in the hot spring"
+                        style={{
+                          width: isMobile ? 110 : 150, height: isMobile ? 100 : 130, objectFit: "cover", borderRadius: 16,
+                          boxShadow: "0 8px 20px rgba(60, 100, 110, 0.15)",
+                        }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    ) : (
+                      <MonkeySVG size={isMobile ? 90 : 120} mood={s.mood} variant={s.variant} delay={i * 0.3} accessories={s.monkeyAcc} />
+                    )}
+                  </div>
+                  <h3 style={{ fontSize: 22, color: C.text, margin: "0 0 8px", fontWeight: 700 }}>{s.title}</h3>
+                  <p style={{ fontSize: 15, color: C.textLight, margin: 0, lineHeight: 1.5 }}>{s.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── SECTION: 6 ways to play (game modes) ─── */}
+        <section style={{ padding: isMobile ? "48px 20px" : "80px 40px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+            <h2 style={{ fontSize: isMobile ? 28 : 40, color: C.text, margin: "0 0 8px", fontWeight: 700 }}>6 ways to play</h2>
+            <p style={{ fontSize: 18, color: C.textLight, margin: "0 0 48px" }}>Every mission can be played as any of these games</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 18 }}>
+              {[
+                { icon: "game_blockblast", title: "🧩 Block Blast", desc: "Place puzzle shapes from a tray to clear lines.", c: C.accent },
+                { icon: "game_runner",     title: "🏃 Fruit Runner", desc: "Run, jump, and dodge falling fruits.",     c: "#5caa5e" },
+                { icon: "game_flappy",     title: "❄️ Icicle Flap",  desc: "Flap through icicle gaps without crashing.", c: "#5ac8e8" },
+                { icon: "game_crush",      title: "🌸 Monkey Crush", desc: "Match-3 with question checkpoints.",       c: "#ff90b8" },
+                { icon: "game_quiz",       title: "📝 Quiz Mode",    desc: "Classic quiz — read & pick the right answer.", c: "#5a8fc7" },
+                { icon: "game_tetris",     title: "🎮 Tetris",       desc: "Falling blocks. ❓ after every piece.",     c: "#a060c0" },
+              ].map((g, i) => (
+                <div key={i} style={{
+                  background: `${C.card}cc`, borderRadius: 20, padding: "20px 18px",
+                  border: `2px solid ${g.c}25`, boxShadow: "0 4px 14px rgba(0,0,0,0.04)",
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  transition: "transform 0.2s, box-shadow 0.2s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = `0 8px 22px ${g.c}30`; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.04)"; }}>
+                  <WatercolorIcon name={g.icon} size={56} />
+                  <div style={{ fontSize: 18, color: C.text, margin: "10px 0 6px", fontWeight: 700 }}>{g.title}</div>
+                  <div style={{ fontSize: 13, color: C.textLight, textAlign: "center", lineHeight: 1.4 }}>{g.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── SECTION: 9 collectible pets ─── */}
+        <section style={{ padding: isMobile ? "48px 20px" : "80px 40px", position: "relative", zIndex: 10, background: `${C.card}40` }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+            <h2 style={{ fontSize: isMobile ? 28 : 40, color: C.text, margin: "0 0 8px", fontWeight: 700 }}>9 cute pets to collect</h2>
+            <p style={{ fontSize: 18, color: C.textLight, margin: "0 0 36px" }}>Open mystery packs, feed them, walk them, dress them up.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center" }}>
+              {PET_CATALOG.map((p, i) => {
+                const rarityColor = {
+                  common: C.textLight, uncommon: "#5caa5e", rare: "#5a8fc7",
+                  epic: "#a060c0", legendary: C.gold, mythic: "#ff6080",
+                }[p.rarity] || C.textLight;
+                return (
+                  <div key={p.id} style={{
+                    width: 110, padding: "16px 8px", borderRadius: 18,
+                    background: `${C.card}dd`, border: `2px solid ${rarityColor}40`,
+                    display: "flex", flexDirection: "column", alignItems: "center",
+                    boxShadow: `0 4px 12px ${rarityColor}15`,
+                  }}>
+                    <div style={{ height: 64, display: "flex", alignItems: "center" }}>
+                      <PetSVG petId={p.id} centered={true} mood="happy" />
+                    </div>
+                    <div style={{ fontSize: 14, color: C.text, fontWeight: 700, marginTop: 6, textAlign: "center", lineHeight: 1.1 }}>{p.name}</div>
+                    <div style={{
+                      fontSize: 10, color: rarityColor, fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4,
+                    }}>{p.rarity}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── SECTION: For Teachers (2-column) ─── */}
+        <section style={{ padding: isMobile ? "48px 20px" : "80px 40px", position: "relative", zIndex: 10 }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 48, alignItems: "center" }}>
+            <div>
+              <p style={{ fontSize: 14, color: C.accent, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", margin: "0 0 8px" }}>For Teachers</p>
+              <h2 style={{ fontSize: isMobile ? 26 : 38, color: C.text, margin: "0 0 16px", fontWeight: 700, lineHeight: 1.15 }}>Built for classrooms,<br />not boardrooms.</h2>
+              <p style={{ fontSize: 16, color: C.textLight, margin: "0 0 24px", lineHeight: 1.55 }}>
+                Skip the spreadsheets. Big A Star handles the busywork so you can focus on teaching.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {[
+                  { ic: "✓", t: "One-click student onboarding", d: "Add students with name, username, password — done." },
+                  { ic: "✓", t: "Upload missions as CSV", d: "Drag in a quiz CSV and assign it to anyone." },
+                  { ic: "✓", t: "Yearbook view", d: "See every student's monkey + completion at a glance." },
+                  { ic: "✓", t: "Per-question wrong-answer tracking", d: "Spot exactly where students struggled, by question." },
+                ].map((f, i) => (
+                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+                      background: `${C.green}25`, color: C.green, fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                    }}>{f.ic}</div>
+                    <div>
+                      <div style={{ fontSize: 17, color: C.text, fontWeight: 700, marginBottom: 2 }}>{f.t}</div>
+                      <div style={{ fontSize: 14, color: C.textLight, lineHeight: 1.4 }}>{f.d}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Right: stylized teacher dashboard mockup */}
+            <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+              <div style={{
+                background: `${C.card}f0`, borderRadius: 24, padding: 24,
+                boxShadow: "0 24px 48px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.05)",
+                border: `2px solid ${C.fur2}30`, width: "100%", maxWidth: 420,
+                transform: "rotate(-1.5deg)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.fur2}30` }}>
+                  <WatercolorIcon name="brand_monkey" size={28} />
+                  <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Class Yearbook</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <MonkeySVG size={56} mood={i % 2 === 0 ? "happy" : "excited"} variant={i} delay={i * 0.2} accessories={i === 1 ? ["crown"] : i === 4 ? ["scarf"] : []} />
+                      <div style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>Student {i}</div>
+                      <div style={{ fontSize: 10, color: C.gold, fontWeight: 700 }}>★ {Math.floor(20 + Math.random() * 40)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── SECTION: Final CTA ─── */}
+        <section style={{ padding: isMobile ? "60px 20px 50px" : "100px 40px 80px", position: "relative", zIndex: 10, background: `${C.water1}15` }}>
+          <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
+            <div style={{ marginBottom: 16 }}>
+              <MonkeySVG size={isMobile ? 100 : 140} mood="excited" variant={1} accessories={["graduationcap"]} />
+            </div>
+            <h2 style={{ fontSize: isMobile ? 28 : 44, color: C.text, margin: "0 0 12px", fontWeight: 700, lineHeight: 1.15 }}>Ready to start?</h2>
+            <p style={{ fontSize: 18, color: C.textLight, margin: "0 0 32px" }}>
+              Sign up free in under a minute. No credit card. No ads.
+            </p>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+              <button onClick={() => { SFX.click(); setShowSignupModal(true); }}
+                style={{
+                  padding: "16px 40px", borderRadius: 16, border: "none", cursor: "pointer",
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                  color: "white", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 22, fontWeight: 700, boxShadow: `0 8px 22px ${C.accent}55`,
+                  transition: "transform 0.2s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px) scale(1.02)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0) scale(1)"}>
+                Sign up free →
+              </button>
+              <button onClick={() => { SFX.click(); setShowLoginModal(true); }}
+                style={{
+                  padding: "16px 32px", borderRadius: 16,
+                  border: `2px solid ${C.fur2}60`, background: `${C.card}ee`,
+                  color: C.text, fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 20, fontWeight: 600, cursor: "pointer",
+                }}>
+                I already have an account
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── FOOTER ─── */}
+        <footer style={{
+          padding: "30px 40px", position: "relative", zIndex: 10,
+          background: `${C.card}80`, borderTop: `1px solid ${C.fur2}30`,
+          textAlign: "center",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 6 }}>
+            <WatercolorIcon name="brand_monkey" size={28} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Big A Star</span>
+          </div>
+          <p style={{ fontSize: 13, color: C.textLight, margin: 0 }}>
+            Made with 🐵 for classrooms · Pronounced ("Big · A · Star") 🌟
+          </p>
+        </footer>
+
+        {/* LOGIN MODAL — opens on click of the "Log in" button */}
+        {showLoginModal && (
+          <div onClick={() => setShowLoginModal(false)}
+            style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              zIndex: 100, padding: 20, backdropFilter: "blur(4px)",
+              animation: "fadeIn 0.2s ease",
+            }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{
+                background: `${C.card}fa`, borderRadius: 28, padding: "40px 48px",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.08)",
+                maxWidth: 420, width: "100%", position: "relative",
+                border: `2px solid ${C.fur2}30`,
+                animation: "modalPop 0.25s ease",
+                maxHeight: "90vh", overflowY: "auto",
+              }}>
+              <button onClick={() => setShowLoginModal(false)}
+                style={{
+                  position: "absolute", top: 14, right: 16, background: "transparent",
+                  border: "none", cursor: "pointer", fontSize: 24, color: C.textLight,
+                  lineHeight: 1, padding: 4,
+                }}>✕</button>
+              <div style={{ textAlign: "center", marginBottom: 22 }}>
+                <div style={{ fontSize: 44, marginBottom: 4 }}>♨️</div>
+                <h2 style={{ fontSize: 28, color: C.text, margin: "0 0 4px", fontWeight: 700 }}>Welcome back!</h2>
+                <p style={{ color: C.textLight, fontSize: 15, margin: 0 }}>Log in to continue</p>
+              </div>
+              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderRadius: 14, overflow: "hidden", border: `2px solid ${C.accent}30` }}>
+                {["teacher", "student"].map(tab => (
+                  <button key={tab} onClick={() => { setLoginTab(tab); setLoginError(""); }}
+                    style={{ flex: 1, padding: "12px 0", border: "none", cursor: "pointer", background: loginTab === tab ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : "transparent", color: loginTab === tab ? "white" : C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 600, transition: "all 0.3s" }}>
+                    {tab === "teacher" ? "🍎 Teacher" : "🐵 Student"}
+                  </button>
+                ))}
+              </div>
+              {/* Google sign-in — available for both teachers and students */}
+              <button onClick={() => handleGoogleSignIn(loginTab)} disabled={signupBusy}
+                style={{
+                  width: "100%", padding: "12px", borderRadius: 12,
+                  border: `2px solid ${C.fur2}50`, background: "white",
+                  color: "#3c4043", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 17, fontWeight: 600, cursor: signupBusy ? "wait" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  marginBottom: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                }}>
+                <GoogleIcon /> {signupBusy ? "Signing in..." : "Continue with Google"}
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0 14px" }}>
+                <div style={{ flex: 1, height: 1, background: `${C.fur2}50` }} />
+                <span style={{ color: C.textLight, fontSize: 13 }}>or</span>
+                <div style={{ flex: 1, height: 1, background: `${C.fur2}50` }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" onKeyDown={e => e.key === "Enter" && handleLogin()} style={inputStyle} />
+                <div style={{ position: "relative" }}>
+                  <input value={password} onChange={e => setPassword(e.target.value)}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    onKeyDown={e => e.key === "Enter" && handleLogin()}
+                    style={{ ...inputStyle, paddingRight: 48, width: "100%", boxSizing: "border-box" }} />
+                  <button type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    style={{
+                      position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                      background: "transparent", border: "none", cursor: "pointer",
+                      fontSize: 20, color: C.textLight, padding: "6px 10px",
+                      lineHeight: 1,
+                    }}>
+                    {showPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+                {loginError && <p style={{ color: C.accentDark, fontSize: 14, margin: 0, textAlign: "center" }}>{loginError}</p>}
+                <button onClick={handleLogin}
+                  style={{ padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 20, fontWeight: 700, boxShadow: `0 6px 16px ${C.accent}50`, transition: "transform 0.2s", marginTop: 4 }}
+                  onMouseEnter={e => e.target.style.transform = "translateY(-2px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}>
+                  Enter the Hot Spring →
+                </button>
+              </div>
+              <p style={{ textAlign: "center", color: C.textLight, fontSize: 12, marginTop: 14, marginBottom: 0 }}>
+                {loginTab === "teacher" ? "Use your teacher credentials" : "Sign in to keep collecting stars"}
+              </p>
+              <p style={{ textAlign: "center", color: C.textLight, fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+                No account? <button onClick={() => { setShowLoginModal(false); setSignupRole(loginTab); setShowSignupModal(true); }}
+                  style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 12, padding: 0, textDecoration: "underline" }}>Sign up</button>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* SIGN UP MODAL — both teachers and students can sign up */}
+        {showSignupModal && (
+          <div onClick={() => setShowSignupModal(false)}
+            style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              zIndex: 100, padding: 20, backdropFilter: "blur(4px)",
+              animation: "fadeIn 0.2s ease",
+            }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{
+                background: `${C.card}fa`, borderRadius: 28, padding: "40px 48px",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.08)",
+                maxWidth: 440, width: "100%", position: "relative",
+                border: `2px solid ${C.fur2}30`,
+                animation: "modalPop 0.25s ease",
+                maxHeight: "90vh", overflowY: "auto",
+              }}>
+              <button onClick={() => setShowSignupModal(false)}
+                style={{
+                  position: "absolute", top: 14, right: 16, background: "transparent",
+                  border: "none", cursor: "pointer", fontSize: 24, color: C.textLight,
+                  lineHeight: 1, padding: 4,
+                }}>✕</button>
+              <div style={{ textAlign: "center", marginBottom: 18 }}>
+                <WatercolorIcon name="brand_monkey" size={56} />
+                <h2 style={{ fontSize: 26, color: C.text, margin: "8px 0 4px", fontWeight: 700 }}>
+                  Create your account
+                </h2>
+                <p style={{ color: C.textLight, fontSize: 13, margin: 0 }}>
+                  Pick how you'll use Big A Star
+                </p>
+              </div>
+
+              {/* Role tabs — Teacher / Student */}
+              <div style={{ display: "flex", gap: 0, marginBottom: 18, borderRadius: 14, overflow: "hidden", border: `2px solid ${C.accent}30` }}>
+                {[
+                  { id: "teacher", label: "🍎 Teacher" },
+                  { id: "student", label: "🐵 Student" },
+                ].map(r => (
+                  <button key={r.id} onClick={() => { setSignupRole(r.id); setSignupError(""); }}
+                    style={{
+                      flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
+                      background: signupRole === r.id ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : "transparent",
+                      color: signupRole === r.id ? "white" : C.text,
+                      fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 16, fontWeight: 600, transition: "all 0.3s",
+                    }}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Role-specific subtitle */}
+              <p style={{ textAlign: "center", color: C.textLight, fontSize: 13, margin: "0 0 16px", lineHeight: 1.4 }}>
+                {signupRole === "teacher"
+                  ? "Free account to manage your classroom — add students, set rewards, upload missions."
+                  : "Join your classroom — earn ★ stars, customize your monkey, soak in the hot spring."}
+              </p>
+
+              {/* Google sign-up button */}
+              <button onClick={() => handleGoogleSignIn(signupRole)} disabled={signupBusy}
+                style={{
+                  width: "100%", padding: "13px", borderRadius: 12,
+                  border: `2px solid ${C.fur2}50`, background: "white",
+                  color: "#3c4043", fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 17, fontWeight: 600, cursor: signupBusy ? "wait" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  marginBottom: 14, boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                  transition: "transform 0.2s, box-shadow 0.2s",
+                }}
+                onMouseEnter={e => { if (!signupBusy) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.12)"; } }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}>
+                <GoogleIcon /> {signupBusy ? "Signing in..." : `Sign up with Google${signupRole === "student" ? " (school account)" : ""}`}
+              </button>
+
+              {/* OR divider */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 14px" }}>
+                <div style={{ flex: 1, height: 1, background: `${C.fur2}50` }} />
+                <span style={{ color: C.textLight, fontSize: 13 }}>or sign up manually</span>
+                <div style={{ flex: 1, height: 1, background: `${C.fur2}50` }} />
+              </div>
+
+              {/* Manual sign-up form — labels & placeholders depend on role */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <input value={signupName} onChange={e => setSignupName(e.target.value)}
+                  placeholder={signupRole === "teacher" ? "Your name (e.g. Ms. Smith)" : "Your name (e.g. Lily)"}
+                  style={inputStyle} />
+                <input value={signupUser} onChange={e => setSignupUser(e.target.value)}
+                  placeholder="Username" style={inputStyle} />
+                <input value={signupPass} onChange={e => setSignupPass(e.target.value)}
+                  type="password" placeholder="Password (4+ chars)"
+                  onKeyDown={e => e.key === "Enter" && handleManualSignup()}
+                  style={inputStyle} />
+                {signupError && <p style={{ color: C.accentDark, fontSize: 14, margin: 0, textAlign: "center" }}>{signupError}</p>}
+                <button onClick={handleManualSignup} disabled={signupBusy}
+                  style={{ padding: "14px", borderRadius: 14, border: "none", cursor: signupBusy ? "wait" : "pointer", background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700, boxShadow: `0 6px 16px ${C.accent}50`, transition: "transform 0.2s", marginTop: 4, opacity: signupBusy ? 0.7 : 1 }}
+                  onMouseEnter={e => { if (!signupBusy) e.target.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={e => e.target.style.transform = "translateY(0)"}>
+                  {signupBusy ? "Creating account..." : `Create my ${signupRole} account →`}
+                </button>
+              </div>
+              <p style={{ textAlign: "center", color: C.textLight, fontSize: 12, marginTop: 14, marginBottom: 0 }}>
+                Already have an account? <button onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }}
+                  style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 12, padding: 0, textDecoration: "underline" }}>Log in</button>
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   // Speech-bubble message generator for the BirdFlock — provides reminders for students
   // and update notifications for teachers. Memoized so the flock effect doesn't churn.
+
+  /* ─── Star user helpers (computed for the current user) ─── */
+  const isStarUser = isStarUserCheck(user, teachers);
+
+  /* ─── LIVE GAME: subscribe to RTDB whenever liveGameCode is set ─── */
+  useEffect(() => {
+    if (!liveGameCode) {
+      setLiveGame(null);
+      return;
+    }
+    const unsub = watchLiveGame(liveGameCode, (game) => {
+      setLiveGame(game);
+      // If the host ended the game (status flips), keep showing the result screen.
+      // If the game disappeared entirely (host closed), drop the player back home.
+      if (!game) {
+        setLiveGameCode(null);
+        setLivePlayerId(null);
+        setShowHostGame(false);
+      }
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [liveGameCode]);
+
+  /* ─── HOST: create + open a live game from a study pack ─── */
+  const handleHostGame = async (pack) => {
+    if (!pack || !pack.questions?.length) {
+      notify("This pack has no questions.", "error"); return;
+    }
+    try {
+      const code = await createLiveGame({
+        hostId: user?.id || "anon",
+        hostName: user?.name || user?.username || "Teacher",
+        pack, mode: "restaurant",
+      });
+      setLiveGameCode(code);
+      setHostingPack(pack);
+      setShowHostGame(true);
+      setShowStudyPacks(false);
+      setPreviewPack(null);
+      SFX.click();
+    } catch (e) {
+      console.error("Host game failed:", e);
+      notify("Could not create game. Try again.", "error");
+    }
+  };
+
+  const handleAdvanceQuestion = async () => {
+    if (!liveGameCode || !liveGame) return;
+    try {
+      if (liveGame.status === "lobby") {
+        await startLiveGame(liveGameCode);
+      } else {
+        const next = (liveGame.currentQuestionIdx || 0) + 1;
+        const total = liveGame.pack?.questions?.length || 0;
+        if (next >= total) {
+          await endLiveGame(liveGameCode);
+        } else {
+          await advanceLiveGameQuestion(liveGameCode, next);
+        }
+      }
+    } catch (e) { console.error("Advance failed:", e); }
+  };
+
+  const handleEndGame = async () => {
+    if (!liveGameCode) return;
+    try { await endLiveGame(liveGameCode); } catch {}
+  };
+
+  const handleCloseHost = async () => {
+    if (liveGameCode) {
+      try { await deleteLiveGame(liveGameCode); } catch {}
+    }
+    setLiveGameCode(null);
+    setHostingPack(null);
+    setShowHostGame(false);
+    setLiveGame(null);
+  };
+
+  /* ─── PLAYER: join an existing game ─── */
+  const handleJoinGame = async (code, name) => {
+    const playerId = await joinLiveGame(code, {
+      name,
+      monkeyVariant: ((user?.monkeyVariant) || (Math.floor(Math.random() * 4) + 1)),
+    });
+    setLiveGameCode(code);
+    setLivePlayerId(playerId);
+    setShowJoinGame(false);
+  };
+
+  const handleLeaveGame = () => {
+    setLiveGameCode(null);
+    setLivePlayerId(null);
+    setLiveGame(null);
+  };
+
+  // Open Stripe Checkout in a new tab (Payment Link is a Stripe-hosted page)
+  const startStarCheckout = (plan) => {
+    const teacherId = user?.id;
+    const email = user?.email || user?.username;
+    const url = buildStripeCheckoutUrl(plan, teacherId, email);
+    if (!url) {
+      notify("Stripe is not yet configured. See STRIPE_SETUP.md.", "error");
+      return;
+    }
+    SFX.click();
+    window.open(url, "_blank", "noopener");
+  };
+
+  /* ─── Study pack handlers ─── */
+  const handleAssignStudyPack = async (pack, studentIds) => {
+    // Convert a study pack into a personal mission for each selected student.
+    if (!studentIds || studentIds.length === 0) return;
+    try {
+      for (const sid of studentIds) {
+        const newMission = {
+          id: `mission_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: pack.title,
+          points: 5,
+          questions: pack.questions || [],
+          fromStudyPack: pack.id,
+          assignedAt: new Date().toISOString(),
+        };
+        const existing = missions[sid] || [];
+        const updated = [...existing, newMission];
+        await setMissionsForStudent(sid, updated);
+        setMissions(prev => ({ ...prev, [sid]: updated }));
+      }
+      notify(`✓ Assigned "${pack.title}" to ${studentIds.length} student${studentIds.length === 1 ? "" : "s"}`, "success");
+      setShowStudyPacks(false);
+      setPreviewPack(null);
+    } catch (e) {
+      console.error("Assign study pack failed:", e);
+      notify("Failed to assign pack. Try again.", "error");
+    }
+  };
+
+  const handleUploadStudyPack = async (file) => {
+    // Teacher uploads a CSV → admin path. Reuses the existing parseCSV helper
+    // (same parser used for missions/quizzes throughout the app).
+    //
+    // The CSV may optionally include METADATA rows at the very top to set
+    // curriculum/grade/subject/topic for the pack. Format:
+    //   #title: Grade 5 Fractions
+    //   #curriculum: Common Core
+    //   #grade: Grade 5
+    //   #subject: Math
+    //   #topic: Fractions
+    //   #standardCode: 5.NF.B.4
+    //   #icon: 🔢
+    //   #tags: fractions, decimals, ratios
+    //   #isFree: true
+    //   question,a,b,c,d,correct
+    //   ...
+    // Lines starting with `#` are treated as metadata, the rest is regular CSV.
+    if (!file) return;
+    try {
+      const rawText = await file.text();
+      // Extract metadata header lines
+      const meta = {};
+      const csvLines = [];
+      let inHeader = true;
+      for (const line of rawText.split(/\r?\n/)) {
+        if (inHeader && line.trim().startsWith("#")) {
+          const m = line.match(/^#\s*(\w+)\s*:\s*(.+)$/);
+          if (m) meta[m[1].toLowerCase()] = m[2].trim();
+        } else if (line.trim()) {
+          inHeader = false;
+          csvLines.push(line);
+        }
+      }
+      const csvText = csvLines.join("\n");
+      const questions = parseCSV(csvText);
+      if (!questions || questions.length === 0) {
+        notify("CSV is empty or wrong format. Need columns: question, a, b, c, d, correct", "error");
+        return;
+      }
+      const tagsRaw = meta.tags || "";
+      const tags = tagsRaw ? tagsRaw.split(",").map(t => t.trim()).filter(Boolean) : [];
+      const fallbackTitle = file.name.replace(/\.csv$/i, "").replace(/[_-]/g, " ");
+      const pack = await addStudyPack({
+        title: meta.title || fallbackTitle,
+        questions,
+        curriculum: meta.curriculum || "",
+        gradeLevel: meta.grade || meta.gradelevel || "",
+        subject: meta.subject || "General",
+        topic: meta.topic || "",
+        standardCode: meta.standardcode || meta.code || "",
+        description: meta.description || `${questions.length} questions`,
+        icon: meta.icon || "📚",
+        tags,
+        isFree: (meta.isfree || "").toLowerCase() === "true",
+      });
+      setStudyPacks(prev => [...prev, pack]);
+      const tagInfo = pack.curriculum || pack.subject ? ` (${[pack.curriculum, pack.subject].filter(Boolean).join(" · ")})` : "";
+      notify(`✓ Uploaded "${pack.title}"${tagInfo} — ${questions.length} questions`, "success");
+    } catch (e) {
+      console.error("Upload pack failed:", e);
+      notify("Failed to upload CSV. Check the format.", "error");
+    }
+  };
+
+  const handleDeleteStudyPack = async (packId) => {
+    if (!window.confirm("Delete this study pack? Already-assigned missions stay.")) return;
+    try {
+      await deleteStudyPack(packId);
+      setStudyPacks(prev => prev.filter(p => p.id !== packId));
+      notify("Study pack deleted.", "success");
+    } catch {
+      notify("Failed to delete pack.", "error");
+    }
+  };
+
   /* ── TEACHER ── */
   if (screen === "teacher") {
     const sel = students.find(s => s.id === selectedStudent);
@@ -11301,13 +14034,29 @@ function SnowMonkeyTrackerInner() {
             {notification.msg}
           </div>
         )}
-        {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20` }}>
-          <div>
-            <h1 style={{ fontSize: 26, color: C.text, margin: 0 }}>♨️ Monkey Hot Spring</h1>
-            <p style={{ color: C.textLight, margin: 0, fontSize: 14 }}>Welcome, {user?.name}! · {students.length} student{students.length !== 1 ? "s" : ""}</p>
+        {/* Top bar — 3-column flex: left brand, center title, right controls */}
+        <div style={{ display: "flex", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20`, gap: 12 }}>
+          {/* LEFT: Big A Star brand + welcome */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <WatercolorIcon name="brand_monkey" size={32} />
+              <span style={{
+                fontSize: 20, fontWeight: 700, color: C.text,
+                fontFamily: "'Patrick Hand', cursive",
+                letterSpacing: 0.3,
+              }}>Big A Star</span>
+            </div>
+            <p style={{ color: C.textLight, margin: 0, fontSize: 13 }}>Welcome, {user?.name}! · {students.length} student{students.length !== 1 ? "s" : ""}</p>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* CENTER: title — flex:0 so it only takes content width and stays centered between equal-width sides */}
+          <h1 style={{
+            flex: "0 0 auto",
+            fontSize: 24, color: C.text, margin: 0,
+            fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}>♨️ Monkey Hot Spring</h1>
+          {/* RIGHT: controls */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
             <button onClick={toggleTheme}
               title={themeTitle}
               style={{
@@ -11345,6 +14094,8 @@ function SnowMonkeyTrackerInner() {
               {showPoints ? "★" : "☆"}
             </button>
             {[
+              { label: "📚 Packs", active: showStudyPacks, fn: () => { SFX.click(); setShowStudyPacks(true); }, c: C.gold },
+              { label: "📖 Overview", active: showOverview, fn: () => { SFX.click(); setShowOverview(true); }, c: C.water1 },
               { label: "📋 Manage", active: showManage, fn: () => { SFX.click(); setShowManage(!showManage); setShowAddStudent(false); }, c: C.accent },
               { label: "➕ Add", active: showAddStudent, fn: () => { SFX.click(); setShowAddStudent(!showAddStudent); setShowManage(false); }, c: C.green },
               { label: "🚪 Logout", active: false, fn: logout, c: C.textLight },
@@ -11353,6 +14104,17 @@ function SnowMonkeyTrackerInner() {
                 {b.label}
               </button>
             ))}
+            {/* Star badge — shown on the brand row when teacher is a Star user */}
+            {isStarUser && (
+              <span title="Star User · Premium" style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "6px 12px", borderRadius: 999,
+                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                color: "white", fontSize: 13, fontWeight: 700,
+                boxShadow: `0 3px 10px ${C.gold}50`,
+                fontFamily: "'Patrick Hand', cursive",
+              }}>⭐ Star</span>
+            )}
           </div>
         </div>
 
@@ -11366,6 +14128,64 @@ function SnowMonkeyTrackerInner() {
             <button onClick={addStudent} style={{ width: "100%", padding: 13, borderRadius: 14, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, marginTop: 4 }}>Add to Hot Spring!</button>
           </div>
         )}
+        {/* TEACHER OVERVIEW — yearbook view of every student's progress */}
+        {showOverview && (
+          <TeacherOverview
+            students={students}
+            missions={missions}
+            onClose={() => setShowOverview(false)}
+            onViewMissionResults={(studentId, missionId) => setMissionResultsTarget({ studentId, missionId })}
+          />
+        )}
+
+        {/* STUDY PACKS BROWSER */}
+        {showStudyPacks && (
+          <StudyPacksBrowser
+            packs={studyPacks}
+            students={students}
+            missions={missions}
+            isStar={isStarUser}
+            isAdmin={user?.username === "teacher" || user?.isAdmin}
+            onClose={() => { setShowStudyPacks(false); setPreviewPack(null); }}
+            onPreview={(pack) => setPreviewPack(pack)}
+            onUpgrade={() => setShowStarUpgrade(true)}
+            onUploadCSV={handleUploadStudyPack}
+            onDeletePack={handleDeleteStudyPack}
+          />
+        )}
+
+        {/* PACK PREVIEW (inside the browser) */}
+        {previewPack && (
+          <PackPreviewModal
+            pack={previewPack}
+            students={students}
+            onAssign={handleAssignStudyPack}
+            onHostLive={handleHostGame}
+            onClose={() => setPreviewPack(null)}
+          />
+        )}
+
+        {/* RESTAURANT HOST VIEW — fullscreen control panel */}
+        {showHostGame && liveGameCode && (
+          <RestaurantHostView
+            game={liveGame}
+            code={liveGameCode}
+            onAdvance={handleAdvanceQuestion}
+            onEnd={handleEndGame}
+            onClose={handleCloseHost}
+          />
+        )}
+
+        {/* STAR UPGRADE MODAL */}
+        {showStarUpgrade && (
+          <StarUpgradeModal
+            currentUser={user}
+            role="teacher"
+            onClose={() => setShowStarUpgrade(false)}
+            onCheckout={(plan) => { startStarCheckout(plan); setShowStarUpgrade(false); }}
+          />
+        )}
+
         {showManage && (
           <div style={{ position: "absolute", top: 72, right: 28, zIndex: 30, background: C.card, borderRadius: 22, padding: 24, width: 420, boxShadow: "0 16px 48px rgba(0,0,0,0.15)", border: `2px solid ${C.accent}30`, maxHeight: "82vh", overflowY: "auto" }}>
             <h3 style={{ margin: "0 0 14px", color: C.text, fontSize: 22 }}>Student List</h3>
@@ -12013,16 +14833,32 @@ function SnowMonkeyTrackerInner() {
         <WatercolorFilters /><GlobalKeyframes /><SnowParticles />
 
         {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <h1 style={{ fontSize: 26, color: C.text, margin: 0 }}>♨️ Monkey Hot Spring</h1>
-            <div style={{ background: `${C.gold}18`, borderRadius: 12, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 18, color: C.text, fontWeight: 600 }}>{me?.name}</span>
-              <span style={{ fontSize: 18, color: C.gold, fontWeight: 700 }}>★ {me?.points || 0}</span>
-              <span style={{ fontSize: 14, color: C.accent, fontWeight: 600 }}>#{rank}</span>
+        <div style={{ display: "flex", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20`, gap: 12 }}>
+          {/* LEFT: Big A Star brand + student stats pill */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <WatercolorIcon name="brand_monkey" size={32} />
+              <span style={{
+                fontSize: 20, fontWeight: 700, color: C.text,
+                fontFamily: "'Patrick Hand', cursive",
+                letterSpacing: 0.3,
+              }}>Big A Star</span>
+            </div>
+            <div style={{ background: `${C.gold}18`, borderRadius: 12, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start" }}>
+              <span style={{ fontSize: 16, color: C.text, fontWeight: 600 }}>{me?.name}</span>
+              <span style={{ fontSize: 16, color: C.gold, fontWeight: 700 }}>★ {me?.points || 0}</span>
+              <span style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>#{rank}</span>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* CENTER: title — flex:0 stays centered between equal-width sides */}
+          <h1 style={{
+            flex: "0 0 auto",
+            fontSize: 24, color: C.text, margin: 0,
+            fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}>♨️ Monkey Hot Spring</h1>
+          {/* RIGHT: controls */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
             <button onClick={toggleTheme}
               title={themeTitle}
               style={{
@@ -12059,9 +14895,121 @@ function SnowMonkeyTrackerInner() {
               }}>
               {showPoints ? "★" : "☆"}
             </button>
+            <button onClick={() => { SFX.click(); setShowStudyPacks(true); }}
+              title="Study Packs"
+              style={{
+                padding: "9px 14px", borderRadius: 12,
+                border: `2px solid ${C.gold}40`, background: `${C.gold}15`,
+                color: "#a07820", fontFamily: "'Patrick Hand', cursive",
+                fontSize: 15, cursor: "pointer", fontWeight: 700,
+              }}>
+              📚 Packs
+            </button>
+            <button onClick={() => { SFX.click(); setShowJoinGame(true); }}
+              title="Join a live game"
+              style={{
+                padding: "9px 14px", borderRadius: 12,
+                border: `2px solid ${C.accent}60`,
+                background: `linear-gradient(135deg, ${C.accent}15, ${C.accent}25)`,
+                color: C.accent, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 15, cursor: "pointer", fontWeight: 700,
+              }}>
+              🍜 Join Live
+            </button>
+            {isStarUser && (
+              <span title="Star User · Premium" style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "8px 12px", borderRadius: 999,
+                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                color: "white", fontSize: 13, fontWeight: 700,
+                boxShadow: `0 3px 10px ${C.gold}50`,
+                fontFamily: "'Patrick Hand', cursive",
+              }}>⭐ Star</span>
+            )}
             <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
           </div>
         </div>
+
+        {/* STUDENT: Study Packs Browser (read-only — students can't assign or upload) */}
+        {showStudyPacks && (
+          <StudyPacksBrowser
+            packs={studyPacks}
+            students={[]}              // students don't see other students
+            missions={missions}
+            isStar={isStarUser}
+            isAdmin={false}            // students can't upload/delete
+            studentMode={true}         // disables "assign" — students just play packs
+            onClose={() => { setShowStudyPacks(false); setPreviewPack(null); }}
+            onPreview={(pack) => setPreviewPack(pack)}
+            onUpgrade={() => setShowStarUpgrade(true)}
+            onUploadCSV={() => {}}
+            onDeletePack={() => {}}
+          />
+        )}
+
+        {/* STUDENT: Pack preview — converts to a personal mission for THIS student */}
+        {previewPack && (
+          <PackPreviewModal
+            pack={previewPack}
+            students={[]}
+            studentMode={true}
+            onAssign={async (pack) => {
+              // Self-assign: pack becomes a personal mission for this student
+              if (!user?.id) return;
+              try {
+                const newMission = {
+                  id: `mission_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  name: pack.title,
+                  points: 5,
+                  questions: pack.questions || [],
+                  fromStudyPack: pack.id,
+                  assignedAt: new Date().toISOString(),
+                  selfAssigned: true,
+                };
+                const existing = missions[user.id] || [];
+                const updated = [...existing, newMission];
+                await setMissionsForStudent(user.id, updated);
+                setMissions(prev => ({ ...prev, [user.id]: updated }));
+                notify(`✓ Added "${pack.title}" to your missions!`, "success");
+                setPreviewPack(null);
+                setShowStudyPacks(false);
+              } catch (e) {
+                notify("Failed to start pack. Try again.", "error");
+              }
+            }}
+            onClose={() => setPreviewPack(null)}
+          />
+        )}
+
+        {/* STUDENT: Star upgrade modal */}
+        {showStarUpgrade && (
+          <StarUpgradeModal
+            currentUser={user}
+            role="student"
+            onClose={() => setShowStarUpgrade(false)}
+            onCheckout={(plan) => { startStarCheckout(plan); setShowStarUpgrade(false); }}
+          />
+        )}
+
+        {/* STUDENT: Join live game modal */}
+        {showJoinGame && (
+          <JoinGameModal
+            defaultName={user?.name || ""}
+            onJoin={handleJoinGame}
+            onClose={() => setShowJoinGame(false)}
+          />
+        )}
+
+        {/* STUDENT: Live restaurant player view (full-screen takeover) */}
+        {liveGameCode && livePlayerId && (
+          <RestaurantPlayerView
+            game={liveGame}
+            playerId={livePlayerId}
+            code={liveGameCode}
+            monkeyVariant={user?.monkeyVariant || 1}
+            onLeave={handleLeaveGame}
+          />
+        )}
 
         {/* Wordle modal */}
         {showWordle && <WordleGame onWin={handleWordleWin} onLose={handleWordleLose} onClose={() => setShowWordle(false)} />}
@@ -12236,6 +15184,14 @@ function SnowMonkeyTrackerInner() {
                     color: "#5a8fc7",
                     progress: null, // Quiz mode has no save/resume — just answer all questions
                   },
+                  {
+                    id: "tetris",
+                    emoji: "🎮",
+                    title: "Tetris",
+                    desc: "Classic falling blocks. Clear lines to unlock questions.",
+                    color: "#5ac8e8",
+                    progress: completions[`mission:${gameTypeChoiceMission.id}:tetris`]?.progress || null,
+                  },
                 ];
                 return (
                   <div style={{ display: "grid", gap: 10 }}>
@@ -12345,6 +15301,19 @@ function SnowMonkeyTrackerInner() {
                 studentId={me.id}
                 studentName={me.name}
                 mission={activeMission}
+                onClose={closeFn}
+                onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onShop={() => setShowFoodShop(true)}
+              />
+            );
+          }
+          if (gameType === "tetris") {
+            const savedProgress = me.completions?.[progressKey]?.progress || null;
+            return (
+              <TetrisGame
+                studentName={me.name}
+                mission={activeMission}
+                savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onShop={() => setShowFoodShop(true)}
@@ -12975,15 +15944,48 @@ function SnowMonkeyTrackerInner() {
                     <strong style={{ color: C.gold, fontSize: 18 }}>+{packResult.consolationStars} ★</strong> consolation stars!
                   </div>
                 ) : (
-                  <div style={{
-                    background: `${C.green}20`, borderRadius: 12, padding: "10px 14px",
-                    marginBottom: 14, fontSize: 14, color: C.green, fontWeight: 700,
-                  }}>
-                    🎉 New companion unlocked!
-                  </div>
+                  <>
+                    <div style={{
+                      background: `${C.green}20`, borderRadius: 12, padding: "10px 14px",
+                      marginBottom: 12, fontSize: 14, color: C.green, fontWeight: 700,
+                    }}>
+                      🎉 New companion unlocked!
+                    </div>
+                    {/* Nickname input — only for newly-unlocked pets */}
+                    <div style={{
+                      background: `${C.water1}10`, borderRadius: 12, padding: "12px 14px",
+                      marginBottom: 14, border: `1.5px solid ${C.water1}40`,
+                    }}>
+                      <label style={{ fontSize: 13, color: C.textLight, fontWeight: 700, display: "block", marginBottom: 6, textAlign: "left" }}>
+                        ✏️ Give them a name (optional)
+                      </label>
+                      <input
+                        value={petNicknameInput}
+                        onChange={(e) => setPetNicknameInput(e.target.value)}
+                        maxLength={20}
+                        placeholder={`e.g. Sparkles, Buddy, ${pet.name}...`}
+                        style={{
+                          width: "100%", padding: "10px 12px", borderRadius: 10,
+                          border: `2px solid ${C.fur2}40`, background: C.card,
+                          fontSize: 15, fontFamily: "'Patrick Hand', cursive",
+                          color: C.text, boxSizing: "border-box", textAlign: "center",
+                        }}
+                      />
+                      <p style={{ fontSize: 11, color: C.textLight, margin: "6px 0 0", lineHeight: 1.3 }}>
+                        Leave blank to keep the default name. You can rename anytime in the Hot Spring.
+                      </p>
+                    </div>
+                  </>
                 )}
 
-                <button onClick={() => setPackResult(null)}
+                <button onClick={() => {
+                  // Save nickname if user typed one (only for new pets)
+                  if (!packResult.isDuplicate && petNicknameInput.trim()) {
+                    setPetNickname(me.id, pet.id, petNicknameInput);
+                  }
+                  setPetNicknameInput("");
+                  setPackResult(null);
+                }}
                   style={{
                     padding: "12px 28px", borderRadius: 14, border: "none",
                     background: `linear-gradient(135deg, ${rarityColor}, ${rarityColor}cc)`,
@@ -12991,7 +15993,7 @@ function SnowMonkeyTrackerInner() {
                     fontSize: 17, fontWeight: 700, cursor: "pointer",
                     boxShadow: `0 4px 14px ${rarityColor}60`,
                   }}>
-                  Awesome!
+                  {packResult.isDuplicate ? "Awesome!" : (petNicknameInput.trim() ? `Welcome ${petNicknameInput.trim()}!` : "Awesome!")}
                 </button>
               </div>
             </div>
