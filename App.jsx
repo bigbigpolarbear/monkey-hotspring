@@ -12247,6 +12247,26 @@ function SnowMonkeyTrackerInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ─── LIVE GAME: subscribe to RTDB whenever liveGameCode is set.
+     This MUST live up here with the other top-level hooks (before any early
+     return) — putting it below `if (loading) return ...` would make React's
+     hook count change between renders and trigger error #310. */
+  useEffect(() => {
+    if (!liveGameCode) {
+      setLiveGame(null);
+      return;
+    }
+    const unsub = watchLiveGame(liveGameCode, (game) => {
+      setLiveGame(game);
+      if (!game) {
+        setLiveGameCode(null);
+        setLivePlayerId(null);
+        setShowHostGame(false);
+      }
+    });
+    return () => { try { unsub(); } catch {} };
+  }, [liveGameCode]);
+
   const persist = useCallback(async (newT, newS, newQ, newM) => {
     if (newT) { setTeachers(newT); }
     if (newS) {
@@ -13812,25 +13832,6 @@ function SnowMonkeyTrackerInner() {
 
   /* ─── Star user helpers (computed for the current user) ─── */
   const isStarUser = isStarUserCheck(user, teachers);
-
-  /* ─── LIVE GAME: subscribe to RTDB whenever liveGameCode is set ─── */
-  useEffect(() => {
-    if (!liveGameCode) {
-      setLiveGame(null);
-      return;
-    }
-    const unsub = watchLiveGame(liveGameCode, (game) => {
-      setLiveGame(game);
-      // If the host ended the game (status flips), keep showing the result screen.
-      // If the game disappeared entirely (host closed), drop the player back home.
-      if (!game) {
-        setLiveGameCode(null);
-        setLivePlayerId(null);
-        setShowHostGame(false);
-      }
-    });
-    return () => { try { unsub(); } catch {} };
-  }, [liveGameCode]);
 
   /* ─── HOST: create + open a live game from a study pack ─── */
   const handleHostGame = async (pack) => {
