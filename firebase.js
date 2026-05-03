@@ -17,7 +17,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const rtdb = getDatabase(app);
+
+// Realtime Database is initialized lazily and wrapped in try/catch so the
+// app keeps working even if RTDB hasn't been enabled in Firebase Console yet.
+// Live game features will simply throw a friendly error if RTDB is unavailable.
+let rtdb = null;
+try {
+  rtdb = getDatabase(app);
+} catch (e) {
+  console.warn("Realtime Database not available — live games disabled:", e?.message);
+}
+function requireRtdb() {
+  if (!rtdb) throw new Error("Live games require Firebase Realtime Database to be enabled. See LIVE_GAMES_GUIDE.md");
+  return rtdb;
+}
 
 /* ─── Database helpers ─── */
 
@@ -267,7 +280,7 @@ export async function createLiveGame({ hostId, hostName, pack, mode = "restauran
   // Try a few times in case of collision
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateGameCode();
-    const gameRef = ref(rtdb, `liveGames/${code}`);
+    const gameRef = ref(requireRtdb(), `liveGames/${code}`);
     const snap = await get(gameRef);
     if (snap.exists()) continue; // Collision, retry
     await set(gameRef, {
@@ -289,7 +302,7 @@ export async function createLiveGame({ hostId, hostName, pack, mode = "restauran
 
 // Subscribe to live game state. Returns an unsubscribe function.
 export function watchLiveGame(code, callback) {
-  const gameRef = ref(rtdb, `liveGames/${code}`);
+  const gameRef = ref(requireRtdb(), `liveGames/${code}`);
   const unsub = onValue(gameRef, (snap) => {
     callback(snap.exists() ? snap.val() : null);
   });
@@ -298,13 +311,13 @@ export function watchLiveGame(code, callback) {
 
 // Player joins a live game. Returns the playerId on success.
 export async function joinLiveGame(code, { name, monkeyVariant }) {
-  const gameRef = ref(rtdb, `liveGames/${code}`);
+  const gameRef = ref(requireRtdb(), `liveGames/${code}`);
   const snap = await get(gameRef);
   if (!snap.exists()) throw new Error("Game not found");
   const game = snap.val();
   if (game.status !== "lobby") throw new Error("Game already started");
   // Push a new player record
-  const playersRef = ref(rtdb, `liveGames/${code}/players`);
+  const playersRef = ref(requireRtdb(), `liveGames/${code}/players`);
   const playerRef = push(playersRef);
   const playerId = playerRef.key;
   await set(playerRef, {
@@ -326,7 +339,7 @@ export async function joinLiveGame(code, { name, monkeyVariant }) {
 
 // Host starts the game (status → "playing")
 export async function startLiveGame(code) {
-  await update(ref(rtdb, `liveGames/${code}`), {
+  await update(ref(requireRtdb(), `liveGames/${code}`), {
     status: "playing",
     currentQuestionIdx: 0,
     questionStartedAt: serverTimestamp(),
@@ -335,7 +348,7 @@ export async function startLiveGame(code) {
 
 // Advance to next question (host only)
 export async function advanceLiveGameQuestion(code, nextIdx) {
-  await update(ref(rtdb, `liveGames/${code}`), {
+  await update(ref(requireRtdb(), `liveGames/${code}`), {
     currentQuestionIdx: nextIdx,
     questionStartedAt: serverTimestamp(),
   });
@@ -343,12 +356,12 @@ export async function advanceLiveGameQuestion(code, nextIdx) {
 
 // End the game (host only)
 export async function endLiveGame(code) {
-  await update(ref(rtdb, `liveGames/${code}`), { status: "ended" });
+  await update(ref(requireRtdb(), `liveGames/${code}`), { status: "ended" });
 }
 
 // Player submits an answer. Updates score/tips/served/lost.
 export async function submitLiveAnswer(code, playerId, { correct, tipEarned, questionIdx }) {
-  const playerRef = ref(rtdb, `liveGames/${code}/players/${playerId}`);
+  const playerRef = ref(requireRtdb(), `liveGames/${code}/players/${playerId}`);
   const snap = await get(playerRef);
   if (!snap.exists()) return;
   const p = snap.val();
@@ -370,7 +383,7 @@ export async function submitLiveAnswer(code, playerId, { correct, tipEarned, que
 
 // Cleanup helper — host can manually end + delete the game
 export async function deleteLiveGame(code) {
-  await remove(ref(rtdb, `liveGames/${code}`));
+  await remove(ref(requireRtdb(), `liveGames/${code}`));
 }
 
 export { db, rtdb };
