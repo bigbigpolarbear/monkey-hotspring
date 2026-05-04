@@ -198,6 +198,29 @@ function GlobalKeyframes() {
         from { opacity: 0; transform: scale(0.92) translateY(8px); }
         to   { opacity: 1; transform: scale(1) translateY(0); }
       }
+      /* ── Mission game animations (consolidated from inline blocks for perf) ── */
+      @keyframes monkeyShake { 0%,100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-6px) rotate(-5deg); } 75% { transform: translateX(6px) rotate(5deg); } }
+      @keyframes monkeyJoy { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.05); } }
+      @keyframes monkeyLeapEat {
+        0% { transform: translateY(0) scale(1); }
+        30% { transform: translateY(-25px) scale(1.1); }
+        55% { transform: translateY(-35px) scale(1.2); }
+        75% { transform: translateY(-25px) scale(1.15); }
+        90% { transform: translateY(-5px) scale(1.05); }
+        100% { transform: translateY(0) scale(1); }
+      }
+      @keyframes shakeRow { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+      @keyframes examPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+      @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+      @keyframes incomeBadgePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+      @keyframes notifIn { from { opacity:0; transform:translateX(-50%) translateY(-16px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+      @keyframes shhFade { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } to { opacity: 0.5; transform: translateX(-50%) translateY(0); } }
+      @keyframes tipFloat {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+        20% { opacity: 1; transform: translate(-50%, -60%) scale(1.2); }
+        80% { opacity: 1; transform: translate(-50%, -90%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -120%) scale(0.9); }
+      }
     `}</style>
   );
 }
@@ -4180,7 +4203,7 @@ function NearestExamCard({ exam, canEdit, onDelete }) {
           display: "inline-block",
           animation: "examPulse 1.4s ease-in-out infinite",
         }}>
-          <style>{`@keyframes examPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }`}</style>
+          
           🎉 Exam day has arrived!
         </div>
         {canEdit && (
@@ -5874,18 +5897,7 @@ function RestaurantPlayerView({ game, playerId, code, monkeyVariant, onLeave }) 
         )}
       </div>
 
-      <style>{`
-        @keyframes tipFloat {
-          0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
-          20% { opacity: 1; transform: translate(-50%, -60%) scale(1.2); }
-          80% { opacity: 1; transform: translate(-50%, -90%) scale(1); }
-          100% { opacity: 0; transform: translate(-50%, -120%) scale(0.9); }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.08); }
-        }
-      `}</style>
+
     </div>
   );
 }
@@ -8358,7 +8370,7 @@ function PenguinFlock({ activeMsg }) {
           fontFamily: "'Patrick Hand', cursive", zIndex: 7,
           animation: "shhFade 0.4s ease",
         }}>
-          <style>{`@keyframes shhFade { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } to { opacity: 0.5; transform: translateX(-50%) translateY(0); } }`}</style>
+          
           🐧 ...the penguins are watching
         </div>
       )}
@@ -8393,7 +8405,7 @@ function DragonFlock({ activeMsg }) {
           fontFamily: "'Patrick Hand', cursive", zIndex: 7,
           animation: "shhFade 0.4s ease",
         }}>
-          <style>{`@keyframes shhFade { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } to { opacity: 0.5; transform: translateX(-50%) translateY(0); } }`}</style>
+          
           🐲 ...the dragons are watching
         </div>
       )}
@@ -8556,7 +8568,7 @@ function WordleGame({ onWin, onLose, onClose }) {
             const states = guess ? getLetterStates(guess) : null;
             return (
               <div key={row} style={{ display: "flex", gap: 6, animation: isCurrentRow && shake ? "shakeRow 0.4s ease" : "none" }}>
-                <style>{`@keyframes shakeRow { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }`}</style>
+                
                 {Array.from({ length: 5 }, (_, col) => {
                   const letter = guess ? guess[col] : (isCurrentRow ? (current[col] || "") : "");
                   const bg = states ? tileColor[states[col]] : (letter ? `${C.fur2}40` : `${C.snow1}`);
@@ -8987,20 +8999,30 @@ function FoodReward({ onComplete }) {
 }
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
-function QuizGame({ studentId, studentName, quiz, mission, onClose, onComplete, onShop }) {
+function QuizGame({ studentId, studentName, quiz, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
-  const [currentIdx, setCurrentIdx] = useState(0);
+  // Resume from saved progress if present
+  const [currentIdx, setCurrentIdx] = useState(savedProgress?.currentIdx || 0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [showHawk, setShowHawk] = useState(false);
   const [showFood, setShowFood] = useState(false);
-  const [score, setScore] = useState(0);
+  const [score, setScore] = useState(savedProgress?.score || 0);
   const [monkeyShake, setMonkeyShake] = useState(false);
   const [monkeyHappy, setMonkeyHappy] = useState(false);
   const [finished, setFinished] = useState(false);
   const [rewarded, setRewarded] = useState(false);
   // Track which questions were answered wrong, with the chosen answer
-  const [wrongAnswers, setWrongAnswers] = useState([]);
+  const [wrongAnswers, setWrongAnswers] = useState(savedProgress?.wrongAnswers || []);
+
+  // Auto-save progress between questions (cheap — only when currentIdx/score changes)
+  useEffect(() => {
+    if (!onSaveProgress) return;
+    if (finished) return;
+    // Skip the initial save if there's no progress yet
+    if (currentIdx === 0 && score === 0 && wrongAnswers.length === 0) return;
+    onSaveProgress({ currentIdx, score, wrongAnswers });
+  }, [currentIdx, score, wrongAnswers, finished, onSaveProgress]);
 
   // Accept either `quiz` (legacy) or `mission` (current); both share { questions, points } shape
   const source = mission || quiz;
@@ -9065,6 +9087,11 @@ function QuizGame({ studentId, studentName, quiz, mission, onClose, onComplete, 
       setCurrentIdx(i => i + 1);
       setSelected(null);
       setShowResult(false);
+      // Clear any in-flight animation state so the next question starts clean
+      setShowHawk(false);
+      setShowFood(false);
+      setMonkeyShake(false);
+      setMonkeyHappy(false);
     }
   };
 
@@ -9186,18 +9213,7 @@ function QuizGame({ studentId, studentName, quiz, mission, onClose, onComplete, 
             display: "inline-block",
             animation: monkeyShake ? "monkeyShake 0.4s ease infinite" : showFood ? "monkeyLeapEat 2.2s ease-in-out forwards" : monkeyHappy ? "monkeyJoy 0.6s ease infinite" : "none",
           }}>
-            <style>{`
-              @keyframes monkeyShake { 0%,100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-6px) rotate(-5deg); } 75% { transform: translateX(6px) rotate(5deg); } }
-              @keyframes monkeyJoy { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.05); } }
-              @keyframes monkeyLeapEat {
-                0% { transform: translateY(0) scale(1); }
-                30% { transform: translateY(-25px) scale(1.1); }
-                55% { transform: translateY(-35px) scale(1.2); }
-                75% { transform: translateY(-25px) scale(1.15); }
-                90% { transform: translateY(-5px) scale(1.05); }
-                100% { transform: translateY(0) scale(1); }
-              }
-            `}</style>
+
             <MonkeySVG
               size={110}
               mood={showFood ? "eating" : monkeyHappy ? "excited" : monkeyShake ? "neutral" : "happy"}
@@ -9274,8 +9290,8 @@ function QuizGame({ studentId, studentName, quiz, mission, onClose, onComplete, 
                   ? "🎉 Correct! Your monkey gets a treat!"
                   : "🦅 Yikes! A hawk attacked your monkey!"}
               </p>
-              <button onClick={nextQuestion} disabled={showHawk || showFood}
-                style={{ ...primaryBtnStyle, opacity: (showHawk || showFood) ? 0.5 : 1, fontSize: 18, padding: "12px 28px" }}>
+              <button onClick={nextQuestion}
+                style={{ ...primaryBtnStyle, fontSize: 18, padding: "12px 28px" }}>
                 {isLast ? "Finish Quiz" : "Next Question →"}
               </button>
             </div>
@@ -9625,7 +9641,7 @@ function drawObstacle(ctx, x, y, obs, frame) {
   ctx.restore();
 }
 
-function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const stateRef = useRef({
@@ -9667,6 +9683,15 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
   const scoreRef = useRef(initial.score || 0);
   // Track wrong checkpoint answers for the post-mission summary
   const [wrongAnswers, setWrongAnswers] = useState([]);
+
+  // Auto-save progress on question milestones (not every animation frame)
+  useEffect(() => {
+    if (gameOver) return;
+    if (!onSaveProgress) return;
+    if (questionsAnswered === 0 && score === 0) return;
+    onSaveProgress({ questionsAnswered, score, wrongAnswers });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsAnswered, score]);
 
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
@@ -10240,7 +10265,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
 }
 
 
-function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const initial = savedProgress || {};
@@ -10284,6 +10309,15 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
   const totalReward = mission?.points || 5;
   const targetQuestions = questions.length;
   const pipesPerCheckpoint = 4;
+
+  // Auto-save progress on question milestones (not every frame)
+  useEffect(() => {
+    if (gameOver) return;
+    if (!onSaveProgress) return;
+    if (questionsAnswered === 0 && score === 0) return;
+    onSaveProgress({ questionsAnswered, score, wrongAnswers });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsAnswered, score]);
 
   // Responsive canvas size
   useEffect(() => {
@@ -11217,7 +11251,7 @@ function ConfettiBurst({ trigger, count = 60, intensity = "normal" }) {
   );
 }
 
-function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
   const [selected, setSelected] = useState(null); // {r, c}
@@ -11241,18 +11275,15 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
   const targetQuestions = questions.length;
   const CRUSHES_PER_QUESTION = 4;
 
-  // Save progress whenever state changes
+  // Save progress whenever questions-answered or score changes (not on every grid update)
   useEffect(() => {
     if (gameOver) return;
-    if (savedProgress?.questionsAnswered === questionsAnswered && savedProgress?.score === score) return;
-    onComplete && onComplete({
-      pointsEarned: 0,
-      won: false,
-      partial: true,
-      progress: { grid, score, crushCount, questionsAnswered },
-    });
+    if (!onSaveProgress) return;
+    // Don't save on the very first render if there's nothing new
+    if (questionsAnswered === 0 && score === 0 && crushCount === 0) return;
+    onSaveProgress({ grid, score, crushCount, questionsAnswered, wrongAnswers });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionsAnswered]);
+  }, [questionsAnswered, score]);
 
   if (!questions || questions.length === 0) {
     return (
@@ -11735,7 +11766,7 @@ function tetrisCollides(grid, piece) {
   return false;
 }
 
-function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, onShop }) {
+function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
   const targetQuestions = questions.length;
@@ -11759,6 +11790,16 @@ function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, 
   const [paused, setPaused] = useState(false);
   const [flashRows, setFlashRows] = useState([]); // rows currently animating
   const [wrongAnswers, setWrongAnswers] = useState([]);
+
+  // Auto-save progress between question milestones (not on every piece movement,
+  // which would thrash Firestore). Triggers when questionsAnswered or score changes.
+  useEffect(() => {
+    if (gameOver) return;
+    if (!onSaveProgress) return;
+    if (questionsAnswered === 0 && score === 0 && linesCleared === 0) return;
+    onSaveProgress({ grid, score, linesCleared, questionsAnswered, wrongAnswers });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsAnswered, score, linesCleared]);
 
   // Save progress as the player makes progress (on line clear)
   useEffect(() => {
@@ -12167,27 +12208,36 @@ function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, 
   );
 }
 
-function MissionGame({ studentName, mission, onClose, onComplete, onShop }) {
+function MissionGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
-  const [grid, setGrid] = useState(() => Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
-  const [tray, setTray] = useState(() => [generateShape(), generateShape(), generateShape()]);
+  const [grid, setGrid] = useState(() => savedProgress?.grid || Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
+  const [tray, setTray] = useState(() => savedProgress?.tray || [generateShape(), generateShape(), generateShape()]);
   const [selectedShapeIdx, setSelectedShapeIdx] = useState(null);
   const [hoverCell, setHoverCell] = useState(null);
-  const [score, setScore] = useState(0);
+  const [score, setScore] = useState(savedProgress?.score || 0);
   const [showQuestion, setShowQuestion] = useState(false);
   const [pendingPlacement, setPendingPlacement] = useState(null); // { shapeIdx, r, c }
   const [questionIdx, setQuestionIdx] = useState(0);
   const [questionResult, setQuestionResult] = useState(null); // null | 'correct' | 'wrong'
   const [selected, setSelected] = useState(null);
-  const [questionsCompleted, setQuestionsCompleted] = useState(0);
+  const [questionsCompleted, setQuestionsCompleted] = useState(savedProgress?.questionsCompleted || 0);
   const [gameOver, setGameOver] = useState(false);
   const [rewarded, setRewarded] = useState(false);
-  const [wrongAnswers, setWrongAnswers] = useState([]);
+  const [wrongAnswers, setWrongAnswers] = useState(savedProgress?.wrongAnswers || []);
 
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
   // Mission complete when all questions answered correctly
   const targetQuestions = questions.length;
+
+  // Auto-save progress on question milestones
+  useEffect(() => {
+    if (gameOver) return;
+    if (!onSaveProgress) return;
+    if (questionsCompleted === 0 && score === 0) return;
+    onSaveProgress({ grid, tray, score, questionsCompleted, wrongAnswers });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsCompleted, score]);
 
   if (!questions || questions.length === 0) {
     return (
@@ -12949,6 +12999,37 @@ function SnowMonkeyTrackerInner() {
     notify(`🎉 Quiz complete! +${pointsEarned} ★`);
   };
 
+  /* ─── Save mid-game progress for a mission. Lets students leave a game
+     and pick it back up later (per game type, so they can play the same
+     mission's Tetris OR Crush separately and each remembers its own state). */
+  const handleSaveMissionProgress = useCallback(async (missionId, gameType, progress) => {
+    if (!user || !missionId || !gameType) return;
+    try {
+      const completions = { ...(user.completions || {}) };
+      const key = `mission:${missionId}:${gameType}`;
+      const prev = completions[key] || {};
+      // Don't overwrite a completed game's progress
+      if (prev.completed) return;
+      completions[key] = {
+        ...prev,
+        progress,
+        progressSavedAt: new Date().toISOString(),
+      };
+      const newS = students.map(s => s.id === user.id ? { ...s, completions } : s);
+      // Optimistic local update — don't wait for the network. The next
+      // periodic save will flush to Firestore. This is the key to making
+      // mid-game saves feel free.
+      setStudents(newS);
+      setUser(u => u && u.id === user.id ? { ...u, completions } : u);
+      // Async fire-and-forget Firestore write (no await — UI never blocks)
+      updateStudent(user.id, { completions }).catch(e => {
+        console.warn("Background progress save failed:", e?.message);
+      });
+    } catch (e) {
+      console.error("Save progress failed:", e);
+    }
+  }, [user, students]);
+
   const handleMissionComplete = async (result) => {
     if (!user) return;
     const r = (typeof result === "number") ? { pointsEarned: result, won: true } : (result || {});
@@ -13015,7 +13096,9 @@ function SnowMonkeyTrackerInner() {
     persist(null, newS);
     if (won && grantedStars > 0) {
       SFX.levelUp();
-      notify(`🚀 Mission complete! +${grantedStars} ★`);
+      // First-time completion gets a more celebratory message
+      const missionName = activeMission?.name || "mission";
+      notify(`🏆 ${missionName} completed! +${grantedStars} ★`);
     } else if (won && alreadyCompleted) {
       SFX.click();
       notify(`✓ Replayed! (Reward already collected)`, "info");
@@ -14442,7 +14525,7 @@ function SnowMonkeyTrackerInner() {
         <WatercolorFilters /><GlobalKeyframes /><SnowParticles />
         {notification && (
           <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 1000, background: notification.type === "error" ? C.accentDark : C.green, color: "white", padding: "14px 32px", borderRadius: 18, fontSize: 19, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,0.2)", animation: "notifIn 0.35s ease" }}>
-            <style>{`@keyframes notifIn { from { opacity:0; transform:translateX(-50%) translateY(-16px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }`}</style>
+            
             {notification.msg}
           </div>
         )}
@@ -15497,7 +15580,13 @@ function SnowMonkeyTrackerInner() {
                 {myMissions.length === 0 ? (
                   <p style={{ color: C.textLight, textAlign: "center", padding: 20 }}>No missions assigned yet!</p>
                 ) : (
-                  myMissions.map(m => (
+                  myMissions.map(m => {
+                    // Has the student completed this mission in ANY game mode?
+                    const aggKey = `mission:${m.id}`;
+                    const isCompleted = !!me.completions?.[aggKey]?.completed;
+                    const bestScore = me.completions?.[aggKey]?.bestScore;
+                    const totalQs = me.completions?.[aggKey]?.scoreTotal || m.questions.length;
+                    return (
                     <button key={m.id}
                       onClick={() => {
                         // Backward-compat: if mission has a hardcoded old type, run it directly.
@@ -15515,23 +15604,37 @@ function SnowMonkeyTrackerInner() {
                       style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
                         width: "100%", padding: "14px 16px", borderRadius: 12,
-                        background: `${C.green}15`, border: `2px solid ${C.green}40`,
+                        background: isCompleted ? `${C.green}25` : `${C.green}15`,
+                        border: isCompleted ? `2px solid ${C.green}80` : `2px solid ${C.green}40`,
                         cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
                         color: C.text, fontSize: 16, marginBottom: 8, textAlign: "left",
                         transition: "all 0.2s",
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = `${C.green}25`}
-                      onMouseLeave={e => e.currentTarget.style.background = `${C.green}15`}
+                      onMouseEnter={e => e.currentTarget.style.background = isCompleted ? `${C.green}35` : `${C.green}25`}
+                      onMouseLeave={e => e.currentTarget.style.background = isCompleted ? `${C.green}25` : `${C.green}15`}
                     >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 17 }}>{m.name}</div>
-                        <div style={{ fontSize: 12, color: C.textLight }}>{m.questions.length} question{m.questions.length === 1 ? "" : "s"}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 17, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span>{m.name}</span>
+                          {isCompleted && (
+                            <span style={{
+                              fontSize: 11, background: C.green, color: "white",
+                              padding: "2px 8px", borderRadius: 999, fontWeight: 700,
+                            }}>
+                              ✓ Completed{bestScore !== undefined && bestScore !== null ? ` · ${bestScore}/${totalQs}` : ""}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.textLight }}>
+                          {m.questions.length} question{m.questions.length === 1 ? "" : "s"}
+                          {isCompleted && <span style={{ color: C.green, marginLeft: 6 }}>· play again to improve your score</span>}
+                        </div>
                       </div>
-                      <div style={{ background: C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700 }}>
+                      <div style={{ background: isCompleted ? C.green : C.gold, color: "white", padding: "4px 12px", borderRadius: 999, fontSize: 15, fontWeight: 700, marginLeft: 10 }}>
                         ★ {m.points}
                       </div>
                     </button>
-                  ))
+                  );})
                 )}
               </div>
             </div>
@@ -15555,6 +15658,8 @@ function SnowMonkeyTrackerInner() {
               {(() => {
                 // Show progress badges for save/resume game types
                 const completions = me.completions || {};
+                // Aggregate completion (any mode) — for an overall "you've finished this!" banner
+                const aggDone = !!completions[`mission:${gameTypeChoiceMission.id}`]?.completed;
                 const choices = [
                   {
                     id: "blockblast",
@@ -15562,7 +15667,8 @@ function SnowMonkeyTrackerInner() {
                     title: "Block Blast",
                     desc: "Tetris-style puzzle. Place blocks, then answer questions.",
                     color: "#a060c0",
-                    progress: null, // Block Blast has no save/resume
+                    progress: completions[`mission:${gameTypeChoiceMission.id}:blockblast`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:blockblast`]?.completed,
                   },
                   {
                     id: "runner",
@@ -15571,6 +15677,7 @@ function SnowMonkeyTrackerInner() {
                     desc: "Run & jump over fruits. Every 5 fruits = a checkpoint.",
                     color: "#5caa5e",
                     progress: completions[`mission:${gameTypeChoiceMission.id}:runner`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:runner`]?.completed,
                   },
                   {
                     id: "flappy",
@@ -15579,6 +15686,7 @@ function SnowMonkeyTrackerInner() {
                     desc: "Flap between icicles. Every 4 icicles = a checkpoint.",
                     color: "#5a8fc7",
                     progress: completions[`mission:${gameTypeChoiceMission.id}:flappy`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:flappy`]?.completed,
                   },
                   {
                     id: "crush",
@@ -15587,6 +15695,7 @@ function SnowMonkeyTrackerInner() {
                     desc: "Match-3 watercolor tiles. Every 4 crushes = a checkpoint.",
                     color: "#ff90b8",
                     progress: completions[`mission:${gameTypeChoiceMission.id}:crush`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:crush`]?.completed,
                   },
                   {
                     id: "quiz",
@@ -15594,7 +15703,8 @@ function SnowMonkeyTrackerInner() {
                     title: "Quiz Mode",
                     desc: "Classic quiz — read each question and pick the right answer.",
                     color: "#5a8fc7",
-                    progress: null, // Quiz mode has no save/resume — just answer all questions
+                    progress: completions[`mission:${gameTypeChoiceMission.id}:quiz`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:quiz`]?.completed,
                   },
                   {
                     id: "tetris",
@@ -15603,12 +15713,26 @@ function SnowMonkeyTrackerInner() {
                     desc: "Classic falling blocks. Clear lines to unlock questions.",
                     color: "#5ac8e8",
                     progress: completions[`mission:${gameTypeChoiceMission.id}:tetris`]?.progress || null,
+                    completed: !!completions[`mission:${gameTypeChoiceMission.id}:tetris`]?.completed,
                   },
                 ];
                 return (
-                  <div style={{ display: "grid", gap: 10 }}>
+                  <>
+                    {aggDone && (
+                      <div style={{
+                        background: `${C.green}20`, border: `2px solid ${C.green}50`,
+                        borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+                        display: "flex", alignItems: "center", gap: 8,
+                      }}>
+                        <span style={{ fontSize: 20 }}>🏆</span>
+                        <div style={{ fontSize: 14, color: C.green, fontWeight: 700 }}>
+                          You've completed this mission! Replay any mode for fun — no extra ★ this time.
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display: "grid", gap: 10 }}>
                     {choices.map(c => {
-                      const hasProgress = c.progress && (c.progress.questionsAnswered > 0 || c.progress.score > 0);
+                      const hasProgress = c.progress && (c.progress.questionsAnswered > 0 || c.progress.score > 0 || c.progress.currentIdx > 0 || c.progress.questionsCompleted > 0);
                       return (
                         <button key={c.id}
                           onClick={() => {
@@ -15621,37 +15745,46 @@ function SnowMonkeyTrackerInner() {
                           style={{
                             display: "flex", alignItems: "center", gap: 14,
                             padding: "14px 16px", borderRadius: 14,
-                            background: `${c.color}10`,
-                            border: `2px solid ${c.color}40`,
+                            background: c.completed ? `${C.green}18` : `${c.color}10`,
+                            border: c.completed ? `2px solid ${C.green}60` : `2px solid ${c.color}40`,
                             cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
                             color: C.text, textAlign: "left",
                             transition: "all 0.2s",
                           }}
-                          onMouseEnter={e => e.currentTarget.style.background = `${c.color}25`}
-                          onMouseLeave={e => e.currentTarget.style.background = `${c.color}10`}
+                          onMouseEnter={e => e.currentTarget.style.background = c.completed ? `${C.green}28` : `${c.color}25`}
+                          onMouseLeave={e => e.currentTarget.style.background = c.completed ? `${C.green}18` : `${c.color}10`}
                         >
                           <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <WatercolorIcon name={`game_${c.id}`} size={42} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: 18, color: c.color, marginBottom: 2 }}>
-                              {c.title}
-                              {hasProgress && (
+                            <div style={{ fontWeight: 700, fontSize: 18, color: c.completed ? C.green : c.color, marginBottom: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <span>{c.title}</span>
+                              {c.completed && (
                                 <span style={{
-                                  marginLeft: 8, fontSize: 11, background: C.gold, color: "white",
-                                  padding: "2px 8px", borderRadius: 999, fontWeight: 700, verticalAlign: "middle",
+                                  fontSize: 11, background: C.green, color: "white",
+                                  padding: "2px 8px", borderRadius: 999, fontWeight: 700,
                                 }}>
-                                  💾 {c.progress.questionsAnswered}/{gameTypeChoiceMission.questions.length}
+                                  ✓ Completed
+                                </span>
+                              )}
+                              {!c.completed && hasProgress && (
+                                <span style={{
+                                  fontSize: 11, background: C.gold, color: "white",
+                                  padding: "2px 8px", borderRadius: 999, fontWeight: 700,
+                                }}>
+                                  💾 In progress
                                 </span>
                               )}
                             </div>
                             <div style={{ fontSize: 13, color: C.textLight, lineHeight: 1.3 }}>{c.desc}</div>
                           </div>
-                          <div style={{ fontSize: 22, color: c.color, opacity: 0.7 }}>→</div>
+                          <div style={{ fontSize: 22, color: c.completed ? C.green : c.color, opacity: 0.7 }}>→</div>
                         </button>
                       );
                     })}
-                  </div>
+                    </div>
+                  </>
                 );
               })()}
             </div>
@@ -15677,6 +15810,7 @@ function SnowMonkeyTrackerInner() {
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15690,6 +15824,7 @@ function SnowMonkeyTrackerInner() {
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15703,18 +15838,22 @@ function SnowMonkeyTrackerInner() {
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onShop={() => setShowFoodShop(true)}
               />
             );
           }
           if (gameType === "quiz") {
+            const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <QuizGame
                 studentId={me.id}
                 studentName={me.name}
                 mission={activeMission}
+                savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15728,16 +15867,21 @@ function SnowMonkeyTrackerInner() {
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+                onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onShop={() => setShowFoodShop(true)}
               />
             );
           }
+          // Default: MissionGame (Block Blast)
+          const savedProgressBB = me.completions?.[progressKey]?.progress || null;
           return (
             <MissionGame
               studentName={me.name}
               mission={activeMission}
+              savedProgress={savedProgressBB}
               onClose={closeFn}
               onComplete={(data) => handleMissionComplete({ ...data, gameType })}
+              onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
               onShop={() => setShowFoodShop(true)}
             />
           );
@@ -15811,7 +15955,7 @@ function SnowMonkeyTrackerInner() {
                     boxShadow: `0 2px 8px ${C.gold}80`,
                     animation: "incomeBadgePulse 1.4s ease-in-out infinite",
                   }}>
-                    <style>{`@keyframes incomeBadgePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }`}</style>
+                    
                     +{calculatePendingIncome(me)} ★
                   </span>
                 )}
