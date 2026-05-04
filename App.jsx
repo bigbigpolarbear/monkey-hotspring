@@ -326,6 +326,80 @@ const PET_CATALOG = [
 ];
 function getPet(id) { return PET_CATALOG.find(p => p.id === id); }
 
+/* ─── CROSS-MODE QUESTION TRACKING ───
+   When a student answers a question correctly, that question's index is added
+   to a shared mission-level set. Subsequent game-mode plays of the same mission
+   filter the question pool to exclude already-answered questions, so students
+   never see the same question twice unless they got it wrong before.
+
+   Each question keeps its original index as `_origIdx` so we can map back to
+   the source mission's question array regardless of which mode is being played.
+*/
+function getRemainingQuestions(mission, answeredCorrect = []) {
+  if (!mission?.questions) return { questions: [], allAnswered: false };
+  const answeredSet = new Set(answeredCorrect);
+  // Tag each question with its original index so games can report which one they answered
+  const remaining = mission.questions
+    .map((q, i) => ({ ...q, _origIdx: i }))
+    .filter(q => !answeredSet.has(q._origIdx));
+  return {
+    questions: remaining,
+    allAnswered: remaining.length === 0 && mission.questions.length > 0,
+    totalAnswered: answeredSet.size,
+    totalQuestions: mission.questions.length,
+  };
+}
+
+/* ─── SHARED MISSION UI COMPONENTS ──
+   These are used by all game modes (Quiz/Runner/Flappy/Crush/Tetris/Block Blast)
+   for a consistent pause/save and progress-display experience. */
+
+// Drop-in replacement for the small ✕ close button that doubles as a pause
+// and visual reminder that progress will be saved. Title makes it discoverable.
+function MissionPauseButton({ onClose, label = "Pause & save" }) {
+  return (
+    <button
+      onClick={onClose}
+      title={label + " — your progress is kept and you can resume anytime"}
+      style={{
+        display: "flex", alignItems: "center", gap: 6,
+        padding: "6px 12px", borderRadius: 999,
+        background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.08)",
+        color: "#666", fontFamily: "'Patrick Hand', cursive",
+        fontSize: 14, fontWeight: 600, cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,0,0,0.08)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+    >
+      <span style={{ fontSize: 14 }}>⏸️</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+// Cross-mode progress indicator: "5 of 10 mastered". Shown at the top of each
+// mission so the student knows their progress carries across all game modes.
+function MissionProgressBadge({ answered, total, color = "#48c060" }) {
+  if (!total) return null;
+  const remaining = total - answered;
+  return (
+    <div style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      padding: "4px 10px", borderRadius: 999,
+      background: `${color}15`, border: `1.5px solid ${color}40`,
+      fontSize: 12, fontWeight: 700, color: color,
+      whiteSpace: "nowrap",
+    }}>
+      <span>✓</span>
+      <span>{answered} / {total} mastered</span>
+      {remaining > 0 && remaining < total && (
+        <span style={{ color: "#888", fontWeight: 500 }}>· {remaining} left</span>
+      )}
+    </div>
+  );
+}
+
 /* ─── FOOD CATALOG ─── creative treats students buy with stars to feed their pet
    - hunger: how much it fills the pet's hunger meter (0-100)
    - happiness: how much it boosts happiness (0-100)
@@ -8999,7 +9073,7 @@ function FoodReward({ onComplete }) {
 }
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
-function QuizGame({ studentId, studentName, quiz, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function QuizGame({ studentId, studentName, quiz, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   // Resume from saved progress if present
   const [currentIdx, setCurrentIdx] = useState(savedProgress?.currentIdx || 0);
@@ -9054,6 +9128,10 @@ function QuizGame({ studentId, studentName, quiz, mission, savedProgress, onClos
       setMonkeyHappy(true);
       setShowFood(true);
       setTimeout(() => setMonkeyHappy(false), 2200);
+      // Record at mission level so this question won't appear again in any mode
+      if (onQuestionAnswered && currentQ._origIdx !== undefined) {
+        onQuestionAnswered(currentQ._origIdx);
+      }
     } else {
       SFX.wrong();
       setMonkeyShake(true);
@@ -9194,8 +9272,13 @@ function QuizGame({ studentId, studentName, quiz, mission, savedProgress, onClos
             <p style={{ margin: 0, color: C.textLight, fontSize: 16 }}>
               Question {currentIdx + 1} of {questions.length} · Score: {score}
             </p>
+            {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         {/* Progress bar */}
@@ -9641,7 +9724,7 @@ function drawObstacle(ctx, x, y, obs, frame) {
   ctx.restore();
 }
 
-function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function RunnerGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const stateRef = useRef({
@@ -9956,8 +10039,12 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
     if (selectedAns !== null) return;
     setSelectedAns(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
-    else SFX.wrong();
+    if (isCorrect) {
+      SFX.correct(); setConfettiTrigger(t => t + 1);
+      // Record at mission level so this question won't appear again in any mode
+      const _q = questions[questionIdx];
+      if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
+    } else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -10060,8 +10147,13 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
             <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
             </p>
+            {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         {/* Game canvas */}
@@ -10265,7 +10357,7 @@ function RunnerGame({ studentName, mission, savedProgress, onClose, onComplete, 
 }
 
 
-function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function FlappyGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const initial = savedProgress || {};
@@ -10661,8 +10753,12 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
     if (selectedAns !== null) return;
     setSelectedAns(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
-    else SFX.wrong();
+    if (isCorrect) {
+      SFX.correct(); setConfettiTrigger(t => t + 1);
+      // Record at mission level so this question won't appear again in any mode
+      const _q = questions[questionIdx];
+      if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
+    } else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -10763,8 +10859,13 @@ function FlappyGame({ studentName, mission, savedProgress, onClose, onComplete, 
             <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               Checkpoints: {questionsAnswered} / {targetQuestions} · Lives: {"❤️".repeat(Math.max(0, lives))}{"🤍".repeat(Math.max(0, 3 - lives))} · Score: {score}
             </p>
+            {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         {/* Game canvas */}
@@ -11251,7 +11352,7 @@ function ConfettiBurst({ trigger, count = 60, intensity = "normal" }) {
   );
 }
 
-function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function CrushGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
   const [selected, setSelected] = useState(null); // {r, c}
@@ -11414,7 +11515,10 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
     const correct = idx === q.correct;
     setQuestionAnswer(idx);
     setQuestionResult(correct ? "correct" : "wrong");
-    if (correct) { SFX.correct(); setConfettiTrigger(t => t + 1); } else SFX.wrong();
+    if (correct) {
+      SFX.correct(); setConfettiTrigger(t => t + 1);
+      if (onQuestionAnswered && q._origIdx !== undefined) onQuestionAnswered(q._origIdx);
+    } else SFX.wrong();
     if (!correct) {
       setWrongAnswers(w => [...w, {
         questionIdx,
@@ -11502,8 +11606,13 @@ function CrushGame({ studentName, mission, savedProgress, onClose, onComplete, o
             <p style={{ margin: 0, color: C.textLight, fontSize: 14 }}>
               {mission.name} · Match 3+ to crush · ★ {totalReward} reward
             </p>
+                      {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 24, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         {/* Progress bar + score */}
@@ -11766,7 +11875,7 @@ function tetrisCollides(grid, piece) {
   return false;
 }
 
-function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function TetrisGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
   const targetQuestions = questions.length;
@@ -11974,7 +12083,10 @@ function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, 
     const correct = idx === q.correct;
     setQuestionAnswer(idx);
     setQuestionResult(correct ? "correct" : "wrong");
-    if (correct) { SFX.correct(); setConfettiTrigger(t => t + 1); } else SFX.wrong();
+    if (correct) {
+      SFX.correct(); setConfettiTrigger(t => t + 1);
+      if (onQuestionAnswered && q._origIdx !== undefined) onQuestionAnswered(q._origIdx);
+    } else SFX.wrong();
     if (!correct) {
       setWrongAnswers(w => [...w, {
         questionIdx,
@@ -12045,8 +12157,13 @@ function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, 
             <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textLight }}>
               {questionsAnswered}/{targetQuestions} done · ❓ after every piece
             </p>
+            {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start", justifyContent: "center", flexWrap: "wrap" }}>
@@ -12208,7 +12325,7 @@ function TetrisGame({ studentName, mission, savedProgress, onClose, onComplete, 
   );
 }
 
-function MissionGame({ studentName, mission, savedProgress, onClose, onComplete, onSaveProgress, onShop }) {
+function MissionGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
   const [tray, setTray] = useState(() => savedProgress?.tray || [generateShape(), generateShape(), generateShape()]);
@@ -12319,8 +12436,12 @@ function MissionGame({ studentName, mission, savedProgress, onClose, onComplete,
     if (selected !== null) return;
     setSelected(idx);
     const isCorrect = idx === questions[questionIdx].correct;
-    if (isCorrect) { SFX.correct(); setConfettiTrigger(t => t + 1); }
-    else SFX.wrong();
+    if (isCorrect) {
+      SFX.correct(); setConfettiTrigger(t => t + 1);
+      // Record at mission level so this question won't appear again in any mode
+      const _q = questions[questionIdx];
+      if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
+    } else SFX.wrong();
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -12370,8 +12491,13 @@ function MissionGame({ studentName, mission, savedProgress, onClose, onComplete,
             <p style={{ margin: 0, color: C.textLight, fontSize: 15 }}>
               {questionsCompleted} / {targetQuestions} answered · {totalReward} ★ reward
             </p>
+            {missionFullCount > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <MissionProgressBadge answered={missionAlreadyAnswered || 0} total={missionFullCount} />
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 26, color: C.textLight, cursor: "pointer", padding: 4 }}>✕</button>
+          <MissionPauseButton onClose={onClose} />
         </div>
 
         {/* Progress bar */}
@@ -13027,6 +13153,35 @@ function SnowMonkeyTrackerInner() {
       });
     } catch (e) {
       console.error("Save progress failed:", e);
+    }
+  }, [user, students]);
+
+  /* ─── Record that a student answered a specific question correctly.
+     Updates the cross-mode shared `answeredCorrect` array so the same question
+     won't appear again when switching to a different mode within the same mission.
+     Returns the new total of correctly-answered questions. */
+  const handleQuestionAnsweredCorrectly = useCallback(async (missionId, origIdx) => {
+    if (!user || !missionId || origIdx === undefined || origIdx === null) return;
+    try {
+      const completions = { ...(user.completions || {}) };
+      const aggKey = `mission:${missionId}`;
+      const prev = completions[aggKey] || {};
+      const prevAnswered = prev.answeredCorrect || [];
+      // Already in the set? No-op (idempotent — game can call multiple times safely).
+      if (prevAnswered.includes(origIdx)) return;
+      const newAnswered = [...prevAnswered, origIdx];
+      completions[aggKey] = {
+        ...prev,
+        answeredCorrect: newAnswered,
+      };
+      const newS = students.map(s => s.id === user.id ? { ...s, completions } : s);
+      setStudents(newS);
+      setUser(u => u && u.id === user.id ? { ...u, completions } : u);
+      updateStudent(user.id, { completions }).catch(e => {
+        console.warn("Background answered-correct save failed:", e?.message);
+      });
+    } catch (e) {
+      console.error("Save answered-correct failed:", e);
     }
   }, [user, students]);
 
@@ -15801,16 +15956,59 @@ function SnowMonkeyTrackerInner() {
           const gameType = activeGameType || (activeMission.type !== "any" ? activeMission.type : "blockblast");
           // Progress is keyed per game type so each mode keeps its own checkpoint
           const progressKey = `mission:${activeMission.id}:${gameType}`;
+
+          // ── CROSS-MODE QUESTION FILTER ──
+          // Build a "remaining questions" view of the mission so students never
+          // see questions they've already answered correctly in another mode.
+          const aggData = me.completions?.[`mission:${activeMission.id}`];
+          const answeredCorrect = aggData?.answeredCorrect || [];
+          const { questions: remainingQuestions, allAnswered, totalAnswered, totalQuestions } =
+            getRemainingQuestions(activeMission, answeredCorrect);
+
+          // If everything is already answered correctly, show a "you've finished" screen
+          if (allAnswered) {
+            return (
+              <div style={modalBackdropStyle} onClick={closeFn}>
+                <div style={{ ...modalCardStyle, textAlign: "center", maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
+                  <h2 style={{ color: C.text, margin: "0 0 4px", fontSize: 26 }}>All questions answered!</h2>
+                  <p style={{ color: C.textLight, fontSize: 15, margin: "0 0 16px" }}>
+                    You've correctly answered all {totalQuestions} questions in <strong>{activeMission.name}</strong>.
+                  </p>
+                  <div style={{
+                    background: `${C.green}15`, padding: 14, borderRadius: 12,
+                    border: `2px solid ${C.green}40`, marginBottom: 16, fontSize: 14, color: C.green, fontWeight: 700,
+                  }}>
+                    ✓ {totalQuestions} / {totalQuestions} mastered
+                  </div>
+                  <button onClick={closeFn} style={{ ...primaryBtnStyle, fontSize: 16, padding: "12px 28px" }}>
+                    Done
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          // Build a "playable mission" with only the remaining questions
+          const playableMission = { ...activeMission, questions: remainingQuestions };
+
+          // Shared callback: when a question is answered correctly, record it
+          // at the mission level so the next mode skips it.
+          const onQuestionAnswered = (origIdx) => handleQuestionAnsweredCorrectly(activeMission.id, origIdx);
+
           if (gameType === "runner") {
             const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <RunnerGame
                 studentName={me.name}
-                mission={activeMission}
+                mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15820,11 +16018,14 @@ function SnowMonkeyTrackerInner() {
             return (
               <FlappyGame
                 studentName={me.name}
-                mission={activeMission}
+                mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15834,11 +16035,14 @@ function SnowMonkeyTrackerInner() {
             return (
               <CrushGame
                 studentName={me.name}
-                mission={activeMission}
+                mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15849,11 +16053,14 @@ function SnowMonkeyTrackerInner() {
               <QuizGame
                 studentId={me.id}
                 studentName={me.name}
-                mission={activeMission}
+                mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15863,11 +16070,14 @@ function SnowMonkeyTrackerInner() {
             return (
               <TetrisGame
                 studentName={me.name}
-                mission={activeMission}
+                mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
                 savedProgress={savedProgress}
                 onClose={closeFn}
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
                 onShop={() => setShowFoodShop(true)}
               />
             );
@@ -15877,11 +16087,14 @@ function SnowMonkeyTrackerInner() {
           return (
             <MissionGame
               studentName={me.name}
-              mission={activeMission}
+              mission={playableMission}
+                missionFullCount={totalQuestions}
+                missionAlreadyAnswered={totalAnswered}
               savedProgress={savedProgressBB}
               onClose={closeFn}
               onComplete={(data) => handleMissionComplete({ ...data, gameType })}
               onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
+                onQuestionAnswered={onQuestionAnswered}
               onShop={() => setShowFoodShop(true)}
             />
           );
