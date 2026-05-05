@@ -12909,6 +12909,35 @@ function SnowMonkeyTrackerInner() {
     return () => { try { unsub(); } catch {} };
   }, [liveGameCode]);
 
+  /* ─── Reusable: refetch missions + student data from Firestore.
+     Used by both periodic auto-refresh and manual refresh button. */
+  const refreshMissionsAndStudents = useCallback(async () => {
+    try {
+      const [m, s] = await Promise.all([getMissions(), getStudents()]);
+      setMissions(m || {});
+      setStudents(s || []);
+      // Also refresh `user` so they see updated points/completions
+      if (user?.id) {
+        const me = (s || []).find(x => x.id === user.id);
+        if (me) setUser(me);
+      }
+    } catch (e) {
+      console.warn("Background refresh failed:", e?.message);
+    }
+  }, [user]);
+
+  /* ─── Auto-refresh student data every 30 seconds when logged in as student.
+     This is how newly-assigned missions show up without manual reload — the
+     teacher's Firestore write is picked up on the next refresh tick. */
+  useEffect(() => {
+    if (!user || user.role === "teacher") return;
+    const id = setInterval(() => { refreshMissionsAndStudents(); }, 30000);
+    // Also refresh once when the tab is brought back into focus
+    const onFocus = () => { refreshMissionsAndStudents(); };
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); };
+  }, [user, refreshMissionsAndStudents]);
+
   const persist = useCallback(async (newT, newS, newQ, newM) => {
     if (newT) { setTeachers(newT); }
     if (newS) {
@@ -15730,10 +15759,45 @@ function SnowMonkeyTrackerInner() {
               <div style={{ ...modalCardStyle, width: 520, maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                   <h2 style={{ margin: 0, color: C.text, fontSize: 22 }}>🚀 Pick a Mission</h2>
-                  <button onClick={() => setShowMissionPicker(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      onClick={async (e) => {
+                        // Manual refresh — pulls latest missions from Firestore so newly assigned ones show up instantly
+                        e.stopPropagation();
+                        const btn = e.currentTarget;
+                        btn.disabled = true;
+                        const orig = btn.innerHTML;
+                        btn.innerHTML = "Refreshing…";
+                        try { await refreshMissionsAndStudents(); }
+                        finally {
+                          if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+                        }
+                      }}
+                      title="Pull the latest missions assigned by your teacher"
+                      style={{
+                        background: "rgba(0,0,0,0.04)", border: "1.5px solid rgba(0,0,0,0.08)",
+                        color: "#666", fontFamily: "'Patrick Hand', cursive", fontSize: 13,
+                        padding: "5px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
+                      }}
+                    >
+                      🔄 Refresh
+                    </button>
+                    <button onClick={() => setShowMissionPicker(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
+                  </div>
                 </div>
                 {myMissions.length === 0 ? (
-                  <p style={{ color: C.textLight, textAlign: "center", padding: 20 }}>No missions assigned yet!</p>
+                  <div style={{ textAlign: "center", padding: "30px 20px" }}>
+                    <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                    <p style={{ color: C.text, fontSize: 16, marginBottom: 6, fontWeight: 600 }}>
+                      No missions yet!
+                    </p>
+                    <p style={{ color: C.textLight, fontSize: 14, marginBottom: 12 }}>
+                      If your teacher just assigned one, tap <strong>🔄 Refresh</strong> above to check.
+                    </p>
+                    <p style={{ color: C.textLight, fontSize: 13, fontStyle: "italic" }}>
+                      Missions also appear automatically every 30 seconds.
+                    </p>
+                  </div>
                 ) : (
                   myMissions.map(m => {
                     // Has the student completed this mission in ANY game mode?
@@ -16130,20 +16194,25 @@ function SnowMonkeyTrackerInner() {
                   </>
                 )}
               </button>
-              <button onClick={() => hasMission && setShowMissionPicker(true)}
+              <button onClick={async () => {
+                  // Always allow opening the picker — even with 0 missions —
+                  // and trigger a refresh so newly assigned missions appear immediately.
+                  setShowMissionPicker(true);
+                  refreshMissionsAndStudents();
+                }}
                 style={{
                   padding: "10px 22px", borderRadius: 16,
-                  border: `2px solid ${hasMission ? C.green + "70" : C.fur2 + "50"}`,
-                  background: hasMission ? `${C.card}ee` : `${C.card}cc`,
-                  color: hasMission ? C.text : C.textLight,
+                  border: `2px solid ${hasMission ? C.green + "70" : C.fur2 + "70"}`,
+                  background: `${C.card}ee`,
+                  color: C.text,
                   fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: hasMission ? "pointer" : "default",
+                  cursor: "pointer",
                   boxShadow: hasMission ? `0 4px 14px ${C.green}30` : "none",
                   transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
                   backdropFilter: "blur(8px)",
                 }}>
                 <WatercolorIcon name="btn_mission" size={22} />
-                {hasMission ? `Missions (${myMissions.length})` : "No Missions"}
+                {hasMission ? `Missions (${myMissions.length})` : "Missions"}
               </button>
               <button onClick={() => { setPetMartTab("packs"); setShowPetMart(true); }}
                 style={{
