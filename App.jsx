@@ -12854,7 +12854,21 @@ function SnowMonkeyTrackerInner() {
         setMissions(m || {});
         setStudyPacks(sp || []);
       } catch (error) {
-        console.error("Failed to load data:", error);
+        // CRITICAL: This used to swallow errors silently, which made it
+        // impossible to debug Firestore permission issues. Now we surface
+        // them as a notification AND log the full error so the user can
+        // forward the console screenshot for support.
+        console.error("Failed to load data from Firestore:", error);
+        console.error("Error code:", error?.code);
+        console.error("Error message:", error?.message);
+        // Show a user-visible error so they aren't left wondering
+        if (error?.code === "permission-denied" || /permission/i.test(error?.message || "")) {
+          alert(
+            "⚠️ Could not load data from the database.\n\n" +
+            "This usually means the Firestore security rules are too strict. " +
+            "Open the browser console (right-click → Inspect → Console) and send a screenshot for help."
+          );
+        }
       }
       setLoading(false);
     })();
@@ -12909,13 +12923,19 @@ function SnowMonkeyTrackerInner() {
     return () => { try { unsub(); } catch {} };
   }, [liveGameCode]);
 
-  /* ─── Reusable: refetch missions + student data from Firestore.
-     Used by both periodic auto-refresh and manual refresh button. */
+  /* ─── Reusable: refetch missions, quizzes, and student data from Firestore.
+     Used by both periodic auto-refresh and manual refresh button so newly
+     assigned content (missions, quizzes, study packs) appears for students
+     without requiring a page reload. */
   const refreshMissionsAndStudents = useCallback(async () => {
     try {
-      const [m, s] = await Promise.all([getMissions(), getStudents()]);
+      const [m, s, q, sp] = await Promise.all([
+        getMissions(), getStudents(), getQuizzes(), getStudyPacks()
+      ]);
       setMissions(m || {});
       setStudents(s || []);
+      setQuizzes(q || {});
+      setStudyPacks(sp || []);
       // Also refresh `user` so they see updated points/completions
       if (user?.id) {
         const me = (s || []).find(x => x.id === user.id);
@@ -12939,6 +12959,13 @@ function SnowMonkeyTrackerInner() {
   }, [user, refreshMissionsAndStudents]);
 
   const persist = useCallback(async (newT, newS, newQ, newM) => {
+    let permissionError = null;
+    const trackError = (where, error) => {
+      console.error(`Failed to update ${where}:`, error?.code, "|", error?.message);
+      if (!permissionError && (error?.code === "permission-denied" || /permission/i.test(error?.message || ""))) {
+        permissionError = `${where}: ${error?.message || "permission denied"}`;
+      }
+    };
     if (newT) { setTeachers(newT); }
     if (newS) {
       const prevStudents = students;
@@ -12950,7 +12977,7 @@ function SnowMonkeyTrackerInner() {
             const { id, ...data } = student;
             await updateStudent(id, data);
           } catch (error) {
-            console.error("Failed to update student:", student.name, error);
+            trackError("student " + student.name, error);
           }
         }
       }
@@ -12967,7 +12994,7 @@ function SnowMonkeyTrackerInner() {
               await deleteQuizzesForStudent(studentId);
             }
           } catch (error) {
-            console.error("Failed to update quiz:", error);
+            trackError("quiz", error);
           }
         }
       }
@@ -12989,7 +13016,7 @@ function SnowMonkeyTrackerInner() {
               await deleteMissionsForStudent(studentId);
             }
           } catch (error) {
-            console.error("Failed to update mission:", error);
+            trackError("mission", error);
           }
         }
       }
@@ -12998,6 +13025,22 @@ function SnowMonkeyTrackerInner() {
           try { await deleteMissionsForStudent(studentId); } catch (e) { console.error(e); }
         }
       }
+    }
+    // After all writes attempted: if any was a permission error, surface it ONCE.
+    // We use a global flag so we don't pop the alert on every keystroke.
+    if (permissionError && !window.__bigAStarPermAlertShown) {
+      window.__bigAStarPermAlertShown = true;
+      setTimeout(() => {
+        alert(
+          "⚠️ The database is rejecting writes (permission denied).\n\n" +
+          "This means the Firestore security rules aren't allowing this teacher's account to update student data.\n\n" +
+          "Fix:\n" +
+          "1. Go to Firebase Console → Firestore Database → Rules\n" +
+          "2. Make sure students, missions, quizzes all have `allow read, write: if true;`\n" +
+          "3. Click Publish\n\n" +
+          "Full error: " + permissionError
+        );
+      }, 200);
     }
   }, [students, quizzes, missions]);
 
@@ -13421,7 +13464,18 @@ function SnowMonkeyTrackerInner() {
       notify(`${newStudentName.trim()} joined the hot spring!`);
     } catch (error) {
       console.error("Failed to add student:", error);
-      notify("Failed to add student. Try again.", "error");
+      console.error("Error code:", error?.code, "| Error message:", error?.message);
+      // Distinguish between permission errors (rules issue) and other errors
+      if (error?.code === "permission-denied" || /permission/i.test(error?.message || "")) {
+        notify("⚠️ Database is blocking writes. Check Firestore rules.", "error");
+        alert(
+          "Could not add student — Firestore security rules are blocking writes.\n\n" +
+          "Fix: Firebase Console → Firestore Database → Rules → make sure students/{studentId} allows write: if true. Then click Publish.\n\n" +
+          "Full error: " + (error?.message || error)
+        );
+      } else {
+        notify(`Failed to add student: ${error?.message || "Unknown error"}`, "error");
+      }
     }
   };
 
