@@ -12692,6 +12692,41 @@ function MissionGame({ studentName, mission, savedProgress, missionFullCount, mi
   );
 }
 
+/* ─── DEBUG ERROR OVERLAY ─── shows the most recent runtime/Firestore error
+   as a fixed banner at the top of the screen. Helps diagnose when the user
+   can't access browser console (e.g. on iPad/phone). Clicking the X dismisses it. */
+function DebugErrorOverlay({ errors, onDismiss }) {
+  if (!errors || errors.length === 0) return null;
+  const latest = errors[errors.length - 1];
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 99999,
+      background: "#7a1320", color: "#ffe4e6",
+      padding: "10px 14px", fontFamily: "monospace", fontSize: 12,
+      boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+      maxHeight: 240, overflowY: "auto",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+        <strong style={{ fontSize: 13 }}>⚠️ Error #{errors.length} — {latest.where}</strong>
+        <button onClick={onDismiss}
+          style={{ background: "transparent", color: "#ffe4e6", border: "1px solid #ffe4e6", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+          dismiss
+        </button>
+      </div>
+      <div style={{ wordBreak: "break-word", lineHeight: 1.4 }}>
+        <strong>Code:</strong> {latest.code || "(none)"}<br />
+        <strong>Message:</strong> {latest.message}<br />
+        {latest.stack && (
+          <details style={{ marginTop: 4 }}>
+            <summary style={{ cursor: "pointer" }}>Stack trace (tap to expand)</summary>
+            <pre style={{ whiteSpace: "pre-wrap", fontSize: 10, marginTop: 4 }}>{latest.stack}</pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── MAIN APP ─── */
 export default function SnowMonkeyTracker() {
   const [anyHovering, setAnyHovering] = useState(false);
@@ -12705,6 +12740,36 @@ export default function SnowMonkeyTracker() {
 function SnowMonkeyTrackerInner() {
   const isMobile = useIsMobile(640); // portrait phone breakpoint
   const [loading, setLoading] = useState(true);
+
+  // ── DEBUG: track recent errors and show them in an on-screen banner ──
+  // Useful for diagnosing issues when the user can't access browser console.
+  // Captures: (1) errors thrown anywhere, (2) unhandled promise rejections,
+  // (3) errors we explicitly forward via window.__bigAStarError(...)
+  const [debugErrors, setDebugErrors] = useState([]);
+  useEffect(() => {
+    const pushError = (where, error) => {
+      const errObj = {
+        where,
+        code: error?.code,
+        message: error?.message || String(error),
+        stack: error?.stack,
+        timestamp: Date.now(),
+      };
+      setDebugErrors(prev => [...prev.slice(-9), errObj]); // keep last 10
+    };
+    // Expose globally so other parts of the app can report errors that
+    // would otherwise be swallowed by try/catch
+    window.__bigAStarError = pushError;
+    const onError = (e) => pushError("uncaught", e?.error || e);
+    const onRejection = (e) => pushError("unhandled-promise", e?.reason || e);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+      delete window.__bigAStarError;
+    };
+  }, []);
   const [screen, setScreen] = useState("login");
   const [loginTab, setLoginTab] = useState("student");
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -12861,6 +12926,10 @@ function SnowMonkeyTrackerInner() {
         console.error("Failed to load data from Firestore:", error);
         console.error("Error code:", error?.code);
         console.error("Error message:", error?.message);
+        // Forward to the on-screen debug overlay
+        if (typeof window !== "undefined" && window.__bigAStarError) {
+          window.__bigAStarError("initial load", error);
+        }
         // Show a user-visible error so they aren't left wondering
         if (error?.code === "permission-denied" || /permission/i.test(error?.message || "")) {
           alert(
@@ -12946,14 +13015,26 @@ function SnowMonkeyTrackerInner() {
     }
   }, [user]);
 
-  /* ─── Auto-refresh student data every 30 seconds when logged in as student.
-     This is how newly-assigned missions show up without manual reload — the
-     teacher's Firestore write is picked up on the next refresh tick. */
+  /* ─── Auto-refresh student data — reads from Firestore on a slower cadence
+     to stay well under Firebase free-tier quotas (50K reads/day).
+     Strategy:
+     - Only poll every 5 minutes (was 30s — that burned through the daily quota)
+     - Refresh on tab focus (cheap UX win — picks up new content when student returns)
+     - Manual refresh button on the picker for impatient cases
+     This keeps a typical classroom of 30 students well under quota all day. */
   useEffect(() => {
     if (!user || user.role === "teacher") return;
-    const id = setInterval(() => { refreshMissionsAndStudents(); }, 30000);
-    // Also refresh once when the tab is brought back into focus
-    const onFocus = () => { refreshMissionsAndStudents(); };
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    const id = setInterval(() => { refreshMissionsAndStudents(); }, FIVE_MINUTES);
+    // Also refresh once when the tab is brought back into focus, but throttle
+    // to avoid hammering the DB if the user is rapidly switching tabs.
+    let lastFocusRefresh = 0;
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh < 30000) return; // 30s cooldown between focus refreshes
+      lastFocusRefresh = now;
+      refreshMissionsAndStudents();
+    };
     window.addEventListener("focus", onFocus);
     return () => { clearInterval(id); window.removeEventListener("focus", onFocus); };
   }, [user, refreshMissionsAndStudents]);
@@ -12962,6 +13043,10 @@ function SnowMonkeyTrackerInner() {
     let permissionError = null;
     const trackError = (where, error) => {
       console.error(`Failed to update ${where}:`, error?.code, "|", error?.message);
+      // Forward to the on-screen debug overlay
+      if (typeof window !== "undefined" && window.__bigAStarError) {
+        window.__bigAStarError(`persist:${where}`, error);
+      }
       if (!permissionError && (error?.code === "permission-denied" || /permission/i.test(error?.message || ""))) {
         permissionError = `${where}: ${error?.message || "permission denied"}`;
       }
@@ -13465,6 +13550,10 @@ function SnowMonkeyTrackerInner() {
     } catch (error) {
       console.error("Failed to add student:", error);
       console.error("Error code:", error?.code, "| Error message:", error?.message);
+      // Forward to the on-screen debug overlay so iPad/phone users can see it
+      if (typeof window !== "undefined" && window.__bigAStarError) {
+        window.__bigAStarError("addStudent", error);
+      }
       // Distinguish between permission errors (rules issue) and other errors
       if (error?.code === "permission-denied" || /permission/i.test(error?.message || "")) {
         notify("⚠️ Database is blocking writes. Check Firestore rules.", "error");
