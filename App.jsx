@@ -12741,6 +12741,12 @@ function SnowMonkeyTrackerInner() {
   const isMobile = useIsMobile(640); // portrait phone breakpoint
   const [loading, setLoading] = useState(true);
 
+  // Frozen snapshot of `answeredCorrect` for the currently-open mission. Keeps
+  // the question pool stable while a game is open so the on-screen correct
+  // answer doesn't visibly jump when an answer fires `onQuestionAnswered`.
+  // Reset to null when the game closes (see closeFn in the dispatch block).
+  const frozenAnsweredRef = useRef(null);
+
   // ── DEBUG: track recent errors and show them in an on-screen banner ──
   // Useful for diagnosing issues when the user can't access browser console.
   // Captures: (1) errors thrown anywhere, (2) unhandled promise rejections,
@@ -16158,7 +16164,15 @@ function SnowMonkeyTrackerInner() {
         {showMission && me && (() => {
           const activeMission = (missions[me.id] || []).find(m => m.id === activeMissionId);
           if (!activeMission) { setShowMission(false); return null; }
-          const closeFn = () => { setShowMission(false); setActiveMissionId(null); setActiveGameType(null); };
+          const closeFn = () => {
+            // Reset the frozen snapshot so the NEXT mission opens with current
+            // answeredCorrect data (otherwise switching missions would carry
+            // over the previous mission's frozen pool).
+            frozenAnsweredRef.current = null;
+            setShowMission(false);
+            setActiveMissionId(null);
+            setActiveGameType(null);
+          };
           // Use activeGameType (chosen by student) — fall back to mission.type for legacy missions
           const gameType = activeGameType || (activeMission.type !== "any" ? activeMission.type : "blockblast");
           // Progress is keyed per game type so each mode keeps its own checkpoint
@@ -16167,8 +16181,22 @@ function SnowMonkeyTrackerInner() {
           // ── CROSS-MODE QUESTION FILTER ──
           // Build a "remaining questions" view of the mission so students never
           // see questions they've already answered correctly in another mode.
+          //
+          // CRITICAL: We use a frozen snapshot of `answeredCorrect` taken when
+          // the game first opens. Without this, the moment a student answers
+          // correctly, `me.completions.answeredCorrect` updates, the mission's
+          // question array shrinks, and the on-screen question's correct-answer
+          // index appears to jump to a different option mid-render.
+          // The snapshot is keyed by mission ID so switching missions resets it.
           const aggData = me.completions?.[`mission:${activeMission.id}`];
-          const answeredCorrect = aggData?.answeredCorrect || [];
+          const liveAnsweredCorrect = aggData?.answeredCorrect || [];
+          if (!frozenAnsweredRef.current || frozenAnsweredRef.current.missionId !== activeMission.id) {
+            frozenAnsweredRef.current = {
+              missionId: activeMission.id,
+              answered: [...liveAnsweredCorrect],
+            };
+          }
+          const answeredCorrect = frozenAnsweredRef.current.answered;
           const { questions: remainingQuestions, allAnswered, totalAnswered, totalQuestions } =
             getRemainingQuestions(activeMission, answeredCorrect);
 
