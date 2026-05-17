@@ -242,6 +242,12 @@ export async function setTeacherStarStatus(teacherId, isStar, expiresAt = null) 
   });
 }
 
+// General-purpose partial update for a teacher document.
+// Used for: persisting a generated classCode, updating display name, etc.
+export async function updateTeacher(teacherId, data) {
+  await updateDoc(doc(db, "teachers", teacherId), data);
+}
+
 /* ─── LIVE GAMES (multiplayer) ───
    Uses Firebase Realtime Database (separate from Firestore) for low-latency
    game state sync. Lobby + active game lives at `/liveGames/{gameCode}`.
