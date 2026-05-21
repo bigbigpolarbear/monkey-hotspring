@@ -13225,20 +13225,31 @@ function SnowMonkeyTrackerInner() {
   // `myClassStudents` is the filtered list — use this everywhere a teacher
   // views/lists their students. `students` (unfiltered) is still used for
   // lookups by ID, login, and the global leaderboard.
+  //
+  // Robustness: older accounts may not have `role` set. We fall back to
+  // checking whether the user.id appears in the teachers collection.
+  const isTeacherUser = useMemo(() => {
+    if (!user) return false;
+    if (user.role === "teacher") return true;
+    if (user.role === "student") return false;
+    // Legacy account: figure out role from which collection they're in
+    return !!teachers.find(t => t.id === user.id);
+  }, [user, teachers]);
+
   const myClassStudents = useMemo(() => {
-    if (!user || user.role !== "teacher") return students;
+    if (!user || !isTeacherUser) return students;
     if (user.isAdmin) return students;
     return students.filter(s => s.teacherId === user.id);
-  }, [students, user]);
+  }, [students, user, isTeacherUser]);
 
   // ─── ORPHAN DETECTION ──
   // Students who existed before the per-class feature was added (or who
   // self-signed-up without picking a teacher) have no `teacherId`. The first
   // teacher to log in sees a one-time modal to claim or skip them.
   const orphanStudents = useMemo(() => {
-    if (!user || user.role !== "teacher") return [];
+    if (!user || !isTeacherUser) return [];
     return students.filter(s => !s.teacherId);
-  }, [students, user]);
+  }, [students, user, isTeacherUser]);
   const [showOrphanModal, setShowOrphanModal] = useState(false);
   const [orphanAssignments, setOrphanAssignments] = useState({}); // { studentId: "claim" | "skip" }
 
@@ -13247,7 +13258,7 @@ function SnowMonkeyTrackerInner() {
   // per teacher login.
   const orphanShownRef = useRef(false);
   useEffect(() => {
-    if (!user || user.role !== "teacher") {
+    if (!user || !isTeacherUser) {
       orphanShownRef.current = false;
       return;
     }
@@ -13255,14 +13266,14 @@ function SnowMonkeyTrackerInner() {
       orphanShownRef.current = true;
       setShowOrphanModal(true);
     }
-  }, [user, orphanStudents.length]);
+  }, [user, isTeacherUser, orphanStudents.length]);
 
   // Auto-generate a class code for teachers who don't have one yet (legacy accounts
   // created before this feature shipped). Runs once per session on first login.
   const classCodeBackfillRef = useRef(false);
   useEffect(() => {
     if (classCodeBackfillRef.current) return;
-    if (!user || user.role !== "teacher") return;
+    if (!user || !isTeacherUser) return;
     if (user.classCode) return; // already has one — nothing to do
     classCodeBackfillRef.current = true;
     (async () => {
@@ -13539,7 +13550,7 @@ function SnowMonkeyTrackerInner() {
      - Manual refresh button on the picker for impatient cases
      This keeps a typical classroom of 30 students well under quota all day. */
   useEffect(() => {
-    if (!user || user.role === "teacher") return;
+    if (!user || isTeacherUser) return;
     const FIVE_MINUTES = 5 * 60 * 1000;
     const id = setInterval(() => { refreshMissionsAndStudents(); }, FIVE_MINUTES);
     // Also refresh once when the tab is brought back into focus, but throttle
@@ -13553,7 +13564,7 @@ function SnowMonkeyTrackerInner() {
     };
     window.addEventListener("focus", onFocus);
     return () => { clearInterval(id); window.removeEventListener("focus", onFocus); };
-  }, [user, refreshMissionsAndStudents]);
+  }, [user, isTeacherUser, refreshMissionsAndStudents]);
 
   const persist = useCallback(async (newT, newS, newQ, newM) => {
     let permissionError = null;
@@ -14019,6 +14030,7 @@ function SnowMonkeyTrackerInner() {
           password: signupPass.trim(),
           name: signupName.trim(),
           authMethod: "manual",
+          role: "student",
           createdAt: new Date().toISOString(),
           points: 0,
           accessories: [],
@@ -14038,6 +14050,7 @@ function SnowMonkeyTrackerInner() {
           password: signupPass.trim(),
           name: signupName.trim(),
           authMethod: "manual",
+          role: "teacher",
           createdAt: new Date().toISOString(),
           // Each teacher gets a unique class code for students to join their class.
           // We retry a few times to avoid collisions with existing teachers.
@@ -14112,6 +14125,7 @@ function SnowMonkeyTrackerInner() {
         pet: null,
         // ── Class scoping: tag new students with the teacher who created them
         // so each teacher's class view stays separate.
+        role: "student",
         teacherId: user?.id || null,
         createdAt: new Date().toISOString(),
       };
