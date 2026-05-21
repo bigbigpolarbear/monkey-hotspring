@@ -75,7 +75,10 @@ export async function signInWithGoogle(role = "teacher") {
       return x.googleUid === u.uid || x.email === u.email;
     });
     if (existing) {
-      return { user: { id: existing.id, ...existing.data() }, role: "student" };
+      const existingData = { id: existing.id, ...existing.data() };
+      // Backfill role if missing on older records
+      if (!existingData.role) existingData.role = "student";
+      return { user: existingData, role: "student" };
     }
     // Create new student record
     const newStudent = {
@@ -85,11 +88,13 @@ export async function signInWithGoogle(role = "teacher") {
       googleUid: u.uid,
       photoURL: u.photoURL || "",
       authMethod: "google",
+      role: "student",
       createdAt: new Date().toISOString(),
       points: 0,
       accessories: [],
       ownedPets: [],
       pet: null,
+      teacherId: null, // orphan until a teacher claims them via the orphan modal
     };
     const created = await addStudentToDB(newStudent);
     return { user: created, role: "student" };
@@ -98,7 +103,49 @@ export async function signInWithGoogle(role = "teacher") {
   // Teacher path (default) — look in teachers collection
   const teachers = await getTeachers();
   const existing = teachers.find(t => t.googleUid === u.uid || t.email === u.email);
-  if (existing) return { user: existing, role: "teacher" };
+  if (existing) {
+    // Backfill missing role/classCode on older records so the filter works
+    const patch = {};
+    if (!existing.role) patch.role = "teacher";
+    if (!existing.classCode) {
+      // Generate a code that doesn't collide with any existing teacher
+      const generate = () => {
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        let code = "";
+        for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
+      };
+      for (let i = 0; i < 10; i++) {
+        const c = generate();
+        if (!teachers.find(t => t.classCode === c)) { patch.classCode = c; break; }
+      }
+      if (!patch.classCode) patch.classCode = generate();
+    }
+    if (Object.keys(patch).length > 0) {
+      try {
+        await updateDoc(doc(db, "teachers", existing.id), patch);
+      } catch (e) {
+        console.warn("Teacher backfill failed:", e?.message);
+      }
+      return { user: { ...existing, ...patch }, role: "teacher" };
+    }
+    return { user: existing, role: "teacher" };
+  }
+
+  // Brand-new teacher signing in with Google for the first time —
+  // every teacher gets their own class with its own join code
+  const generate = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  };
+  let classCode;
+  for (let i = 0; i < 10; i++) {
+    const c = generate();
+    if (!teachers.find(t => t.classCode === c)) { classCode = c; break; }
+  }
+  if (!classCode) classCode = generate();
 
   const newTeacher = {
     username: u.email,
@@ -107,6 +154,8 @@ export async function signInWithGoogle(role = "teacher") {
     googleUid: u.uid,
     photoURL: u.photoURL || "",
     authMethod: "google",
+    role: "teacher",
+    classCode,
     createdAt: new Date().toISOString(),
   };
   const created = await addTeacherToDB(newTeacher);
