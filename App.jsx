@@ -504,13 +504,9 @@ function getCareIncomeMultiplier(avgCare) {
    Inactivity for 2+ days sends the monkey to "Monkey Jail" until the student
    completes a recovery task (answer 10 questions, 7 correct). */
 
-// Day key in local YYYY-MM-DD format so daily resets fire at midnight local time.
-// Note: vulnerable to clock manipulation, but for v1 classroom use this is fine.
-// A future hardening pass can use server timestamps (Cloud Function) to prevent farming.
-function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+// (Uses the existing top-level `getTodayKey()` helper for day boundaries.
+//  Note: vulnerable to clock manipulation, but for v1 classroom use this is fine.
+//  A future hardening pass can use server timestamps via Cloud Function.)
 function daysBetween(aKey, bKey) {
   if (!aKey || !bKey) return 0;
   const a = new Date(aKey + "T00:00:00");
@@ -578,7 +574,7 @@ function computeDailyIncome(student) {
 // State of today's daily challenge for a student.
 function getDailyChallengeState(student) {
   if (!student) return { questionsAnswered: 0, bestStreak: 0, completed: false, collected: false };
-  const today = todayKey();
+  const today = getTodayKey();
   const dc = student.dailyChallenge || {};
   if (dc.date !== today) {
     // Fresh day — reset
@@ -609,7 +605,7 @@ function shouldBeInJail(student) {
   if (student.jail?.active) return true;
   const last = student.lastActiveDay;
   if (!last) return false;
-  const gap = daysBetween(last, todayKey());
+  const gap = daysBetween(last, getTodayKey());
   return gap >= 2;
 }
 
@@ -14145,7 +14141,7 @@ function SnowMonkeyTrackerInner() {
      Also: if monkey is in jail, every correct answer counts toward release. */
   const handleDailyChallengeAttempt = useCallback((wasCorrect) => {
     if (!user) return;
-    const today = todayKey();
+    const today = getTodayKey();
     const dc = user.dailyChallenge?.date === today
       ? user.dailyChallenge
       : { date: today, questionsAnswered: 0, bestStreak: 0, currentStreak: 0, completed: false, collected: false };
@@ -16502,7 +16498,7 @@ function SnowMonkeyTrackerInner() {
                 gap: 10,
               }}>
                 {(() => {
-                  const today = todayKey();
+                  const today = getTodayKey();
                   const totalStudents = myClassStudents.length;
                   const activeToday = myClassStudents.filter(s => s.lastActiveDay === today).length;
                   // "Needs help" heuristic — student has 0 points and joined more than 1 day ago
