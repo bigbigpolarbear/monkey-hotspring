@@ -498,6 +498,124 @@ function getCareIncomeMultiplier(avgCare) {
   return 0.5;
 }
 
+/* ─── DAILY ECONOMY ──
+   Pets generate passive income each day. To collect that income, the student
+   must complete a daily challenge: answer 5 questions and get 3 in a row right.
+   Inactivity for 2+ days sends the monkey to "Monkey Jail" until the student
+   completes a recovery task (answer 10 questions, 7 correct). */
+
+// Day key in local YYYY-MM-DD format so daily resets fire at midnight local time.
+// Note: vulnerable to clock manipulation, but for v1 classroom use this is fine.
+// A future hardening pass can use server timestamps (Cloud Function) to prevent farming.
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function daysBetween(aKey, bKey) {
+  if (!aKey || !bKey) return 0;
+  const a = new Date(aKey + "T00:00:00");
+  const b = new Date(bKey + "T00:00:00");
+  return Math.round((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+// Streak multiplier (per the spec)
+function getStreakIncomeMultiplier(streak) {
+  if (streak >= 14) return 1.5;
+  if (streak >= 7)  return 1.25;
+  if (streak >= 3)  return 1.10;
+  return 1.0;
+}
+
+// Pet happiness multiplier — derived from the pet's care state, not stored separately.
+// We use the existing avgCare value, mapped to the spec's tiers.
+function getPetHappinessMultiplier(avgCare) {
+  if (avgCare >= 90) return 1.5;  // very happy
+  if (avgCare >= 70) return 1.2;  // happy
+  if (avgCare >= 40) return 1.0;  // normal
+  if (avgCare >= 15) return 0.5;  // sad
+  return 0.1;                      // crying/black
+}
+
+// Owned pet contributes income based on its purchase price (which approximates rarity).
+// Each owned pet (counted by petCounts) contributes once per day.
+function getPetBaseIncome(petId) {
+  const pet = getPet(petId);
+  if (!pet) return 0;
+  // Base income scales with rarity. Numbers tuned so a typical mid-game student
+  // earns ~50-200★/day before multipliers.
+  const rarityBase = {
+    common: 5, uncommon: 8, rare: 14, epic: 22, legendary: 35, mythic: 60,
+  };
+  return rarityBase[pet.rarity] || 5;
+}
+
+// Compute today's potential income for a student. This is what they'd COLLECT
+// if they complete the daily challenge — not what's already in their pocket.
+function computeDailyIncome(student) {
+  if (!student) return { total: 0, breakdown: [] };
+  const petCounts = student.petCounts || {};
+  const care = getPetCare(student);
+  const careMul = getCareIncomeMultiplier(care?.avgCare ?? 50);
+  const happyMul = getPetHappinessMultiplier(care?.avgCare ?? 50);
+  const streakMul = getStreakIncomeMultiplier(getEffectiveStreak(student));
+  // In Monkey Jail, income is heavily reduced
+  const jailMul = student.jail?.active ? 0.1 : 1.0;
+
+  let total = 0;
+  const breakdown = [];
+  Object.entries(petCounts).forEach(([petId, count]) => {
+    const base = getPetBaseIncome(petId);
+    const perPet = base * happyMul * careMul * streakMul * jailMul;
+    const contribution = Math.round(perPet * count);
+    if (contribution > 0) {
+      breakdown.push({ petId, count, contribution });
+      total += contribution;
+    }
+  });
+  return { total, breakdown, careMul, happyMul, streakMul, jailMul };
+}
+
+// State of today's daily challenge for a student.
+function getDailyChallengeState(student) {
+  if (!student) return { questionsAnswered: 0, bestStreak: 0, completed: false, collected: false };
+  const today = todayKey();
+  const dc = student.dailyChallenge || {};
+  if (dc.date !== today) {
+    // Fresh day — reset
+    return { date: today, questionsAnswered: 0, bestStreak: 0, completed: false, collected: false };
+  }
+  return dc;
+}
+
+// Has the student earned the right to collect today's pet income?
+function isDailyCollectionUnlocked(student) {
+  const dc = getDailyChallengeState(student);
+  return dc.completed === true && dc.collected !== true;
+}
+
+// Has today's collection already been claimed?
+function isDailyCollectionCollected(student) {
+  const dc = getDailyChallengeState(student);
+  return dc.collected === true;
+}
+
+/* ─── MONKEY JAIL ──
+   If the student misses 2+ consecutive days, the monkey goes to jail.
+   Pets visually sad. Income is 10%. Released by completing recovery task. */
+
+// Determines if the student SHOULD be in jail based on their last-active day.
+function shouldBeInJail(student) {
+  if (!student) return false;
+  if (student.jail?.active) return true;
+  const last = student.lastActiveDay;
+  if (!last) return false;
+  const gap = daysBetween(last, todayKey());
+  return gap >= 2;
+}
+
+const JAIL_RECOVERY_GOAL_QUESTIONS = 10;
+const JAIL_RECOVERY_GOAL_CORRECT = 7;
+
 const RARITY_COLORS = {
   common: "#9aaab8", uncommon: "#5caa5e", rare: "#5a8fc7",
   epic: "#a060c0", legendary: "#edb830", mythic: "#e06060",
@@ -714,6 +832,14 @@ const ACCESSORY_CATALOG = [
   { id: "rainbowcape", name: "Rainbow Cape",    emoji: "🌈", slot: "back", price: 2200, rarity: "legendary" },
   { id: "dragoncape",  name: "Dragon Wings",    emoji: "🐉", slot: "back", price: 3500, rarity: "mythic" },
   { id: "bowarrow",    name: "Bow & Arrow",     emoji: "🏹", slot: "back", price: 1200, rarity: "epic" },
+
+  // ── BOXING accessories (playful, not aggressive — matches the cute style) ──
+  { id: "boxgloves",    name: "Boxing Gloves",    emoji: "🥊", slot: "hold", price: 700,  rarity: "rare",      category: "boxing" },
+  { id: "boxheadband",  name: "Champion Headband",emoji: "🎽", slot: "head", price: 500,  rarity: "uncommon",  category: "boxing" },
+  { id: "boxbelt",      name: "Champion Belt",    emoji: "🏆", slot: "neck", price: 1500, rarity: "epic",      category: "boxing" },
+  { id: "boxbag",       name: "Punching Buddy",   emoji: "👊", slot: "hold", price: 900,  rarity: "rare",      category: "boxing" },
+  { id: "boxrobe",      name: "Champion Robe",    emoji: "🥋", slot: "back", price: 1200, rarity: "epic",      category: "boxing" },
+  { id: "boxboots",     name: "Tiny Boxing Boots",emoji: "👟", slot: "face", price: 400,  rarity: "uncommon",  category: "boxing" },
 ];
 
 const ACCESSORY_SLOTS = ["head", "face", "neck", "hold", "back"];
@@ -9093,7 +9219,7 @@ function FoodReward({ onComplete }) {
 }
 
 /* ─── QUIZ GAME ─── multi-choice game with food/hawk feedback */
-function QuizGame({ studentId, studentName, quiz, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function QuizGame({ studentId, studentName, quiz, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   // Resume from saved progress if present
   const [currentIdx, setCurrentIdx] = useState(savedProgress?.currentIdx || 0);
@@ -9152,8 +9278,12 @@ function QuizGame({ studentId, studentName, quiz, mission, savedProgress, missio
       if (onQuestionAnswered && currentQ._origIdx !== undefined) {
         onQuestionAnswered(currentQ._origIdx);
       }
+      // Daily challenge counter
+      if (onAnswerAttempt) onAnswerAttempt(true);
     } else {
       SFX.wrong();
+      // Daily challenge counter (also counts wrong answers toward the 5-question goal)
+      if (onAnswerAttempt) onAnswerAttempt(false);
       setMonkeyShake(true);
       setShowHawk(true);
       setTimeout(() => setMonkeyShake(false), 4200);
@@ -9744,7 +9874,7 @@ function drawObstacle(ctx, x, y, obs, frame) {
   ctx.restore();
 }
 
-function RunnerGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function RunnerGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const stateRef = useRef({
@@ -10064,7 +10194,11 @@ function RunnerGame({ studentName, mission, savedProgress, missionFullCount, mis
       // Record at mission level so this question won't appear again in any mode
       const _q = questions[questionIdx];
       if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
-    } else SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(true);
+    } else {
+      SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(false);
+    }
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -10377,7 +10511,7 @@ function RunnerGame({ studentName, mission, savedProgress, missionFullCount, mis
 }
 
 
-function FlappyGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function FlappyGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const initial = savedProgress || {};
@@ -10778,7 +10912,11 @@ function FlappyGame({ studentName, mission, savedProgress, missionFullCount, mis
       // Record at mission level so this question won't appear again in any mode
       const _q = questions[questionIdx];
       if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
-    } else SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(true);
+    } else {
+      SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(false);
+    }
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -11372,7 +11510,7 @@ function ConfettiBurst({ trigger, count = 60, intensity = "normal" }) {
   );
 }
 
-function CrushGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function CrushGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
   const [selected, setSelected] = useState(null); // {r, c}
@@ -11538,7 +11676,11 @@ function CrushGame({ studentName, mission, savedProgress, missionFullCount, miss
     if (correct) {
       SFX.correct(); setConfettiTrigger(t => t + 1);
       if (onQuestionAnswered && q._origIdx !== undefined) onQuestionAnswered(q._origIdx);
-    } else SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(true);
+    } else {
+      SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(false);
+    }
     if (!correct) {
       setWrongAnswers(w => [...w, {
         questionIdx,
@@ -11895,7 +12037,7 @@ function tetrisCollides(grid, piece) {
   return false;
 }
 
-function TetrisGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function TetrisGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const questions = mission?.questions || [];
   const totalReward = mission?.points || 5;
   const targetQuestions = questions.length;
@@ -12106,7 +12248,11 @@ function TetrisGame({ studentName, mission, savedProgress, missionFullCount, mis
     if (correct) {
       SFX.correct(); setConfettiTrigger(t => t + 1);
       if (onQuestionAnswered && q._origIdx !== undefined) onQuestionAnswered(q._origIdx);
-    } else SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(true);
+    } else {
+      SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(false);
+    }
     if (!correct) {
       setWrongAnswers(w => [...w, {
         questionIdx,
@@ -12345,7 +12491,7 @@ function TetrisGame({ studentName, mission, savedProgress, missionFullCount, mis
   );
 }
 
-function MissionGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onShop }) {
+function MissionGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || Array(BB_SIZE).fill(null).map(() => Array(BB_SIZE).fill(null)));
   const [tray, setTray] = useState(() => savedProgress?.tray || [generateShape(), generateShape(), generateShape()]);
@@ -12461,7 +12607,11 @@ function MissionGame({ studentName, mission, savedProgress, missionFullCount, mi
       // Record at mission level so this question won't appear again in any mode
       const _q = questions[questionIdx];
       if (onQuestionAnswered && _q && _q._origIdx !== undefined) onQuestionAnswered(_q._origIdx);
-    } else SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(true);
+    } else {
+      SFX.wrong();
+      if (onAnswerAttempt) onAnswerAttempt(false);
+    }
     setQuestionResult(isCorrect ? "correct" : "wrong");
     if (!isCorrect) {
       const q = questions[questionIdx];
@@ -12708,6 +12858,60 @@ function MissionGame({ studentName, mission, savedProgress, missionFullCount, mi
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── TEACHER QUICK ACTION CARD ─── one of the 4 big buttons on the dashboard.
+   Designed to be obvious even to non-technical teachers (large tap target,
+   emoji + title + one-line subtitle, single-colour accent). */
+function QuickActionCard({ emoji, title, subtitle, color, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "14px 16px", borderRadius: 16,
+      background: "#ffffff",
+      border: `2px solid ${color}40`,
+      cursor: "pointer", fontFamily: "'Patrick Hand', cursive",
+      textAlign: "left", transition: "all 0.15s ease",
+      boxShadow: `0 2px 6px ${color}15`,
+    }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.boxShadow = `0 6px 16px ${color}30`;
+        e.currentTarget.style.borderColor = `${color}90`;
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = `0 2px 6px ${color}15`;
+        e.currentTarget.style.borderColor = `${color}40`;
+      }}
+    >
+      <div style={{
+        fontSize: 32, lineHeight: 1, width: 46, height: 46,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: `${color}18`, borderRadius: 12, flexShrink: 0,
+      }}>{emoji}</div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#2c1e10", lineHeight: 1.2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "#8b5e2b", marginTop: 2, lineHeight: 1.3 }}>{subtitle}</div>
+      </div>
+    </button>
+  );
+}
+
+/* ─── TEACHER SUMMARY CARD ─── single-stat dashboard tile. Big number, label below. */
+function SummaryCard({ label, value, color }) {
+  return (
+    <div style={{
+      background: "#ffffff",
+      borderRadius: 14,
+      padding: "12px 16px",
+      border: "1.5px solid rgba(0,0,0,0.06)",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+    }}>
+      <div style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1, fontFamily: "'Patrick Hand', cursive" }}>{value}</div>
+      <div style={{ fontSize: 12, color: "#8b5e2b", marginTop: 3, fontWeight: 600 }}>{label}</div>
     </div>
   );
 }
@@ -13040,25 +13244,25 @@ function TeacherRoster({
       <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ color: C.textLight, fontSize: 13, marginRight: 4 }}>Sort:</span>
         <SortBtn k="name" label="A → Z" />
-        <SortBtn k="points" label="★ Points" />
-        <SortBtn k="missions" label="🚀 Missions left" />
+        <SortBtn k="points" label="★ Stars" />
+        <SortBtn k="missions" label="🚀 Tasks left" />
         <SortBtn k="last" label="⏱ Last active" />
         <div style={{ flex: 1 }} />
         <button onClick={onOpenYearbook} style={{
           padding: "6px 12px", borderRadius: 999, background: "transparent",
           border: `1.5px solid ${C.water1}60`, color: C.text,
           fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 700, cursor: "pointer",
-        }}>📖 Yearbook view</button>
+        }}>📖 Student Profiles</button>
         <button onClick={onOpenManage} style={{
           padding: "6px 12px", borderRadius: 999, background: "transparent",
           border: `1.5px solid ${C.accent}60`, color: C.text,
           fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 700, cursor: "pointer",
-        }}>📋 Manage missions & quotes</button>
+        }}>📋 Manage Tasks</button>
         <button onClick={onSwitchToHotSpring} style={{
           padding: "6px 12px", borderRadius: 999, background: "transparent",
           border: `1.5px solid ${C.fur2}40`, color: C.textLight,
           fontFamily: "'Patrick Hand', cursive", fontSize: 13, fontWeight: 700, cursor: "pointer",
-        }}>♨️ Hot Spring view</button>
+        }}>♨️ Student Hot Springs</button>
       </div>
 
       {/* Spreadsheet */}
@@ -13337,6 +13541,9 @@ function SnowMonkeyTrackerInner() {
   const [showFoodShop, setShowFoodShop] = useState(false);
   const [showMyPool, setShowMyPool] = useState(false);
   const [showWalk, setShowWalk] = useState(false);
+  // Default student landing: their personal Hot Spring (not the classroom).
+  // Students can toggle to "classroom" via the World View button in the top nav.
+  const [studentView, setStudentView] = useState("hotspring"); // "hotspring" | "classroom"
   const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
   const [petNicknameInput, setPetNicknameInput] = useState(""); // student-typed nickname for new pet
@@ -13844,6 +14051,150 @@ function SnowMonkeyTrackerInner() {
      Updates the cross-mode shared `answeredCorrect` array so the same question
      won't appear again when switching to a different mode within the same mission.
      Returns the new total of correctly-answered questions. */
+  /* ─── Collect today's pet income ──
+     Adds the computed daily income to the student's points balance and marks
+     today's challenge as "collected" so they can't double-claim. */
+  const handleCollectDaily = useCallback(async () => {
+    if (!user) return;
+    const me = students.find(s => s.id === user.id);
+    if (!me) return;
+    const dc = getDailyChallengeState(me);
+    if (!dc.completed) {
+      notify("Answer 5 questions and get 3 in a row first!", "info");
+      return;
+    }
+    if (dc.collected) {
+      notify("Already collected today — come back tomorrow!", "info");
+      return;
+    }
+    const income = computeDailyIncome(me);
+    if (income.total <= 0) {
+      notify("You need pets to generate stars. Visit the Pet Mart!", "info");
+      return;
+    }
+    const patch = {
+      points: (me.points || 0) + income.total,
+      dailyChallenge: { ...dc, collected: true, collectedAt: new Date().toISOString() },
+    };
+    const newS = students.map(s => s.id === user.id ? { ...s, ...patch } : s);
+    setStudents(newS);
+    setUser(u => u && u.id === user.id ? { ...u, ...patch } : u);
+    SFX.reward();
+    notify(`🌟 +${income.total} stars from your pets!`, "success");
+    updateStudent(user.id, patch).catch(e => {
+      console.warn("Collect daily save failed:", e?.message);
+    });
+  }, [user, students]);
+
+  /* ─── Auto-detect & enforce Monkey Jail on login ──
+     If the student has been gone 2+ days and isn't already in jail, send the
+     monkey to jail. This runs once per user session on login. */
+  const jailCheckRef = useRef(false);
+  useEffect(() => {
+    if (!user || isTeacherUser) {
+      jailCheckRef.current = false;
+      return;
+    }
+    if (jailCheckRef.current) return;
+    jailCheckRef.current = true;
+    const me = students.find(s => s.id === user.id);
+    if (!me) return;
+    if (shouldBeInJail(me) && !me.jail?.active) {
+      const patch = {
+        jail: {
+          active: true,
+          reason: "missed 2 or more days",
+          since: new Date().toISOString(),
+          recoveryQuestions: 0,
+          recoveryCorrect: 0,
+        },
+      };
+      const newS = students.map(s => s.id === user.id ? { ...s, ...patch } : s);
+      setStudents(newS);
+      setUser(u => u && u.id === user.id ? { ...u, ...patch } : u);
+      updateStudent(user.id, patch).catch(e => {
+        console.warn("Jail check save failed:", e?.message);
+      });
+    }
+  }, [user, isTeacherUser, students]);
+
+  /* ─── Hot Spring as default landing for students ──
+     When a student logs in, the MyPool ("personal Hot Spring") modal opens
+     automatically — that's their home base. They can dismiss it to see the
+     classroom view, OR they can toggle via the 🌍 World button in the top bar.
+     The studentView state lets us flip without forcing a re-mount. */
+  const hotSpringAutoOpenRef = useRef(false);
+  useEffect(() => {
+    if (!user || isTeacherUser) {
+      // Reset on logout / role change so next student gets the auto-open
+      hotSpringAutoOpenRef.current = false;
+      return;
+    }
+    if (hotSpringAutoOpenRef.current) return;
+    if (studentView !== "hotspring") return;
+    // Wait for `me` data to load before opening
+    const me = students.find(s => s.id === user.id);
+    if (!me) return;
+    hotSpringAutoOpenRef.current = true;
+    setShowMyPool(true);
+  }, [user, isTeacherUser, studentView, students]);
+
+  /* ─── Daily Challenge Tracker ──
+     Every answer (correct or wrong) is counted toward today's challenge.
+     Goal: answer 5 questions AND get 3 in a row right → unlocks pet income.
+     Also: if monkey is in jail, every correct answer counts toward release. */
+  const handleDailyChallengeAttempt = useCallback((wasCorrect) => {
+    if (!user) return;
+    const today = todayKey();
+    const dc = user.dailyChallenge?.date === today
+      ? user.dailyChallenge
+      : { date: today, questionsAnswered: 0, bestStreak: 0, currentStreak: 0, completed: false, collected: false };
+
+    const newQuestionsAnswered = dc.questionsAnswered + 1;
+    const newCurrentStreak = wasCorrect ? (dc.currentStreak || 0) + 1 : 0;
+    const newBestStreak = Math.max(dc.bestStreak || 0, newCurrentStreak);
+    const newCompleted = dc.completed || (newQuestionsAnswered >= 5 && newBestStreak >= 3);
+
+    // Also update jail recovery progress if in jail
+    let newJail = user.jail || null;
+    if (newJail?.active) {
+      const recoveryQuestions = (newJail.recoveryQuestions || 0) + 1;
+      const recoveryCorrect = (newJail.recoveryCorrect || 0) + (wasCorrect ? 1 : 0);
+      const freed = recoveryQuestions >= JAIL_RECOVERY_GOAL_QUESTIONS && recoveryCorrect >= JAIL_RECOVERY_GOAL_CORRECT;
+      newJail = freed
+        ? null  // Free the monkey!
+        : { ...newJail, recoveryQuestions, recoveryCorrect };
+    }
+
+    const patch = {
+      dailyChallenge: {
+        ...dc,
+        questionsAnswered: newQuestionsAnswered,
+        currentStreak: newCurrentStreak,
+        bestStreak: newBestStreak,
+        completed: newCompleted,
+      },
+      lastActiveDay: today,
+    };
+    if (newJail !== user.jail) patch.jail = newJail;
+
+    const newS = students.map(s => s.id === user.id ? { ...s, ...patch } : s);
+    setStudents(newS);
+    setUser(u => u && u.id === user.id ? { ...u, ...patch } : u);
+    // Fire-and-forget save
+    updateStudent(user.id, patch).catch(e => {
+      console.warn("Daily challenge save failed:", e?.message);
+    });
+
+    // Show a notification when the challenge is first completed today
+    if (newCompleted && !dc.completed) {
+      notify(`🎉 Challenge complete! Your pets are awake — go collect today's stars.`, "success");
+    }
+    if (newJail === null && user.jail?.active) {
+      notify(`🔓 Your monkey is free! Pets are back to full power.`, "success");
+    }
+  }, [user, students]);
+
   const handleQuestionAnsweredCorrectly = useCallback(async (missionId, origIdx) => {
     if (!user || !missionId || origIdx === undefined || origIdx === null) return;
     try {
@@ -16097,23 +16448,153 @@ function SnowMonkeyTrackerInner() {
         })()}
         {/* ── New default teacher view: minimalist alphabetical roster ── */}
         {teacherView === "roster" && (
-          <TeacherRoster
-            students={myClassStudents}
-            missions={missions}
-            onAssignPack={() => { SFX.click(); setShowStudyPacks(true); }}
-            onOpenYearbook={() => { SFX.click(); setShowOverview(true); }}
-            onOpenManage={() => { SFX.click(); setShowManage(true); setShowAddStudent(false); }}
-            onSelectStudent={(id) => setSelectedStudent(selectedStudent === id ? null : id)}
-            onAddStudent={() => { SFX.click(); setShowAddStudent(true); setShowManage(false); }}
-            onAddMission={(id) => {
-              SFX.click();
-              setMissionUploadStudentId(id);
-              setShowMissionUpload(true);
-              setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvError("");
-            }}
-            onAdjustPoints={(id, delta) => addPoints(id, delta)}
-            onSwitchToHotSpring={() => { SFX.click(); setTeacherView("hotspring"); }}
-          />
+          <>
+            {/* ─── QUICK ACTIONS — 4 big obvious buttons so non-tech teachers
+                immediately see what they can do. Replaces the cluttered row of
+                small buttons. ─── */}
+            <div style={{
+              maxWidth: 1100, margin: "0 auto 12px", padding: "0 16px",
+            }}>
+              <div style={{ marginBottom: 8, fontSize: 14, color: C.textLight, fontWeight: 600 }}>
+                What would you like to do?
+              </div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 10,
+              }}>
+                <QuickActionCard
+                  emoji="🚀"
+                  title="Start Activity"
+                  subtitle="Live quiz, practice, or game"
+                  color={C.green}
+                  onClick={() => { SFX.click(); setShowStudyPacks(true); }}
+                />
+                <QuickActionCard
+                  emoji="📚"
+                  title="Assign Pack"
+                  subtitle="Pick a learning pack for class"
+                  color={C.accent}
+                  onClick={() => { SFX.click(); setShowStudyPacks(true); }}
+                />
+                <QuickActionCard
+                  emoji="👥"
+                  title="Add Students"
+                  subtitle={user?.classCode ? `Code: ${user.classCode}` : "Create a student account"}
+                  color={C.water1}
+                  onClick={() => { SFX.click(); setShowAddStudent(true); setShowManage(false); }}
+                />
+                <QuickActionCard
+                  emoji="📊"
+                  title="View Progress"
+                  subtitle="See who needs help"
+                  color={C.gold}
+                  onClick={() => { SFX.click(); setShowOverview(true); }}
+                />
+              </div>
+            </div>
+
+            {/* ─── CLASS SUMMARY CARDS — at-a-glance numbers ─── */}
+            {myClassStudents.length > 0 && (
+              <div style={{
+                maxWidth: 1100, margin: "0 auto 12px", padding: "0 16px",
+                display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 10,
+              }}>
+                {(() => {
+                  const today = todayKey();
+                  const totalStudents = myClassStudents.length;
+                  const activeToday = myClassStudents.filter(s => s.lastActiveDay === today).length;
+                  // "Needs help" heuristic — student has 0 points and joined more than 1 day ago
+                  const needsHelp = myClassStudents.filter(s => {
+                    if (!s.createdAt) return false;
+                    const created = new Date(s.createdAt);
+                    const daysOld = (Date.now() - created.getTime()) / 86400000;
+                    return daysOld > 1 && (s.points || 0) < 5;
+                  }).length;
+                  const totalStars = myClassStudents.reduce((sum, s) => sum + (s.points || 0), 0);
+                  return (
+                    <>
+                      <SummaryCard label="Students" value={totalStudents} color={C.text} />
+                      <SummaryCard label="Active today" value={activeToday} color={C.green} />
+                      <SummaryCard label="Needs help" value={needsHelp} color={needsHelp > 0 ? C.accent : C.textLight} />
+                      <SummaryCard label="Total stars" value={totalStars.toLocaleString()} color={C.gold} />
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ─── EMPTY STATE — when no students yet ─── */}
+            {myClassStudents.length === 0 ? (
+              <div style={{
+                maxWidth: 700, margin: "32px auto", padding: "40px 24px",
+                background: C.card, borderRadius: 22, textAlign: "center",
+                border: `2px dashed ${C.fur2}40`,
+              }}>
+                <div style={{ fontSize: 56, marginBottom: 12 }}>👋</div>
+                <h2 style={{ fontSize: 24, color: C.text, margin: "0 0 8px", fontWeight: 700 }}>
+                  No students yet!
+                </h2>
+                <p style={{ color: C.textLight, fontSize: 15, margin: "0 0 20px", lineHeight: 1.5 }}>
+                  Share this class code with your students so they can join.<br />
+                  They enter it on signup and automatically appear in your class.
+                </p>
+                {user?.classCode && (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 10,
+                    background: `${C.gold}20`, padding: "12px 20px", borderRadius: 14,
+                    border: `2px solid ${C.gold}60`, marginBottom: 16,
+                  }}>
+                    <span style={{ fontSize: 28, fontWeight: 700, color: C.gold, letterSpacing: 4 }}>
+                      {user.classCode}
+                    </span>
+                    <button
+                      onClick={() => {
+                        try {
+                          navigator.clipboard?.writeText(user.classCode);
+                          notify(`Class code copied!`);
+                        } catch {}
+                      }}
+                      style={{
+                        background: C.gold, color: "white", border: "none", borderRadius: 999,
+                        padding: "6px 14px", fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+                        fontSize: 13, cursor: "pointer",
+                      }}
+                    >Copy</button>
+                  </div>
+                )}
+                <div>
+                  <button
+                    onClick={() => { SFX.click(); setShowAddStudent(true); }}
+                    style={{
+                      background: C.green, color: "white", border: "none", borderRadius: 14,
+                      padding: "10px 22px", fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+                      fontSize: 16, cursor: "pointer",
+                    }}
+                  >+ Add Students Manually</button>
+                </div>
+              </div>
+            ) : (
+              <TeacherRoster
+                students={myClassStudents}
+                missions={missions}
+                onAssignPack={() => { SFX.click(); setShowStudyPacks(true); }}
+                onOpenYearbook={() => { SFX.click(); setShowOverview(true); }}
+                onOpenManage={() => { SFX.click(); setShowManage(true); setShowAddStudent(false); }}
+                onSelectStudent={(id) => setSelectedStudent(selectedStudent === id ? null : id)}
+                onAddStudent={() => { SFX.click(); setShowAddStudent(true); setShowManage(false); }}
+                onAddMission={(id) => {
+                  SFX.click();
+                  setMissionUploadStudentId(id);
+                  setShowMissionUpload(true);
+                  setCsvText(""); setCsvName(""); setCsvPoints(5); setCsvError("");
+                }}
+                onAdjustPoints={(id, delta) => addPoints(id, delta)}
+                onSwitchToHotSpring={() => { SFX.click(); setTeacherView("hotspring"); }}
+              />
+            )}
+          </>
         )}
         {teacherView === "hotspring" && (<>
         <div style={{ position: "relative", margin: "8px auto 0", width: "96%", maxWidth: 1300, height: "calc(100vh - 90px)", borderRadius: 20, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
@@ -16449,6 +16930,14 @@ function SnowMonkeyTrackerInner() {
     const classRank = classSorted.findIndex(s => s.id === user?.id) + 1;
     const classSize = classSorted.length;
     const myIndex = students.indexOf(me);
+
+    /* ─── DAILY ECONOMY (computed every render — cheap) ──
+       These power the daily-challenge pill, collection button, and jail UI. */
+    const dailyIncome = computeDailyIncome(me);
+    const dc = getDailyChallengeState(me);
+    const collectionUnlocked = isDailyCollectionUnlocked(me);
+    const collectionCollected = isDailyCollectionCollected(me);
+    const monkeyInJail = me?.jail?.active === true;
     return (
       <div style={{ minHeight: "100vh", background: C.bg, backgroundSize: themeMode === "rainbow" ? "400% 400%" : undefined, animation: themeMode === "rainbow" ? "rainbowShift 18s ease infinite" : undefined, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
@@ -16476,6 +16965,56 @@ function SnowMonkeyTrackerInner() {
                 #{classRank}{classSize !== students.length && <span style={{ opacity: 0.55, marginLeft: 4 }}>· 🌍 #{rank}</span>}
               </span>
             </div>
+            {/* DAILY INCOME PILL — shows challenge progress + collect button.
+                Three visual states: locked (in progress), ready (claim), or done. */}
+            {!monkeyInJail && dailyIncome.total > 0 && (
+              <div style={{
+                background: collectionUnlocked ? `${C.green}22` : collectionCollected ? "rgba(0,0,0,0.04)" : `${C.gold}15`,
+                border: `2px solid ${collectionUnlocked ? C.green : collectionCollected ? "rgba(0,0,0,0.12)" : C.gold + "60"}`,
+                borderRadius: 12, padding: "4px 12px",
+                display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+              }}>
+                {collectionCollected ? (
+                  <>
+                    <span style={{ fontSize: 14 }}>✓</span>
+                    <span style={{ fontSize: 13, color: C.textLight, fontWeight: 600 }}>Today's stars collected · back tomorrow</span>
+                  </>
+                ) : collectionUnlocked ? (
+                  <>
+                    <span style={{ fontSize: 14 }}>🌟</span>
+                    <span style={{ fontSize: 14, color: C.text, fontWeight: 700 }}>Pets ready: +{dailyIncome.total}</span>
+                    <button onClick={handleCollectDaily}
+                      style={{
+                        background: C.green, color: "white", border: "none",
+                        borderRadius: 999, padding: "4px 14px",
+                        fontFamily: "'Patrick Hand', cursive", fontWeight: 700, fontSize: 13,
+                        cursor: "pointer", marginLeft: 4,
+                      }}>
+                      Collect
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 14 }}>🔒</span>
+                    <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>
+                      Daily challenge: {dc.questionsAnswered || 0}/5 answered, best streak {dc.bestStreak || 0}/3
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            {monkeyInJail && (
+              <div style={{
+                background: "rgba(120,80,80,0.15)", border: "2px solid rgba(120,80,80,0.4)",
+                borderRadius: 12, padding: "4px 12px",
+                display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+              }}>
+                <span style={{ fontSize: 16 }}>🚨</span>
+                <span style={{ fontSize: 13, color: "#7a3030", fontWeight: 700 }}>
+                  Monkey in jail! Free with {me?.jail?.recoveryCorrect || 0}/{JAIL_RECOVERY_GOAL_CORRECT} correct of {me?.jail?.recoveryQuestions || 0}/{JAIL_RECOVERY_GOAL_QUESTIONS} answers
+                </span>
+              </div>
+            )}
           </div>
           {/* CENTER: title — flex:0 stays centered between equal-width sides */}
           <h1 style={{
@@ -16486,6 +17025,30 @@ function SnowMonkeyTrackerInner() {
           }}>♨️ Monkey Hot Spring</h1>
           {/* RIGHT: controls */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+            {/* WORLD VIEW TOGGLE — students land on their personal Hot Spring;
+                they can switch to the wider classroom view via this button.
+                Highlighted with the current-view's accent colour. */}
+            <button onClick={() => {
+                SFX.click();
+                if (studentView === "hotspring") {
+                  setStudentView("classroom");
+                  setShowMyPool(false);
+                } else {
+                  setStudentView("hotspring");
+                  setShowMyPool(true);
+                }
+              }}
+              title={studentView === "hotspring" ? "Switch to Classroom view" : "Back to My Hot Spring"}
+              style={{
+                padding: "9px 14px", borderRadius: 12,
+                border: `2px solid ${studentView === "hotspring" ? C.water1 + "80" : C.gold + "80"}`,
+                background: studentView === "hotspring" ? `${C.water1}18` : `${C.gold}18`,
+                color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1,
+                display: "inline-flex", alignItems: "center", gap: 6,
+              }}>
+              {studentView === "hotspring" ? "🌍 World" : "♨️ My Hot Spring"}
+            </button>
             <button onClick={toggleTheme}
               title={themeTitle}
               style={{
@@ -17063,6 +17626,7 @@ function SnowMonkeyTrackerInner() {
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
                 onShop={openFoodShop}
               />
             );
@@ -17080,6 +17644,7 @@ function SnowMonkeyTrackerInner() {
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
                 onShop={openFoodShop}
               />
             );
@@ -17097,6 +17662,7 @@ function SnowMonkeyTrackerInner() {
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
                 onShop={openFoodShop}
               />
             );
@@ -17115,6 +17681,7 @@ function SnowMonkeyTrackerInner() {
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
                 onShop={openFoodShop}
               />
             );
@@ -17132,6 +17699,7 @@ function SnowMonkeyTrackerInner() {
                 onComplete={(data) => handleMissionComplete({ ...data, gameType })}
                 onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
                 onShop={openFoodShop}
               />
             );
@@ -17149,6 +17717,7 @@ function SnowMonkeyTrackerInner() {
               onComplete={(data) => handleMissionComplete({ ...data, gameType })}
               onSaveProgress={(progress) => handleSaveMissionProgress(activeMission.id, gameType, progress)}
                 onQuestionAnswered={onQuestionAnswered}
+                onAnswerAttempt={handleDailyChallengeAttempt}
               onShop={openFoodShop}
             />
           );
@@ -17302,6 +17871,7 @@ function SnowMonkeyTrackerInner() {
           const visibleAccessories = catalog.filter(a => {
             if (customizeTab === "owned") return a.price === 0 || owned.includes(a.id);
             if (customizeTab === "shop") return a.price > 0;
+            if (customizeTab === "boxing") return a.category === "boxing";
             return true;
           });
           const bySlot = {};
@@ -17367,6 +17937,7 @@ function SnowMonkeyTrackerInner() {
                     { id: "all", label: "All" },
                     { id: "owned", label: `My Items (${owned.length + catalog.filter(a => a.price === 0).length})` },
                     { id: "shop", label: "🛍️ Shop" },
+                    { id: "boxing", label: "🥊 Boxing" },
                   ].map(tab => (
                     <button key={tab.id} onClick={() => setCustomizeTab(tab.id)}
                       style={{
@@ -17460,7 +18031,12 @@ function SnowMonkeyTrackerInner() {
         {showMyPool && me && (
           <MyPool
             student={me}
-            onClose={() => setShowMyPool(false)}
+            onClose={() => {
+              setShowMyPool(false);
+              // Close → student lands on the classroom view.
+              // They can flip back via the 🌍/♨️ button in the top bar.
+              setStudentView("classroom");
+            }}
             onShop={() => { setShowMyPool(false); setShowFoodShop(true); }}
             onWalk={() => { setShowMyPool(false); setShowWalk(true); }}
             onPetMart={() => { setPetMartTab("packs"); setShowPetMart(true); }}
