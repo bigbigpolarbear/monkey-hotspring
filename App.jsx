@@ -6,7 +6,8 @@ import {
   signInWithGoogle,
   getStudyPacks, addStudyPack, deleteStudyPack, setTeacherStarStatus, updateTeacher,
   createLiveGame, watchLiveGame, joinLiveGame, startLiveGame,
-  advanceLiveGameQuestion, endLiveGame, submitLiveAnswer, deleteLiveGame
+  advanceLiveGameQuestion, endLiveGame, submitLiveAnswer, deleteLiveGame,
+  sendMessage, getMessagesForTeacher, markMessageRead, deleteMessage
 } from "./firebase";
 
 /* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
@@ -11533,8 +11534,9 @@ function MonkeyJailModal({ student, onStartMission, onClose, jailGoalQuestions, 
       {/* Sad downcast eyes */}
       <path d="M 100 95 Q 105 105 110 95" stroke="#2a1a0a" strokeWidth="3" fill="none" strokeLinecap="round" />
       <path d="M 130 95 Q 135 105 140 95" stroke="#2a1a0a" strokeWidth="3" fill="none" strokeLinecap="round" />
-      {/* Single tiny tear */}
-      <ellipse cx="108" cy="108" rx="2" ry="3.5" fill="#7ec0f0" opacity="0.85" />
+      {/* Single tiny tear — animated drip for a touch of pathos */}
+      <ellipse cx="108" cy="108" rx="2" ry="3.5" fill="#7ec0f0" opacity="0.85"
+        style={{ animation: "jailTearDrip 4s ease-in-out infinite", transformOrigin: "108px 108px" }} />
       {/* Frowning mouth */}
       <path d="M 108 128 Q 120 122 132 128" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
       {/* Arms gripping bars */}
@@ -11561,9 +11563,58 @@ function MonkeyJailModal({ student, onStartMission, onClose, jailGoalQuestions, 
         animation: "popIn 0.4s ease-out",
         position: "relative",
       }}>
-        {/* Soft jungle leaves at top corners */}
-        <div style={{ position: "absolute", top: -16, left: -8, fontSize: 56, opacity: 0.7, transform: "rotate(-25deg)", pointerEvents: "none" }}>🌿</div>
-        <div style={{ position: "absolute", top: -16, right: -8, fontSize: 56, opacity: 0.7, transform: "rotate(25deg) scaleX(-1)", pointerEvents: "none" }}>🌿</div>
+        {/* Cute jail animations */}
+        <style>{`
+          @keyframes jailTearDrip {
+            0%, 60% { transform: translateY(0) scaleY(1); opacity: 0.85; }
+            85%     { transform: translateY(14px) scaleY(1.4); opacity: 0.5; }
+            100%    { transform: translateY(20px) scaleY(0.6); opacity: 0; }
+          }
+          @keyframes leafSway {
+            0%, 100% { transform: rotate(-25deg); }
+            50%      { transform: rotate(-18deg); }
+          }
+          @keyframes leafSwayRight {
+            0%, 100% { transform: rotate(25deg) scaleX(-1); }
+            50%      { transform: rotate(18deg) scaleX(-1); }
+          }
+          @keyframes floatingLeaf {
+            0%   { transform: translate(0, -10px) rotate(0deg); opacity: 0; }
+            10%  { opacity: 0.7; }
+            100% { transform: translate(var(--lx, 20px), 280px) rotate(360deg); opacity: 0; }
+          }
+        `}</style>
+
+        {/* Soft jungle leaves at top corners — now gently swaying */}
+        <div style={{
+          position: "absolute", top: -16, left: -8, fontSize: 56, opacity: 0.7,
+          transformOrigin: "30% 70%",
+          animation: "leafSway 4s ease-in-out infinite",
+          pointerEvents: "none",
+        }}>🌿</div>
+        <div style={{
+          position: "absolute", top: -16, right: -8, fontSize: 56, opacity: 0.7,
+          transformOrigin: "70% 70%",
+          animation: "leafSwayRight 4s ease-in-out 0.5s infinite",
+          pointerEvents: "none",
+        }}>🌿</div>
+
+        {/* Tiny falling jungle leaves through the scene (4 of them, staggered) */}
+        {[
+          { lx: "30px", left: "15%", delay: "0s", emoji: "🍃" },
+          { lx: "-25px", left: "45%", delay: "2.5s", emoji: "🌸" },
+          { lx: "20px", left: "70%", delay: "5s", emoji: "🍃" },
+          { lx: "-15px", left: "85%", delay: "1.5s", emoji: "🌸" },
+        ].map((leaf, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            top: 0, left: leaf.left,
+            fontSize: 14, opacity: 0.5,
+            ["--lx"]: leaf.lx,
+            animation: `floatingLeaf 8s linear ${leaf.delay} infinite`,
+            pointerEvents: "none",
+          }}>{leaf.emoji}</div>
+        ))}
 
         {/* Header */}
         <div style={{ padding: "20px 24px 8px", textAlign: "center" }}>
@@ -11875,8 +11926,13 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
   const [sway, setSway] = useState(0);
   const [drift, setDrift] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
+  // Cute additions: hover wiggle, click sparkle, periodic heart bubble
+  const [hovering, setHovering] = useState(false);
+  const [sparkleTick, setSparkleTick] = useState(0);
+  const [heartTick, setHeartTick] = useState(0);
   const frameRef = useRef(0);
   const blinkTimer = useRef(null);
+  const heartTimer = useRef(null);
 
   useEffect(() => {
     let running = true;
@@ -11910,6 +11966,18 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
     return () => clearTimeout(blinkTimer.current);
   }, []);
 
+  // Periodic heart-bubble drift (every 8-14s)
+  useEffect(() => {
+    const scheduleHeart = () => {
+      heartTimer.current = setTimeout(() => {
+        setHeartTick(h => h + 1);
+        scheduleHeart();
+      }, 8000 + Math.random() * 6000);
+    };
+    scheduleHeart();
+    return () => clearTimeout(heartTimer.current);
+  }, []);
+
   // ── Orangutan palette: warm orange-browns, but still rendered with the same
   //    watercolor softness as student monkeys. Face stays peachy for warmth.
   const oFur1 = "#d68a4a";   // primary warm orange-brown
@@ -11937,15 +12005,40 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
 
   return (
     <div
-      onClick={onClick}
+      onClick={() => {
+        if (!onClick) return;
+        setSparkleTick(s => s + 1); // fire sparkle burst
+        onClick();
+      }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       style={{
         cursor: onClick ? "pointer" : "default",
-        transform: `translate(${drift.x}px, ${drift.y + bob}px) rotate(${sway}deg)`,
-        transition: "transform 0.05s linear",
+        transform: `translate(${drift.x}px, ${drift.y + bob}px) rotate(${sway + (hovering ? 3 : 0)}deg) scale(${hovering ? 1.05 : 1})`,
+        transition: "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
         position: "relative",
         filter: selected ? "drop-shadow(0 0 14px rgba(255,180,80,0.7))" : undefined,
       }}
     >
+      {/* Inline keyframes for the cute drifting hearts + click sparkle */}
+      <style>{`
+        @keyframes heartDrift-${variant} {
+          0%   { transform: translate(-50%, 0) scale(0.3); opacity: 0; }
+          15%  { transform: translate(-50%, -8px) scale(1.1); opacity: 1; }
+          85%  { transform: translate(-30%, -40px) scale(0.95); opacity: 0.9; }
+          100% { transform: translate(-20%, -56px) scale(0.7); opacity: 0; }
+        }
+        @keyframes sparkleClick-${variant} {
+          0%   { transform: translate(-50%, -50%) scale(0.3) rotate(0deg); opacity: 0; }
+          25%  { opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1.4) rotate(180deg); opacity: 0; }
+        }
+        @keyframes badgePulse-${variant} {
+          0%, 100% { transform: translateX(-50%) scale(1); }
+          50%      { transform: translateX(-50%) scale(1.08); }
+        }
+      `}</style>
+
       {/* "Sensei" badge floating above */}
       <div style={{
         position: "absolute", top: -22, left: "50%",
@@ -11959,9 +12052,42 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
         letterSpacing: 0.5,
         whiteSpace: "nowrap",
         zIndex: 2,
+        animation: hovering ? `badgePulse-${variant} 0.8s ease-in-out infinite` : undefined,
       }}>
         🦧 {name ? `${name} (Sensei)` : "Sensei"}
       </div>
+
+      {/* Cute drifting heart bubble — appears periodically as a charm bit */}
+      {heartTick > 0 && (
+        <div
+          key={`heart-${heartTick}`}
+          style={{
+            position: "absolute",
+            top: -12, left: "50%",
+            fontSize: 18,
+            pointerEvents: "none",
+            animation: `heartDrift-${variant} 3.5s ease-out forwards`,
+            zIndex: 3,
+            filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.15))",
+          }}
+        >💗</div>
+      )}
+
+      {/* Click sparkle — fires when student taps the orangutan */}
+      {sparkleTick > 0 && (
+        <div
+          key={`sparkle-${sparkleTick}`}
+          style={{
+            position: "absolute",
+            top: "50%", left: "50%",
+            fontSize: 56,
+            pointerEvents: "none",
+            animation: `sparkleClick-${variant} 0.8s ease-out forwards`,
+            zIndex: 5,
+            filter: "drop-shadow(0 0 8px rgba(255,220,120,0.9))",
+          }}
+        >✨</div>
+      )}
 
       <svg width={size} height={size * 1.15} viewBox="-60 -62 120 135" style={{ overflow: "visible" }}>
         {/* ─── BODY ─── */}
@@ -12049,17 +12175,473 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
         <path d="M -6 -2 Q 0 3 6 -2" fill="none" stroke="#5a2a10"
               strokeWidth="2" strokeLinecap="round" opacity="0.8" />
 
-        {/* ─── HAIR TUFT ─── tiny sensei wisp on top of head */}
+        {/* ─── HAIR TUFT + TINY LEAF ─── sensei wisp on top, with a little
+            leaf tucked in as a charming bit of jungle whimsy */}
         <g filter="url(#watercolorSoft)">
           <ellipse cx="0" cy="-42" rx="6" ry="4" fill={oFur3} opacity="0.85" />
           <ellipse cx="-2" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
           <ellipse cx="3" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
+        </g>
+        {/* Tiny leaf tucked into the hair */}
+        <g transform="translate(6, -46) rotate(25)">
+          <ellipse cx="0" cy="0" rx="4" ry="2.5" fill="#7ac87c" opacity="0.9" />
+          <ellipse cx="0" cy="0" rx="3" ry="1.5" fill="#4a9550" opacity="0.5" />
+          <line x1="-3" y1="0" x2="3" y2="0" stroke="#3a7530" strokeWidth="0.4" opacity="0.6" />
         </g>
 
         {/* ─── WATER RIPPLE ─── anchors them in the pool */}
         <ellipse cx="0" cy="48" rx="38" ry="4" fill="rgba(120,200,200,0.35)" />
         <ellipse cx="0" cy="52" rx="28" ry="2.5" fill="rgba(120,200,200,0.25)" />
       </svg>
+    </div>
+  );
+}
+
+/* ─── PRESET MESSAGES ─── short, vetted options the student can tap.
+   Free text is optional and capped at 60 characters. */
+const SENSEI_PRESETS = [
+  { id: "need_help",  emoji: "😟", text: "I need help" },
+  { id: "finished",   emoji: "✨", text: "I finished my work!" },
+  { id: "thank_you",  emoji: "🙏", text: "Thank you, Sensei!" },
+  { id: "question",   emoji: "🤔", text: "I have a question" },
+  { id: "stuck",      emoji: "🥺", text: "I'm stuck on something" },
+  { id: "happy",      emoji: "😊", text: "I'm having a good day!" },
+];
+
+/* ─── MESSAGE SENSEI MODAL ─── student-side send-message UI.
+   Shows the orangutan, big preset buttons, and an optional short free-text
+   field. Send-only — no replies; the teacher reads in their mailbox. */
+function MessageSenseiModal({ student, teacher, onClose, onSend, lastSentAt }) {
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [freeText, setFreeText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // Rate limit: max 1 message every 5 minutes (client-side, advisory).
+  // The truly determined kid can refresh and bypass — that's fine for v1.
+  const RATE_LIMIT_MS = 5 * 60 * 1000;
+  const sinceLast = lastSentAt ? Date.now() - lastSentAt : Infinity;
+  const cooldownRemaining = Math.max(0, RATE_LIMIT_MS - sinceLast);
+  const cooledDown = cooldownRemaining === 0;
+  const cooldownSeconds = Math.ceil(cooldownRemaining / 1000);
+
+  const finalText = (selectedPreset
+    ? SENSEI_PRESETS.find(p => p.id === selectedPreset)?.text
+    : "") + (freeText.trim() ? ` — ${freeText.trim()}` : "");
+
+  const canSend = (selectedPreset || freeText.trim()) && cooledDown && !sending;
+
+  const handleSend = async () => {
+    if (!canSend) return;
+    setSending(true);
+    try {
+      await onSend({
+        preset: selectedPreset,
+        text: finalText.trim() || freeText.trim(),
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000,
+      background: "rgba(35, 25, 15, 0.65)",
+      backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, animation: "fadeIn 0.25s ease-out",
+    }} onClick={onClose}>
+      <style>{`
+        @keyframes msgPresetIn {
+          0%   { transform: translateY(8px) scale(0.85); opacity: 0; }
+          70%  { transform: translateY(-2px) scale(1.04); opacity: 1; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes msgPresetSelected {
+          0%, 100% { transform: scale(1); }
+          40%      { transform: scale(1.06) rotate(-1deg); }
+          60%      { transform: scale(1.04) rotate(1deg); }
+        }
+        @keyframes msgHeartUp {
+          0%   { transform: translate(-50%, 0) scale(0.4); opacity: 0; }
+          20%  { transform: translate(-50%, -8px) scale(1); opacity: 1; }
+          100% { transform: translate(-30%, -38px) scale(0.7); opacity: 0; }
+        }
+        @keyframes thinkBubble {
+          0%, 100% { transform: scale(1) translateY(0); opacity: 0.85; }
+          50%      { transform: scale(1.05) translateY(-2px); opacity: 1; }
+        }
+        @keyframes senseiSway {
+          0%, 100% { transform: rotate(-2deg); }
+          50%      { transform: rotate(2deg); }
+        }
+        @keyframes sendButtonGlow {
+          0%, 100% { box-shadow: 0 4px 12px rgba(196,120,53,0.35); }
+          50%      { box-shadow: 0 4px 22px rgba(196,120,53,0.6), 0 0 0 4px rgba(196,120,53,0.12); }
+        }
+        @keyframes paperPlaneFly {
+          0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+          100% { transform: translate(220px, -180px) rotate(25deg); opacity: 0; }
+        }
+      `}</style>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "linear-gradient(180deg, #fff8ec 0%, #fbecd0 100%)",
+        borderRadius: 24, width: "min(440px, 100%)",
+        maxHeight: "90vh", overflow: "auto",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.35), 0 0 0 6px rgba(196,120,53,0.08)",
+        border: "3px solid #c47835",
+        animation: "popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        position: "relative",
+      }}>
+        {/* Close */}
+        <button onClick={onClose} style={{
+          position: "absolute", top: 12, right: 14,
+          background: "transparent", border: "none",
+          fontSize: 22, cursor: "pointer", color: "#7a5d34",
+          fontWeight: 700, lineHeight: 1,
+        }}>✕</button>
+
+        {/* Sensei portrait + greeting + cute thinking bubble */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 24px 8px", position: "relative" }}>
+          <div style={{
+            position: "relative",
+            marginBottom: 4,
+            animation: "senseiSway 3.5s ease-in-out infinite",
+          }}>
+            <OrangutanMascot size={84} />
+            {/* Thinking bubble — cute touch */}
+            <div style={{
+              position: "absolute",
+              top: -4, right: -32,
+              animation: "thinkBubble 2.2s ease-in-out infinite",
+              fontSize: 14,
+            }}>💭</div>
+          </div>
+          <h2 style={{
+            margin: 0, fontSize: 22, color: "#3a2410",
+            fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+          }}>Message Sensei</h2>
+          <p style={{
+            margin: "4px 0 0", fontSize: 13, color: "#7a5d34", textAlign: "center",
+            fontFamily: "'Patrick Hand', cursive",
+          }}>
+            {teacher?.name ? `${teacher.name} will see this in their mailbox.` : "Your teacher will see this."}
+          </p>
+        </div>
+
+        {/* Preset message grid */}
+        <div style={{ padding: "8px 20px 4px" }}>
+          <div style={{
+            fontSize: 12, color: "#7a5d34", fontWeight: 700,
+            letterSpacing: 1, textTransform: "uppercase",
+            fontFamily: "'Patrick Hand', cursive",
+            marginBottom: 8,
+          }}>Pick a message</div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 8,
+          }}>
+            {SENSEI_PRESETS.map((p, i) => {
+              const isSelected = selectedPreset === p.id;
+              return (
+                <button key={p.id} onClick={() => setSelectedPreset(isSelected ? null : p.id)}
+                  style={{
+                    padding: "12px 10px", borderRadius: 14,
+                    background: isSelected
+                      ? "linear-gradient(135deg, #d68a4a 0%, #a05c1e 100%)"
+                      : "white",
+                    color: isSelected ? "white" : "#3a2410",
+                    border: `2px solid ${isSelected ? "#a05c1e" : "#e8d3a8"}`,
+                    fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    transition: "all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    textAlign: "center", position: "relative",
+                    transform: isSelected ? "scale(1.04)" : "scale(1)",
+                    boxShadow: isSelected
+                      ? "0 6px 18px rgba(196,120,53,0.4), 0 0 0 4px rgba(196,120,53,0.12)"
+                      : "0 1px 3px rgba(0,0,0,0.06)",
+                    animation: `msgPresetIn 0.4s ${i * 0.05}s cubic-bezier(0.34, 1.56, 0.64, 1) backwards${isSelected ? `, msgPresetSelected 0.5s ease-out` : ""}`,
+                  }}>
+                  <span style={{
+                    fontSize: 22, lineHeight: 1,
+                    display: "inline-block",
+                    transform: isSelected ? "scale(1.15)" : "scale(1)",
+                    transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  }}>{p.emoji}</span>
+                  <span style={{ lineHeight: 1.2 }}>{p.text}</span>
+                  {/* Heart floats up when selected — feels rewarding */}
+                  {isSelected && (
+                    <span style={{
+                      position: "absolute",
+                      top: 0, left: "50%",
+                      fontSize: 16,
+                      pointerEvents: "none",
+                      animation: "msgHeartUp 1.4s ease-out forwards",
+                      filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.2))",
+                    }}>💖</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Optional free text */}
+        <div style={{ padding: "12px 20px 4px" }}>
+          <div style={{
+            fontSize: 12, color: "#7a5d34", fontWeight: 700,
+            letterSpacing: 1, textTransform: "uppercase",
+            fontFamily: "'Patrick Hand', cursive",
+            marginBottom: 6,
+          }}>Add a note (optional)</div>
+          <input
+            type="text"
+            value={freeText}
+            onChange={e => setFreeText(e.target.value.slice(0, 60))}
+            placeholder="Be kind! Sensei reads every message"
+            style={{
+              width: "100%", padding: "10px 12px", borderRadius: 12,
+              border: `2px solid #e8d3a8`, background: "white",
+              fontFamily: "'Patrick Hand', cursive", fontSize: 14,
+              color: "#3a2410", outline: "none", boxSizing: "border-box",
+            }}
+          />
+          <div style={{
+            fontSize: 11, color: "#a08560",
+            textAlign: "right", marginTop: 4,
+            fontFamily: "'Patrick Hand', cursive",
+          }}>{freeText.length}/60</div>
+        </div>
+
+        {/* Cooldown notice */}
+        {!cooledDown && (
+          <div style={{
+            margin: "0 20px 8px", padding: "8px 12px",
+            background: "rgba(196,120,53,0.12)",
+            borderRadius: 10,
+            fontSize: 12, color: "#7a5d34",
+            fontFamily: "'Patrick Hand', cursive",
+            textAlign: "center",
+          }}>
+            ⏳ Please wait {cooldownSeconds}s before sending another message
+          </div>
+        )}
+
+        {/* Send button */}
+        <div style={{ padding: "8px 20px 20px", display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{
+            padding: "12px 18px", borderRadius: 14,
+            background: "transparent", border: "2px solid rgba(0,0,0,0.12)",
+            color: "#7a5d34", fontFamily: "'Patrick Hand', cursive",
+            fontSize: 15, fontWeight: 700, cursor: "pointer",
+          }}>Cancel</button>
+          <button onClick={handleSend} disabled={!canSend} style={{
+            flex: 1, padding: "12px 18px", borderRadius: 14,
+            background: canSend
+              ? "linear-gradient(135deg, #d68a4a 0%, #a05c1e 100%)"
+              : "rgba(196,120,53,0.3)",
+            border: "none", color: "white",
+            fontFamily: "'Patrick Hand', cursive",
+            fontSize: 16, fontWeight: 700,
+            cursor: canSend ? "pointer" : "not-allowed",
+            boxShadow: canSend ? "0 4px 12px rgba(196,120,53,0.35)" : "none",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            animation: canSend && !sending ? "sendButtonGlow 1.8s ease-in-out infinite" : undefined,
+            position: "relative", overflow: "hidden",
+            transform: sending ? "scale(0.96)" : "scale(1)",
+            transition: "transform 0.15s ease",
+          }}>
+            <span style={{
+              display: "inline-block",
+              animation: sending ? "paperPlaneFly 0.6s ease-in forwards" : undefined,
+            }}>
+              {sending ? "💌" : "📬"}
+            </span>
+            <span>{sending ? "Sending..." : "Send to Sensei"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── TEACHER MAILBOX MODAL ─── read-only view of student messages.
+   Sorted newest-first. Unread messages highlighted; clicking "Mark read"
+   dims them. Teacher can also delete messages they've handled. */
+function TeacherMailboxModal({ messages, onClose, onMarkRead, onDelete }) {
+  const unreadCount = messages.filter(m => !m.read).length;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1800,
+      background: "rgba(35, 25, 15, 0.55)",
+      backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, animation: "fadeIn 0.25s ease-out",
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "#fff",
+        borderRadius: 22, width: "min(560px, 100%)",
+        maxHeight: "85vh", display: "flex", flexDirection: "column",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.3), 0 0 0 6px rgba(196,120,53,0.06)",
+        border: "2px solid #c47835",
+        animation: "popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      }}>
+        <style>{`
+          @keyframes newBadgeWiggle {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25%      { transform: rotate(-4deg) scale(1.05); }
+            75%      { transform: rotate(4deg) scale(1.05); }
+          }
+          @keyframes mailboxIconBob {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50%      { transform: translateY(-3px) rotate(-3deg); }
+          }
+        `}</style>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 22px", borderBottom: "2px solid #f0e0c4",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{
+              fontSize: 26, display: "inline-block",
+              animation: unreadCount > 0 ? "mailboxIconBob 1.6s ease-in-out infinite" : undefined,
+            }}>📬</span>
+            <div>
+              <div style={{
+                fontSize: 18, fontWeight: 700, color: "#3a2410",
+                fontFamily: "'Patrick Hand', cursive",
+              }}>Mailbox</div>
+              <div style={{
+                fontSize: 12, color: "#7a5d34",
+                fontFamily: "'Patrick Hand', cursive",
+              }}>
+                {messages.length} message{messages.length === 1 ? "" : "s"}
+                {unreadCount > 0 && ` · ${unreadCount} unread`}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: "transparent", border: "none",
+            fontSize: 22, cursor: "pointer", color: "#7a5d34",
+            fontWeight: 700, lineHeight: 1,
+          }}>✕</button>
+        </div>
+
+        {/* Message list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 22px" }}>
+          {messages.length === 0 ? (
+            <div style={{
+              padding: "40px 20px 60px", textAlign: "center",
+              color: "#a08560", fontFamily: "'Patrick Hand', cursive",
+            }}>
+              <style>{`
+                @keyframes mailboxZzz {
+                  0%   { transform: translate(0, 0) scale(0.8); opacity: 0; }
+                  20%  { transform: translate(4px, -6px) scale(1); opacity: 1; }
+                  80%  { transform: translate(12px, -22px) scale(1.1); opacity: 0.85; }
+                  100% { transform: translate(18px, -30px) scale(0.7); opacity: 0; }
+                }
+                @keyframes mailboxSenseiBreath {
+                  0%, 100% { transform: scale(1); }
+                  50%      { transform: scale(1.03); }
+                }
+              `}</style>
+              <div style={{ position: "relative", display: "inline-block", marginBottom: 12 }}>
+                <div style={{ animation: "mailboxSenseiBreath 3s ease-in-out infinite" }}>
+                  <OrangutanMascot size={120} />
+                </div>
+                {/* Zzz puffs — three of them staggered */}
+                {[0, 0.8, 1.6].map((delay, i) => (
+                  <div key={i} style={{
+                    position: "absolute",
+                    top: "10%", right: "10%",
+                    fontSize: 18, fontWeight: 700,
+                    color: "#7a9fc0",
+                    animation: `mailboxZzz 2.4s ease-out ${delay}s infinite`,
+                    pointerEvents: "none",
+                  }}>Z</div>
+                ))}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "#7a5d34" }}>Sensei is taking a nap</div>
+              <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
+                No student messages yet.<br />
+                Students can tap your orangutan in the Hot Spring to say hi! 💬
+              </div>
+            </div>
+          ) : (
+            messages.map(m => (
+              <div key={m.id} style={{
+                padding: "12px 14px", borderRadius: 12,
+                background: m.read ? "rgba(0,0,0,0.03)" : "rgba(196,120,53,0.08)",
+                border: `2px solid ${m.read ? "rgba(0,0,0,0.08)" : "rgba(196,120,53,0.35)"}`,
+                marginBottom: 10,
+                opacity: m.read ? 0.7 : 1,
+                transition: "all 0.2s ease",
+              }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+                  marginBottom: 6,
+                }}>
+                  <div>
+                    <div style={{
+                      fontSize: 15, fontWeight: 700, color: "#3a2410",
+                      fontFamily: "'Patrick Hand', cursive",
+                    }}>
+                      {m.studentName || "Student"}
+                      {!m.read && (
+                        <span style={{
+                          marginLeft: 8, fontSize: 10, fontWeight: 700,
+                          background: "linear-gradient(135deg, #d68a4a 0%, #a05c1e 100%)",
+                          color: "white",
+                          padding: "2px 8px", borderRadius: 999,
+                          letterSpacing: 0.5, verticalAlign: "middle",
+                          display: "inline-block",
+                          animation: "newBadgeWiggle 1.6s ease-in-out infinite",
+                          boxShadow: "0 2px 6px rgba(196,120,53,0.3)",
+                        }}>NEW</span>
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: 11, color: "#a08560",
+                      fontFamily: "'Patrick Hand', cursive",
+                    }}>
+                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : ""}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: 15, color: "#3a2410", lineHeight: 1.4,
+                  fontFamily: "'Patrick Hand', cursive",
+                  marginBottom: 8,
+                }}>
+                  {m.text}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {!m.read && (
+                    <button onClick={() => onMarkRead(m.id)} style={{
+                      padding: "5px 12px", borderRadius: 999,
+                      background: "#c47835", color: "white", border: "none",
+                      fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 12, fontWeight: 700, cursor: "pointer",
+                    }}>✓ Mark read</button>
+                  )}
+                  <button onClick={() => onDelete(m.id)} style={{
+                    padding: "5px 12px", borderRadius: 999,
+                    background: "transparent", color: "#a08560",
+                    border: "1.5px solid rgba(160,133,96,0.4)",
+                    fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}>Delete</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -14103,6 +14685,16 @@ function SnowMonkeyTrackerInner() {
   const [showJailModal, setShowJailModal] = useState(false);
   // Trigger counter for the celebratory star-burst animation on collection.
   const [collectBurst, setCollectBurst] = useState({ trigger: 0, amount: 0 });
+
+  // ─── MESSAGE SENSEI ──
+  // Student → teacher "send-only" messaging. Student clicks the orangutan in
+  // the pool to open the send modal; teacher sees received messages in a
+  // mailbox modal accessible from the dashboard.
+  const [showMessageSensei, setShowMessageSensei] = useState(false);
+  const [lastSentMessageAt, setLastSentMessageAt] = useState(null);
+  const [showMailbox, setShowMailbox] = useState(false);
+  const [teacherMessages, setTeacherMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
   const [petNicknameInput, setPetNicknameInput] = useState(""); // student-typed nickname for new pet
@@ -14610,6 +15202,64 @@ function SnowMonkeyTrackerInner() {
      Updates the cross-mode shared `answeredCorrect` array so the same question
      won't appear again when switching to a different mode within the same mission.
      Returns the new total of correctly-answered questions. */
+  /* ─── Send a message to Sensei ──
+     Student-side handler. Writes a doc to the `messages` collection addressed
+     to the student's teacher. The teacher will see it in their Mailbox modal
+     (loaded on demand, not polled — so it doesn't burn Firestore quota). */
+  const handleSendMessageToSensei = useCallback(async ({ preset, text }) => {
+    if (!user) return;
+    const me = students.find(s => s.id === user.id);
+    if (!me) return;
+    if (!me.teacherId) {
+      notify("You don't have a teacher assigned yet — ask them for their class code.", "error");
+      return;
+    }
+    try {
+      await sendMessage({
+        teacherId: me.teacherId,
+        studentId: me.id,
+        studentName: me.name || "Student",
+        text: text || "",
+        preset: preset || null,
+        createdAt: new Date().toISOString(),
+      });
+      setLastSentMessageAt(Date.now());
+      setShowMessageSensei(false);
+      notify(`📬 Message sent to Sensei!`, "success");
+    } catch (e) {
+      console.warn("Send message failed:", e?.message);
+      notify("Couldn't send — please try again.", "error");
+    }
+  }, [user, students]);
+
+  /* ─── Teacher mailbox: load + actions ──
+     Loaded on demand (when the teacher opens the mailbox), not polled. */
+  const handleOpenMailbox = useCallback(async () => {
+    if (!user) return;
+    setShowMailbox(true);
+    setMessagesLoading(true);
+    try {
+      const msgs = await getMessagesForTeacher(user.id);
+      setTeacherMessages(msgs);
+    } catch (e) {
+      console.warn("Mailbox load failed:", e?.message);
+      notify("Couldn't load messages — try again.", "error");
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [user]);
+
+  const handleMarkMessageRead = useCallback(async (msgId) => {
+    // Optimistic local update
+    setTeacherMessages(prev => prev.map(m => m.id === msgId ? { ...m, read: true } : m));
+    try { await markMessageRead(msgId); } catch (e) { console.warn("Mark read failed:", e?.message); }
+  }, []);
+
+  const handleDeleteMessage = useCallback(async (msgId) => {
+    setTeacherMessages(prev => prev.filter(m => m.id !== msgId));
+    try { await deleteMessage(msgId); } catch (e) { console.warn("Delete message failed:", e?.message); }
+  }, []);
+
   /* ─── Collect today's pet income ──
      Adds the computed daily income to the student's points balance and marks
      today's challenge as "collected" so they can't double-claim. */
@@ -16443,6 +17093,21 @@ function SnowMonkeyTrackerInner() {
           }}>♨️ Monkey Hot Spring</h1>
           {/* RIGHT: controls */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+            {/* MAILBOX — student messages. Badge shows unread count.
+                We don't poll on a timer; the count refreshes when the teacher
+                opens the mailbox. Showing a generic dot is OK for v1. */}
+            <button onClick={handleOpenMailbox}
+              title="Student messages"
+              style={{
+                padding: "9px 12px", borderRadius: 12,
+                border: `2px solid ${C.fur2}30`,
+                background: `${C.card}dd`, color: C.text,
+                fontFamily: "'Patrick Hand', cursive",
+                fontSize: 18, cursor: "pointer", lineHeight: 1,
+                position: "relative", minWidth: 42,
+              }}>
+              📬
+            </button>
             <button onClick={toggleTheme}
               title={themeTitle}
               style={{
@@ -16544,6 +17209,16 @@ function SnowMonkeyTrackerInner() {
             ))}
             <button onClick={addStudent} style={{ width: "100%", padding: 13, borderRadius: 14, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, marginTop: 4 }}>Add to Hot Spring!</button>
           </div>
+        )}
+
+        {/* ─── TEACHER MAILBOX ─── read-only view of incoming student messages. */}
+        {showMailbox && (
+          <TeacherMailboxModal
+            messages={teacherMessages}
+            onClose={() => setShowMailbox(false)}
+            onMarkRead={handleMarkMessageRead}
+            onDelete={handleDeleteMessage}
+          />
         )}
 
         {/* ─── ORPHAN STUDENT ASSIGNMENT MODAL ──
@@ -18748,6 +19423,18 @@ function SnowMonkeyTrackerInner() {
         {/* STAR COLLECTION BURST — celebratory floating-stars animation */}
         <StarCollectionBurst trigger={collectBurst.trigger} amount={collectBurst.amount} />
 
+        {/* MESSAGE SENSEI MODAL — student-side; opens when student clicks the
+            teacher orangutan in the classroom view. */}
+        {showMessageSensei && me && (
+          <MessageSenseiModal
+            student={me}
+            teacher={me.teacherId ? teachers.find(t => t.id === me.teacherId) : null}
+            onClose={() => setShowMessageSensei(false)}
+            onSend={handleSendMessageToSensei}
+            lastSentAt={lastSentMessageAt}
+          />
+        )}
+
         {/* Pet Mart modal - Mystery Packs + Pet Collection */}
         {showPetMart && me && (() => {
           const owned = me.ownedPets || [];
@@ -19148,7 +19835,23 @@ function SnowMonkeyTrackerInner() {
                     size={180}
                     name={myTeacher.name}
                     delay={0}
+                    onClick={() => { SFX.click(); setShowMessageSensei(true); }}
                   />
+                  {/* Subtle hint pill so students discover the click */}
+                  <div style={{
+                    position: "absolute",
+                    bottom: -10, left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(196,120,53,0.85)",
+                    color: "white",
+                    fontSize: 11, fontWeight: 700,
+                    padding: "3px 10px", borderRadius: 999,
+                    fontFamily: "'Patrick Hand', cursive",
+                    whiteSpace: "nowrap",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                    pointerEvents: "none",
+                    letterSpacing: 0.3,
+                  }}>💬 Tap to message</div>
                 </div>
               );
             })()}
