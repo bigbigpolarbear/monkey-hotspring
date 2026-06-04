@@ -11506,6 +11506,364 @@ function ConfettiBurst({ trigger, count = 60, intensity = "normal" }) {
   );
 }
 
+/* ─── MONKEY JAIL MODAL ─── playful full-screen jail when a student misses days.
+   Shows bamboo cage, sad monkey behind bars, recovery progress, and a button
+   to start a mission so they can free their monkey. Tone is cute, not punishing. */
+function MonkeyJailModal({ student, onStartMission, onClose, jailGoalQuestions, jailGoalCorrect }) {
+  if (!student?.jail?.active) return null;
+  const recoveryQ = student.jail.recoveryQuestions || 0;
+  const recoveryC = student.jail.recoveryCorrect || 0;
+  const progressQ = Math.min(1, recoveryQ / jailGoalQuestions);
+  const progressC = Math.min(1, recoveryC / jailGoalCorrect);
+  // ── Sad-monkey SVG (drawn inline so it doesn't depend on MonkeySVG variants).
+  //    Eyes downcast, a small tear, drooping ears — playful but clearly "in trouble". ──
+  const sadMonkey = (
+    <svg viewBox="0 0 240 240" style={{ width: "100%", height: "100%" }}>
+      {/* Body */}
+      <ellipse cx="120" cy="155" rx="56" ry="48" fill="#9a7355" />
+      {/* Head */}
+      <circle cx="120" cy="95" r="58" fill="#a87f5c" />
+      {/* Inner face */}
+      <ellipse cx="120" cy="110" rx="38" ry="32" fill="#f0d8b8" />
+      {/* Ears — drooping slightly */}
+      <ellipse cx="62" cy="92" rx="14" ry="18" fill="#9a7355" transform="rotate(-15 62 92)" />
+      <ellipse cx="178" cy="92" rx="14" ry="18" fill="#9a7355" transform="rotate(15 178 92)" />
+      <ellipse cx="62" cy="92" rx="7" ry="10" fill="#e8a888" transform="rotate(-15 62 92)" />
+      <ellipse cx="178" cy="92" rx="7" ry="10" fill="#e8a888" transform="rotate(15 178 92)" />
+      {/* Sad downcast eyes */}
+      <path d="M 100 95 Q 105 105 110 95" stroke="#2a1a0a" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M 130 95 Q 135 105 140 95" stroke="#2a1a0a" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Single tiny tear */}
+      <ellipse cx="108" cy="108" rx="2" ry="3.5" fill="#7ec0f0" opacity="0.85" />
+      {/* Frowning mouth */}
+      <path d="M 108 128 Q 120 122 132 128" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      {/* Arms gripping bars */}
+      <rect x="68" y="135" width="18" height="50" rx="9" fill="#9a7355" />
+      <rect x="154" y="135" width="18" height="50" rx="9" fill="#9a7355" />
+    </svg>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000,
+      background: "rgba(35, 25, 15, 0.75)",
+      backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, animation: "fadeIn 0.3s ease-out",
+    }}
+    onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "linear-gradient(180deg, #f8efd9 0%, #efe0c2 100%)",
+        borderRadius: 28, width: "min(440px, 100%)",
+        maxHeight: "90vh", overflow: "auto",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.4), 0 0 0 6px rgba(70,140,80,0.15)",
+        border: "3px solid #8b6e3a",
+        animation: "popIn 0.4s ease-out",
+        position: "relative",
+      }}>
+        {/* Soft jungle leaves at top corners */}
+        <div style={{ position: "absolute", top: -16, left: -8, fontSize: 56, opacity: 0.7, transform: "rotate(-25deg)", pointerEvents: "none" }}>🌿</div>
+        <div style={{ position: "absolute", top: -16, right: -8, fontSize: 56, opacity: 0.7, transform: "rotate(25deg) scaleX(-1)", pointerEvents: "none" }}>🌿</div>
+
+        {/* Header */}
+        <div style={{ padding: "20px 24px 8px", textAlign: "center" }}>
+          <div style={{
+            display: "inline-block", padding: "4px 14px", borderRadius: 999,
+            background: "#c14d4d", color: "#fff", fontWeight: 700, fontSize: 12,
+            letterSpacing: 1.5, fontFamily: "'Patrick Hand', cursive",
+            marginBottom: 8,
+          }}>MISSION MISSED!</div>
+          <h2 style={{
+            margin: 0, fontSize: 28, color: "#3a2410",
+            fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
+          }}>Your monkey is in jail</h2>
+          <p style={{
+            margin: "6px 0 0", fontSize: 14, color: "#7a5d34",
+            fontFamily: "'Patrick Hand', cursive",
+          }}>Complete a recovery mission to free them!</p>
+        </div>
+
+        {/* Jail cage with monkey inside */}
+        <div style={{
+          position: "relative", margin: "12px auto 0",
+          width: 240, height: 240,
+          background: "radial-gradient(ellipse at center, #d4c39c 0%, #b89c6e 100%)",
+          borderRadius: 18,
+          overflow: "hidden",
+          boxShadow: "inset 0 4px 12px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15)",
+        }}>
+          {/* Soft jungle shadow behind */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "radial-gradient(ellipse at 30% 40%, rgba(120,180,100,0.25) 0%, transparent 60%)",
+            pointerEvents: "none",
+          }} />
+          {/* The monkey */}
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, padding: 4 }}>
+            {sadMonkey}
+          </div>
+          {/* Bamboo bars — 5 vertical, foreground */}
+          {[0.12, 0.32, 0.52, 0.72, 0.92].map((x, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              left: `${x * 100}%`, top: 0, bottom: 0,
+              width: 12, marginLeft: -6,
+              background: "linear-gradient(90deg, #8a6a2a 0%, #c6a05a 35%, #d4b070 50%, #c6a05a 65%, #8a6a2a 100%)",
+              borderRadius: 6,
+              boxShadow: "0 0 4px rgba(0,0,0,0.3)",
+            }}>
+              {/* Bamboo segment lines */}
+              {[0.18, 0.42, 0.66, 0.88].map((y, j) => (
+                <div key={j} style={{
+                  position: "absolute", left: -2, right: -2, top: `${y * 100}%`,
+                  height: 4, background: "#5a3f1a", borderRadius: 2, opacity: 0.6,
+                }} />
+              ))}
+            </div>
+          ))}
+          {/* Top "sign" */}
+          <div style={{
+            position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)",
+            background: "#fff8e8", border: "2px solid #8b6e3a",
+            padding: "2px 12px", borderRadius: 6,
+            fontSize: 11, color: "#5a3520", fontWeight: 700,
+            fontFamily: "'Patrick Hand', cursive",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+            letterSpacing: 0.5,
+          }}>🐵 JAIL</div>
+        </div>
+
+        {/* Recovery progress checklist */}
+        <div style={{ padding: "20px 24px 8px" }}>
+          <div style={{
+            fontSize: 13, color: "#7a5d34", fontWeight: 700,
+            fontFamily: "'Patrick Hand', cursive", marginBottom: 10,
+            letterSpacing: 0.5, textTransform: "uppercase",
+          }}>Recovery Mission</div>
+
+          {/* Questions answered */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontSize: 14, color: "#3a2410", fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>
+                {recoveryQ >= jailGoalQuestions ? "✅" : "📝"} Answer {jailGoalQuestions} questions
+              </span>
+              <span style={{ fontSize: 13, color: "#7a5d34", fontWeight: 700 }}>{recoveryQ}/{jailGoalQuestions}</span>
+            </div>
+            <div style={{ height: 8, background: "#dec9a0", borderRadius: 999, overflow: "hidden" }}>
+              <div style={{
+                width: `${progressQ * 100}%`, height: "100%",
+                background: recoveryQ >= jailGoalQuestions ? "#5caa5e" : "#c69050",
+                borderRadius: 999, transition: "width 0.4s ease",
+              }} />
+            </div>
+          </div>
+
+          {/* Correct */}
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontSize: 14, color: "#3a2410", fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>
+                {recoveryC >= jailGoalCorrect ? "✅" : "🎯"} Get {jailGoalCorrect} correct
+              </span>
+              <span style={{ fontSize: 13, color: "#7a5d34", fontWeight: 700 }}>{recoveryC}/{jailGoalCorrect}</span>
+            </div>
+            <div style={{ height: 8, background: "#dec9a0", borderRadius: 999, overflow: "hidden" }}>
+              <div style={{
+                width: `${progressC * 100}%`, height: "100%",
+                background: recoveryC >= jailGoalCorrect ? "#5caa5e" : "#c69050",
+                borderRadius: 999, transition: "width 0.4s ease",
+              }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ padding: "8px 24px 22px", display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: "0 0 auto", padding: "12px 18px", borderRadius: 14,
+            background: "transparent", border: "2px solid rgba(0,0,0,0.15)",
+            color: "#7a5d34", fontFamily: "'Patrick Hand', cursive",
+            fontSize: 15, fontWeight: 700, cursor: "pointer",
+          }}>Maybe later</button>
+          <button onClick={onStartMission} style={{
+            flex: 1, padding: "12px 18px", borderRadius: 14,
+            background: "linear-gradient(135deg, #5caa5e 0%, #4a9550 100%)",
+            border: "none", color: "white",
+            fontFamily: "'Patrick Hand', cursive",
+            fontSize: 16, fontWeight: 700, cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(92,170,94,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>
+            🔓 Free Your Monkey
+          </button>
+        </div>
+
+        <div style={{
+          padding: "0 24px 18px", textAlign: "center",
+          fontSize: 12, color: "#7a5d34", opacity: 0.75,
+          fontFamily: "'Patrick Hand', cursive",
+        }}>
+          Every question you answer counts toward freeing them
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── STAR COLLECTION BURST ─── shows floating + sparkling stars when the
+   student collects today's pet income. Triggered by bumping a counter prop. */
+function StarCollectionBurst({ trigger, amount = 0 }) {
+  const [active, setActive] = useState(false);
+  const [particles, setParticles] = useState([]);
+
+  useEffect(() => {
+    if (!trigger) return;
+    // Build a fresh particle set on each trigger
+    const count = Math.min(28, 14 + Math.floor(amount / 20));
+    const ps = Array.from({ length: count }, (_, i) => ({
+      id: `${trigger}-${i}`,
+      angle: (Math.random() - 0.5) * Math.PI * 0.7, // mostly upward fan
+      speed: 180 + Math.random() * 280,
+      size: 18 + Math.random() * 16,
+      sparkle: Math.random() > 0.6,
+      delay: Math.random() * 0.25,
+      drift: (Math.random() - 0.5) * 100,
+    }));
+    setParticles(ps);
+    setActive(true);
+    const t = setTimeout(() => setActive(false), 2000);
+    return () => clearTimeout(t);
+  }, [trigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!active) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1900,
+      pointerEvents: "none", overflow: "hidden",
+    }}>
+      {/* Center "+X stars" pop-up */}
+      <div style={{
+        position: "absolute", top: "45%", left: "50%",
+        transform: "translate(-50%, -50%)",
+        fontSize: 64, fontWeight: 700, color: "#edb830",
+        fontFamily: "'Patrick Hand', cursive",
+        textShadow: "0 4px 16px rgba(237,184,48,0.6), 0 2px 4px rgba(0,0,0,0.2)",
+        animation: "starPopText 1.6s ease-out forwards",
+        whiteSpace: "nowrap",
+      }}>+{amount} ★</div>
+
+      {/* Floating star particles */}
+      {particles.map(p => (
+        <div key={p.id} style={{
+          position: "absolute", top: "50%", left: "50%",
+          width: p.size, height: p.size,
+          marginLeft: -p.size / 2, marginTop: -p.size / 2,
+          animation: `starFloat 1.7s ${p.delay}s ease-out forwards`,
+          // Custom CSS vars so each particle gets a unique trajectory
+          ["--dx"]: `${Math.sin(p.angle) * p.speed + p.drift}px`,
+          ["--dy"]: `${-Math.cos(p.angle) * p.speed - 40}px`,
+        }}>
+          <div style={{
+            width: "100%", height: "100%",
+            background: p.sparkle ? "#fff8c0" : "#edb830",
+            clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+            filter: p.sparkle ? "drop-shadow(0 0 6px #fff8c0)" : "drop-shadow(0 0 4px #edb83080)",
+          }} />
+        </div>
+      ))}
+
+      <style>{`
+        @keyframes starFloat {
+          0%   { transform: translate(0, 0) rotate(0deg) scale(0.4); opacity: 0; }
+          15%  { opacity: 1; transform: translate(0, 0) rotate(20deg) scale(1); }
+          100% { transform: translate(var(--dx), var(--dy)) rotate(360deg) scale(0.6); opacity: 0; }
+        }
+        @keyframes starPopText {
+          0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+          30%  { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+          60%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+          100% { transform: translate(-50%, -80%) scale(0.9); opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ─── TEACHER ORANGUTAN MASCOT ─── premium, slightly wiser cousin of the
+   student monkeys. Wears glasses + cardigan. Used as a small dashboard
+   assistant card with status messages (no clutter). */
+function OrangutanMascot({ size = 96 }) {
+  return (
+    <svg viewBox="0 0 240 280" style={{ width: size, height: size * (280 / 240) }} aria-label="Sensei orangutan">
+      <defs>
+        {/* Subtle fur watercolour-style fill */}
+        <radialGradient id="oranFur" cx="50%" cy="40%" r="65%">
+          <stop offset="0%" stopColor="#e0a065" />
+          <stop offset="60%" stopColor="#c47835" />
+          <stop offset="100%" stopColor="#a05c1e" />
+        </radialGradient>
+        <radialGradient id="oranFace" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stopColor="#f7dcae" />
+          <stop offset="100%" stopColor="#dbb482" />
+        </radialGradient>
+        <linearGradient id="cardiganGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7a9fc0" />
+          <stop offset="100%" stopColor="#5e85a8" />
+        </linearGradient>
+      </defs>
+
+      {/* Cardigan body (shows below head) */}
+      <path d="M 60 230 Q 50 195 70 175 L 170 175 Q 190 195 180 230 Z" fill="url(#cardiganGrad)" />
+      <path d="M 120 175 L 120 230" stroke="#4a6b88" strokeWidth="2" opacity="0.6" />
+      {/* Cardigan buttons */}
+      <circle cx="120" cy="195" r="2.5" fill="#dbe4ed" />
+      <circle cx="120" cy="210" r="2.5" fill="#dbe4ed" />
+      <circle cx="120" cy="225" r="2.5" fill="#dbe4ed" />
+      {/* Collar */}
+      <path d="M 90 175 L 110 195 L 130 195 L 150 175" stroke="#4a6b88" strokeWidth="2" fill="none" strokeLinejoin="round" />
+
+      {/* Body fur peeking under cardigan */}
+      <ellipse cx="120" cy="180" rx="48" ry="12" fill="url(#oranFur)" />
+
+      {/* Side wisps of fur on cheeks — orangutan's distinctive face flange */}
+      <path d="M 50 130 Q 30 115 38 90 Q 50 75 70 90 Z" fill="url(#oranFur)" />
+      <path d="M 190 130 Q 210 115 202 90 Q 190 75 170 90 Z" fill="url(#oranFur)" />
+
+      {/* Head — oval, slightly wider than monkeys */}
+      <ellipse cx="120" cy="100" rx="62" ry="58" fill="url(#oranFur)" />
+
+      {/* Face — light skin patch */}
+      <ellipse cx="120" cy="115" rx="42" ry="40" fill="url(#oranFace)" />
+
+      {/* Brow ridge — orangutans have a defined brow */}
+      <path d="M 92 95 Q 102 88 112 96" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M 128 96 Q 138 88 148 95" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
+
+      {/* Glasses */}
+      <circle cx="103" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
+      <circle cx="137" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
+      <line x1="114" y1="113" x2="126" y2="113" stroke="#3a2410" strokeWidth="2.5" />
+      {/* Eyes inside glasses — kind, wise, slight smile crinkle */}
+      <circle cx="103" cy="113" r="3.5" fill="#1a1a1a" />
+      <circle cx="137" cy="113" r="3.5" fill="#1a1a1a" />
+      <circle cx="104" cy="111" r="1.2" fill="#fff" />
+      <circle cx="138" cy="111" r="1.2" fill="#fff" />
+
+      {/* Nose — small, gentle */}
+      <ellipse cx="120" cy="128" rx="5" ry="3" fill="#7a4f1f" opacity="0.6" />
+
+      {/* Mouth — soft trustworthy smile */}
+      <path d="M 108 140 Q 120 148 132 140" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+
+      {/* Tuft of hair on top — wise sensei vibe */}
+      <path d="M 110 50 Q 120 38 130 50 Q 125 56 120 55 Q 115 56 110 50 Z" fill="#7a4f1f" />
+
+      {/* Subtle smile crinkles for "wise" feeling */}
+      <path d="M 85 120 Q 88 122 90 124" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
+      <path d="M 150 124 Q 152 122 155 120" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function CrushGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
@@ -13540,6 +13898,11 @@ function SnowMonkeyTrackerInner() {
   // Default student landing: their personal Hot Spring (not the classroom).
   // Students can toggle to "classroom" via the World View button in the top nav.
   const [studentView, setStudentView] = useState("hotspring"); // "hotspring" | "classroom"
+  // Show the full Monkey Jail modal automatically on login when jail is active,
+  // and let the student dismiss it (they still see the top-bar pill).
+  const [showJailModal, setShowJailModal] = useState(false);
+  // Trigger counter for the celebratory star-burst animation on collection.
+  const [collectBurst, setCollectBurst] = useState({ trigger: 0, amount: 0 });
   const [petMartTab, setPetMartTab] = useState("packs"); // "packs" | "collection"
   const [packResult, setPackResult] = useState(null); // { pet, isDuplicate, consolationStars }
   const [petNicknameInput, setPetNicknameInput] = useState(""); // student-typed nickname for new pet
@@ -14063,6 +14426,24 @@ function SnowMonkeyTrackerInner() {
       notify("Already collected today — come back tomorrow!", "info");
       return;
     }
+    // ── Client-side cheat defense (light) ──
+    // Re-read latest from Firestore before applying. Reduces double-collection
+    // via React state manipulation if the user has DevTools open.
+    // NOTE: This is NOT a real security fix. See SERVER_SIDE_VALIDATION_PLAN.md
+    // for the proper Cloud Function approach when ready.
+    try {
+      const fresh = await getStudents();
+      const freshMe = fresh.find(s => s.id === user.id);
+      if (freshMe?.dailyChallenge?.date === getTodayKey() && freshMe.dailyChallenge.collected) {
+        notify("Already collected today — come back tomorrow!", "info");
+        // Sync local state with the latest from Firestore
+        setStudents(fresh);
+        setUser(u => u && u.id === user.id ? { ...u, ...freshMe } : u);
+        return;
+      }
+    } catch (e) {
+      console.warn("Pre-collect check failed (continuing optimistically):", e?.message);
+    }
     const income = computeDailyIncome(me);
     if (income.total <= 0) {
       notify("You need pets to generate stars. Visit the Pet Mart!", "info");
@@ -14076,6 +14457,8 @@ function SnowMonkeyTrackerInner() {
     setStudents(newS);
     setUser(u => u && u.id === user.id ? { ...u, ...patch } : u);
     SFX.reward();
+    // Trigger the celebratory star-burst animation overlay
+    setCollectBurst(prev => ({ trigger: prev.trigger + 1, amount: income.total }));
     notify(`🌟 +${income.total} stars from your pets!`, "success");
     updateStudent(user.id, patch).catch(e => {
       console.warn("Collect daily save failed:", e?.message);
@@ -14111,6 +14494,13 @@ function SnowMonkeyTrackerInner() {
       updateStudent(user.id, patch).catch(e => {
         console.warn("Jail check save failed:", e?.message);
       });
+      // First-time-jailed: pop up the full Jail modal immediately so the
+      // student sees what happened (otherwise they'd only see the top-bar pill).
+      setShowJailModal(true);
+    } else if (me.jail?.active) {
+      // Already in jail from previous session — surface the modal again on login
+      // so it stays top-of-mind. They can dismiss to keep playing.
+      setShowJailModal(true);
     }
   }, [user, isTeacherUser, students]);
 
@@ -16445,6 +16835,72 @@ function SnowMonkeyTrackerInner() {
         {/* ── New default teacher view: minimalist alphabetical roster ── */}
         {teacherView === "roster" && (
           <>
+            {/* ─── ORANGUTAN ASSISTANT — wise teacher mascot with class insight.
+                Shows a contextual message based on class state (everyone on
+                track, needs help, jailed monkeys, etc). Subtle, not cluttered. */}
+            {myClassStudents.length > 0 && (() => {
+              const today = getTodayKey();
+              const activeToday = myClassStudents.filter(s => s.lastActiveDay === today).length;
+              const inJail = myClassStudents.filter(s => s.jail?.active).length;
+              const needsHelp = myClassStudents.filter(s => {
+                if (!s.createdAt) return false;
+                const daysOld = (Date.now() - new Date(s.createdAt).getTime()) / 86400000;
+                return daysOld > 1 && (s.points || 0) < 5;
+              }).length;
+              const total = myClassStudents.length;
+
+              // Build a contextual message — orangutan is observant, not naggy
+              let msg, tone;
+              if (inJail >= Math.ceil(total * 0.4)) {
+                msg = `${inJail} students' monkeys are in jail. Try a quick class activity to bring them back.`;
+                tone = "warn";
+              } else if (needsHelp > 0) {
+                msg = `${needsHelp} student${needsHelp === 1 ? "" : "s"} need${needsHelp === 1 ? "s" : ""} a hand. They've signed up but haven't earned many stars yet.`;
+                tone = "info";
+              } else if (activeToday >= Math.ceil(total * 0.6)) {
+                msg = `Your class is on track today — ${activeToday} of ${total} are active. Nicely done.`;
+                tone = "good";
+              } else if (activeToday > 0) {
+                msg = `${activeToday} of ${total} students have logged in today. Send an assignment to nudge the rest?`;
+                tone = "info";
+              } else {
+                msg = `Quiet day so far. Try starting a live activity to bring the class in.`;
+                tone = "info";
+              }
+              const toneBg = tone === "warn" ? "#fff3e0" : tone === "good" ? "#e8f5e8" : "#f0f6f9";
+              const toneBorder = tone === "warn" ? "#e6a056" : tone === "good" ? "#5caa5e" : "#7a9fc0";
+
+              return (
+                <div style={{
+                  maxWidth: 1100, margin: "0 auto 14px", padding: "0 16px",
+                }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    background: toneBg,
+                    border: `2px solid ${toneBorder}40`,
+                    borderRadius: 16, padding: "12px 16px",
+                    boxShadow: `0 2px 8px ${toneBorder}15`,
+                  }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <OrangutanMascot size={72} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 12, color: toneBorder, fontWeight: 700,
+                        letterSpacing: 1, textTransform: "uppercase",
+                        fontFamily: "'Patrick Hand', cursive", marginBottom: 2,
+                      }}>Sensei says</div>
+                      <div style={{
+                        fontSize: 15, color: "#3a2410",
+                        fontFamily: "'Patrick Hand', cursive",
+                        lineHeight: 1.35, fontWeight: 600,
+                      }}>{msg}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ─── QUICK ACTIONS — 4 big obvious buttons so non-tech teachers
                 immediately see what they can do. Replaces the cluttered row of
                 small buttons. ─── */}
@@ -16508,12 +16964,14 @@ function SnowMonkeyTrackerInner() {
                     const daysOld = (Date.now() - created.getTime()) / 86400000;
                     return daysOld > 1 && (s.points || 0) < 5;
                   }).length;
+                  const inJail = myClassStudents.filter(s => s.jail?.active).length;
                   const totalStars = myClassStudents.reduce((sum, s) => sum + (s.points || 0), 0);
                   return (
                     <>
                       <SummaryCard label="Students" value={totalStudents} color={C.text} />
                       <SummaryCard label="Active today" value={activeToday} color={C.green} />
                       <SummaryCard label="Needs help" value={needsHelp} color={needsHelp > 0 ? C.accent : C.textLight} />
+                      <SummaryCard label="🚨 In jail" value={inJail} color={inJail > 0 ? "#c14d4d" : C.textLight} />
                       <SummaryCard label="Total stars" value={totalStars.toLocaleString()} color={C.gold} />
                     </>
                   );
@@ -18054,6 +18512,24 @@ function SnowMonkeyTrackerInner() {
             }}
           />
         )}
+
+        {/* MONKEY JAIL MODAL — full-screen on login when in jail; dismissible */}
+        {showJailModal && me?.jail?.active && (
+          <MonkeyJailModal
+            student={me}
+            jailGoalQuestions={JAIL_RECOVERY_GOAL_QUESTIONS}
+            jailGoalCorrect={JAIL_RECOVERY_GOAL_CORRECT}
+            onClose={() => setShowJailModal(false)}
+            onStartMission={() => {
+              setShowJailModal(false);
+              setShowMyPool(false); // close hot-spring if open
+              setShowMissionPicker(true);
+            }}
+          />
+        )}
+
+        {/* STAR COLLECTION BURST — celebratory floating-stars animation */}
+        <StarCollectionBurst trigger={collectBurst.trigger} amount={collectBurst.amount} />
 
         {/* Pet Mart modal - Mystery Packs + Pet Collection */}
         {showPetMart && me && (() => {
