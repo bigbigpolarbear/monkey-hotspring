@@ -441,4 +441,36 @@ export async function deleteLiveGame(code) {
   await remove(ref(requireRtdb(), `liveGames/${code}`));
 }
 
+/* ─── STUDENT → TEACHER MESSAGES ───
+   Send-only: students send messages to their teacher's mailbox.
+   No replies. Teacher can mark messages as read. Stored in `messages`
+   collection, indexed by teacherId for efficient fetching. */
+export async function sendMessage(message) {
+  // message = { teacherId, studentId, studentName, text, preset, createdAt }
+  const ref = await addDoc(collection(db, "messages"), {
+    ...message,
+    createdAt: message.createdAt || new Date().toISOString(),
+    read: false,
+  });
+  return { id: ref.id, ...message, read: false };
+}
+
+// Fetch all messages for a given teacher. Called on demand (when teacher opens
+// the mailbox) — not polled, to avoid burning Firestore quota.
+export async function getMessagesForTeacher(teacherId) {
+  const snap = await getDocs(collection(db, "messages"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(m => m.teacherId === teacherId)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+export async function markMessageRead(messageId) {
+  await updateDoc(doc(db, "messages", messageId), { read: true });
+}
+
+export async function deleteMessage(messageId) {
+  await deleteDoc(doc(db, "messages", messageId));
+}
+
 export { db, rtdb };
