@@ -11788,86 +11788,88 @@ function StarCollectionBurst({ trigger, amount = 0 }) {
   );
 }
 
-/* ─── TEACHER ORANGUTAN MASCOT ─── premium, slightly wiser cousin of the
-   student monkeys. Wears glasses + cardigan. Used as a small dashboard
-   assistant card with status messages (no clutter). */
+/* ─── TEACHER ORANGUTAN MASCOT ─── small dashboard avatar version.
+   Same watercolor style as MonkeySVG — warm orange palette, soft ellipses,
+   no harsh lines. Used in the "Sensei says..." insight card. */
 function OrangutanMascot({ size = 96 }) {
+  const oFur1 = "#d68a4a";
+  const oFur2 = "#b8702f";
+  const oFur3 = "#9a5820";
+  const oFace = "#fbdcb6";
+
   return (
-    <svg viewBox="0 0 240 280" style={{ width: size, height: size * (280 / 240) }} aria-label="Sensei orangutan">
-      <defs>
-        {/* Subtle fur watercolour-style fill */}
-        <radialGradient id="oranFur" cx="50%" cy="40%" r="65%">
-          <stop offset="0%" stopColor="#e0a065" />
-          <stop offset="60%" stopColor="#c47835" />
-          <stop offset="100%" stopColor="#a05c1e" />
-        </radialGradient>
-        <radialGradient id="oranFace" cx="50%" cy="50%" r="60%">
-          <stop offset="0%" stopColor="#f7dcae" />
-          <stop offset="100%" stopColor="#dbb482" />
-        </radialGradient>
-        <linearGradient id="cardiganGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#7a9fc0" />
-          <stop offset="100%" stopColor="#5e85a8" />
-        </linearGradient>
-      </defs>
+    <svg width={size} height={size * 1.15} viewBox="-60 -62 120 135" style={{ overflow: "visible" }} aria-label="Sensei orangutan">
+      {/* Body */}
+      <g filter="url(#furTexture)">
+        <ellipse cx="-12" cy="14" rx="11" ry="9" fill={oFur2} opacity="0.7" />
+        <ellipse cx="10" cy="18" rx="13" ry="11" fill={oFur1} opacity="0.85" />
+      </g>
+      <g filter="url(#watercolorSoft)">
+        <ellipse cx="0" cy="18" rx="32" ry="26" fill={oFur1} />
+        <ellipse cx="-6" cy="14" rx="18" ry="16" fill={oFur2} opacity="0.3" />
+        <ellipse cx="8" cy="20" rx="14" ry="12" fill="white" opacity="0.1" />
+      </g>
 
-      {/* Cardigan body (shows below head) */}
-      <path d="M 60 230 Q 50 195 70 175 L 170 175 Q 190 195 180 230 Z" fill="url(#cardiganGrad)" />
-      <path d="M 120 175 L 120 230" stroke="#4a6b88" strokeWidth="2" opacity="0.6" />
-      {/* Cardigan buttons */}
-      <circle cx="120" cy="195" r="2.5" fill="#dbe4ed" />
-      <circle cx="120" cy="210" r="2.5" fill="#dbe4ed" />
-      <circle cx="120" cy="225" r="2.5" fill="#dbe4ed" />
-      {/* Collar */}
-      <path d="M 90 175 L 110 195 L 130 195 L 150 175" stroke="#4a6b88" strokeWidth="2" fill="none" strokeLinejoin="round" />
+      {/* Head */}
+      <g filter="url(#furTexture)">
+        <ellipse cx="-18" cy="-18" rx="9" ry="8" fill={oFur2} opacity="0.7" />
+        <ellipse cx="16" cy="-22" rx="10" ry="9" fill={oFur1} opacity="0.85" />
+      </g>
+      <g filter="url(#watercolorSoft)">
+        {/* Cheek flanges */}
+        <ellipse cx="-30" cy="-20" rx="12" ry="11" fill={oFur1} />
+        <ellipse cx="-30" cy="-20" rx="7" ry="6" fill={oFur3} opacity="0.4" />
+        <ellipse cx="30" cy="-20" rx="12" ry="11" fill={oFur1} />
+        <ellipse cx="30" cy="-20" rx="7" ry="6" fill={oFur3} opacity="0.4" />
 
-      {/* Body fur peeking under cardigan */}
-      <ellipse cx="120" cy="180" rx="48" ry="12" fill="url(#oranFur)" />
+        <ellipse cx="0" cy="-18" rx="29" ry="26" fill={oFur1} />
+        <ellipse cx="-4" cy="-22" rx="14" ry="12" fill="white" opacity="0.1" />
+      </g>
 
-      {/* Side wisps of fur on cheeks — orangutan's distinctive face flange */}
-      <path d="M 50 130 Q 30 115 38 90 Q 50 75 70 90 Z" fill="url(#oranFur)" />
-      <path d="M 190 130 Q 210 115 202 90 Q 190 75 170 90 Z" fill="url(#oranFur)" />
+      {/* Face */}
+      <ellipse cx="0" cy="-14" rx="20" ry="18.5" fill={oFace} filter="url(#watercolorSoft)" />
 
-      {/* Head — oval, slightly wider than monkeys */}
-      <ellipse cx="120" cy="100" rx="62" ry="58" fill="url(#oranFur)" />
+      <circle cx="-12" cy="-5" r="7" fill="url(#cheekGrad)" opacity="0.8" />
+      <circle cx="12" cy="-5" r="7" fill="url(#cheekGrad)" opacity="0.8" />
 
-      {/* Face — light skin patch */}
-      <ellipse cx="120" cy="115" rx="42" ry="40" fill="url(#oranFace)" />
+      {/* Brow */}
+      <path d="M -13 -18 Q -8 -21 -3 -18" stroke={oFur3} strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.7" />
+      <path d="M 3 -18 Q 8 -21 13 -18" stroke={oFur3} strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.7" />
 
-      {/* Brow ridge — orangutans have a defined brow */}
-      <path d="M 92 95 Q 102 88 112 96" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <path d="M 128 96 Q 138 88 148 95" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Eyes */}
+      <ellipse cx="-8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+      <ellipse cx="8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+      <circle cx="-7.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
+      <circle cx="8.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
+      <circle cx="-6.5" cy="-16.8" r="1.1" fill="white" />
+      <circle cx="9.5" cy="-16.8" r="1.1" fill="white" />
 
-      {/* Glasses */}
-      <circle cx="103" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
-      <circle cx="137" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
-      <line x1="114" y1="113" x2="126" y2="113" stroke="#3a2410" strokeWidth="2.5" />
-      {/* Eyes inside glasses — kind, wise, slight smile crinkle */}
-      <circle cx="103" cy="113" r="3.5" fill="#1a1a1a" />
-      <circle cx="137" cy="113" r="3.5" fill="#1a1a1a" />
-      <circle cx="104" cy="111" r="1.2" fill="#fff" />
-      <circle cx="138" cy="111" r="1.2" fill="#fff" />
+      {/* Nose */}
+      <ellipse cx="0" cy="-8" rx="4" ry="3" fill="#a04020" />
+      <ellipse cx="0" cy="-8.5" rx="3" ry="2" fill="#7a2a10" opacity="0.3" />
 
-      {/* Nose — small, gentle */}
-      <ellipse cx="120" cy="128" rx="5" ry="3" fill="#7a4f1f" opacity="0.6" />
+      {/* Mouth */}
+      <path d="M -6 -2 Q 0 3 6 -2" fill="none" stroke="#5a2a10" strokeWidth="2" strokeLinecap="round" opacity="0.8" />
 
-      {/* Mouth — soft trustworthy smile */}
-      <path d="M 108 140 Q 120 148 132 140" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-
-      {/* Tuft of hair on top — wise sensei vibe */}
-      <path d="M 110 50 Q 120 38 130 50 Q 125 56 120 55 Q 115 56 110 50 Z" fill="#7a4f1f" />
-
-      {/* Subtle smile crinkles for "wise" feeling */}
-      <path d="M 85 120 Q 88 122 90 124" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
-      <path d="M 150 124 Q 152 122 155 120" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
+      {/* Hair tuft */}
+      <g filter="url(#watercolorSoft)">
+        <ellipse cx="0" cy="-42" rx="6" ry="4" fill={oFur3} opacity="0.85" />
+        <ellipse cx="-2" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
+        <ellipse cx="3" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
+      </g>
     </svg>
   );
 }
 
-/* ─── ORANGUTAN IN POOL ─── scene-ready version of the orangutan mascot.
-   Drifts and bobs like the student monkeys, but bigger (the teacher is the
-   wisest, largest character in the hot spring). Renders an animated wrapper
-   around the same SVG art as OrangutanMascot. */
+/* ─── ORANGUTAN IN POOL ─── scene-ready teacher mascot.
+   Drawn in the SAME watercolor-monkey style as MonkeySVG: soft ellipses,
+   watercolor filter, texture overlays, cheek glow, painted highlights.
+   Differences from the student monkeys are gentle:
+     - Warm orange fur palette (vs. cream)
+     - Slightly larger ear flanges (orangutan-style)
+     - Sized bigger in the pool (teacher is the biggest character)
+   Renders inside the same viewBox as MonkeySVG so it sits in the water
+   identically. */
 function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, selected }) {
   const [bob, setBob] = useState(0);
   const [sway, setSway] = useState(0);
@@ -11876,22 +11878,18 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
   const frameRef = useRef(0);
   const blinkTimer = useRef(null);
 
-  // Same animation pattern as MonkeySVG but slower (the orangutan is calm, wise)
   useEffect(() => {
     let running = true;
     const t0 = performance.now() + delay * 1000;
-    const speed1 = 0.6;  // bob — slower than monkeys
-    const speed2 = 0.4;  // sway
-    const driftSpeedX = 0.12;
-    const driftSpeedY = 0.09;
+    // Calm, slow rhythm — sensei vibe
     const tick = (now) => {
       if (!running) return;
       const t = (now - t0) / 1000;
-      setBob(Math.sin(t * speed1) * 4);
-      setSway(Math.sin(t * speed2) * 2);
+      setBob(Math.sin(t * 0.7) * 4);
+      setSway(Math.sin(t * 0.45) * 2);
       setDrift({
-        x: Math.sin(t * driftSpeedX) * 14,
-        y: Math.sin(t * driftSpeedY) * 6,
+        x: Math.sin(t * 0.14) * 12,
+        y: Math.sin(t * 0.11) * 5,
       });
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -11912,6 +11910,31 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
     return () => clearTimeout(blinkTimer.current);
   }, []);
 
+  // ── Orangutan palette: warm orange-browns, but still rendered with the same
+  //    watercolor softness as student monkeys. Face stays peachy for warmth.
+  const oFur1 = "#d68a4a";   // primary warm orange-brown
+  const oFur2 = "#b8702f";   // darker shade for texture
+  const oFur3 = "#9a5820";   // deepest accent
+  const oFace = "#fbdcb6";   // light face patch
+  const oCheek = "#f0a060";  // softer orange cheek
+
+  // Texture blobs scattered around the body and head (same idea as monkey)
+  const bodyTextures = [
+    { x: -16, y: 14, r: 12, shade: 1 },
+    { x: 12, y: 18, r: 14, shade: 2 },
+    { x: -8, y: 24, r: 10, shade: 0 },
+    { x: 6, y: 8, r: 11, shade: 1 },
+    { x: 18, y: 22, r: 9, shade: 2 },
+  ];
+  const headTextures = [
+    { x: -20, y: -18, r: 9, shade: 1 },
+    { x: 18, y: -22, r: 11, shade: 0 },
+    { x: -10, y: -32, r: 8, shade: 2 },
+    { x: 14, y: -10, r: 9, shade: 1 },
+    { x: -16, y: -6, r: 8, shade: 2 },
+  ];
+  const furShades = [oFur1, oFur2, oFur3];
+
   return (
     <div
       onClick={onClick}
@@ -11920,14 +11943,14 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
         transform: `translate(${drift.x}px, ${drift.y + bob}px) rotate(${sway}deg)`,
         transition: "transform 0.05s linear",
         position: "relative",
-        filter: selected ? "drop-shadow(0 0 12px rgba(255,180,80,0.7))" : "drop-shadow(0 4px 8px rgba(0,0,0,0.15))",
+        filter: selected ? "drop-shadow(0 0 14px rgba(255,180,80,0.7))" : undefined,
       }}
     >
-      {/* "Sensei" label badge — clearly marks the teacher in the pool */}
+      {/* "Sensei" badge floating above */}
       <div style={{
         position: "absolute", top: -22, left: "50%",
         transform: "translateX(-50%)",
-        background: "linear-gradient(135deg, #c47835, #a05c1e)",
+        background: `linear-gradient(135deg, ${oFur1}, ${oFur3})`,
         color: "white",
         fontFamily: "'Patrick Hand', cursive",
         fontSize: 12, fontWeight: 700,
@@ -11940,84 +11963,102 @@ function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, s
         🦧 {name ? `${name} (Sensei)` : "Sensei"}
       </div>
 
-      <svg viewBox="0 0 240 280" style={{ width: size, height: size * (280 / 240), display: "block" }}>
-        <defs>
-          <radialGradient id={`oranFur-pool-${variant}`} cx="50%" cy="40%" r="65%">
-            <stop offset="0%" stopColor="#e0a065" />
-            <stop offset="60%" stopColor="#c47835" />
-            <stop offset="100%" stopColor="#a05c1e" />
-          </radialGradient>
-          <radialGradient id={`oranFace-pool-${variant}`} cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor="#f7dcae" />
-            <stop offset="100%" stopColor="#dbb482" />
-          </radialGradient>
-          <linearGradient id={`cardiganGrad-pool-${variant}`} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#7a9fc0" />
-            <stop offset="100%" stopColor="#5e85a8" />
-          </linearGradient>
-        </defs>
+      <svg width={size} height={size * 1.15} viewBox="-60 -62 120 135" style={{ overflow: "visible" }}>
+        {/* ─── BODY ─── */}
+        {/* Texture blob layer behind body for painterly fur */}
+        <g filter="url(#furTexture)">
+          {bodyTextures.map((t, i) => (
+            <ellipse key={`bt${i}`} cx={t.x} cy={t.y} rx={t.r} ry={t.r * 0.85}
+              fill={furShades[t.shade]} opacity={0.7 + (i % 2) * 0.15} />
+          ))}
+        </g>
+        <g filter="url(#watercolorSoft)">
+          {/* Main body — same shape as monkey, just orange */}
+          <ellipse cx="0" cy="18" rx="32" ry="26" fill={oFur1} />
+          {/* Darker undershadow */}
+          <ellipse cx="-6" cy="14" rx="18" ry="16" fill={oFur2} opacity="0.3" />
+          {/* Top highlight (lighter splash) */}
+          <ellipse cx="8" cy="20" rx="14" ry="12" fill="white" opacity="0.1" />
+        </g>
 
-        {/* Cardigan body (shows below head) */}
-        <path d="M 60 230 Q 50 195 70 175 L 170 175 Q 190 195 180 230 Z" fill={`url(#cardiganGrad-pool-${variant})`} />
-        <path d="M 120 175 L 120 230" stroke="#4a6b88" strokeWidth="2" opacity="0.6" />
-        <circle cx="120" cy="195" r="2.5" fill="#dbe4ed" />
-        <circle cx="120" cy="210" r="2.5" fill="#dbe4ed" />
-        <circle cx="120" cy="225" r="2.5" fill="#dbe4ed" />
-        <path d="M 90 175 L 110 195 L 130 195 L 150 175" stroke="#4a6b88" strokeWidth="2" fill="none" strokeLinejoin="round" />
+        {/* ─── HEAD ─── */}
+        {/* Orangutan signature: extra-wide cheek flanges (slightly bigger ears) */}
+        <g filter="url(#furTexture)">
+          {headTextures.map((t, i) => (
+            <ellipse key={`ht${i}`} cx={t.x} cy={t.y} rx={t.r} ry={t.r * 0.9}
+              fill={furShades[t.shade]} opacity={0.65 + (i % 2) * 0.2} />
+          ))}
+        </g>
+        <g filter="url(#watercolorSoft)">
+          {/* Cheek flanges — orangutan-specific (wider than monkey ears) */}
+          <ellipse cx="-30" cy="-20" rx="12" ry="11" fill={oFur1} />
+          <ellipse cx="-30" cy="-20" rx="7" ry="6" fill={oFur3} opacity="0.4" />
+          <ellipse cx="30" cy="-20" rx="12" ry="11" fill={oFur1} />
+          <ellipse cx="30" cy="-20" rx="7" ry="6" fill={oFur3} opacity="0.4" />
 
-        {/* Body fur peeking under cardigan */}
-        <ellipse cx="120" cy="180" rx="48" ry="12" fill={`url(#oranFur-pool-${variant})`} />
+          {/* Main head — slightly wider than monkey for sensei feel */}
+          <ellipse cx="0" cy="-18" rx="29" ry="26" fill={oFur1} />
+          {/* Soft head highlight */}
+          <ellipse cx="-4" cy="-22" rx="14" ry="12" fill="white" opacity="0.1" />
+        </g>
 
-        {/* Side wisps of fur on cheeks — orangutan's face flange */}
-        <path d="M 50 130 Q 30 115 38 90 Q 50 75 70 90 Z" fill={`url(#oranFur-pool-${variant})`} />
-        <path d="M 190 130 Q 210 115 202 90 Q 190 75 170 90 Z" fill={`url(#oranFur-pool-${variant})`} />
+        {/* ─── INNER FACE ─── peachy oval, same as monkey */}
+        <ellipse cx="0" cy="-14" rx="20" ry="18.5" fill={oFace} filter="url(#watercolorSoft)" />
+        <ellipse cx="0" cy="-8" rx="16" ry="10" fill={oCheek} opacity="0.06" />
 
-        {/* Head */}
-        <ellipse cx="120" cy="100" rx="62" ry="58" fill={`url(#oranFur-pool-${variant})`} />
+        {/* Cheek glow — uses shared gradient like monkey but slightly orange */}
+        <circle cx="-12" cy="-5" r="7" fill="url(#cheekGrad)" opacity="0.8" />
+        <circle cx="12" cy="-5" r="7" fill="url(#cheekGrad)" opacity="0.8" />
 
-        {/* Face */}
-        <ellipse cx="120" cy="115" rx="42" ry="40" fill={`url(#oranFace-pool-${variant})`} />
+        {/* ─── BROW RIDGE ─── orangutan signature — gentle wisdom */}
+        <path d="M -13 -18 Q -8 -21 -3 -18" stroke={oFur3} strokeWidth="1.5" fill="none"
+              strokeLinecap="round" opacity="0.7" />
+        <path d="M 3 -18 Q 8 -21 13 -18" stroke={oFur3} strokeWidth="1.5" fill="none"
+              strokeLinecap="round" opacity="0.7" />
 
-        {/* Brow ridge */}
-        <path d="M 92 95 Q 102 88 112 96" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
-        <path d="M 128 96 Q 138 88 148 95" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
-
-        {/* Glasses */}
-        <circle cx="103" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
-        <circle cx="137" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
-        <line x1="114" y1="113" x2="126" y2="113" stroke="#3a2410" strokeWidth="2.5" />
-
-        {/* Eyes — blink toggles */}
+        {/* ─── EYES ─── same style as monkey, blink toggle, with tiny round glasses */}
         {blink ? (
           <>
-            <line x1="98" y1="113" x2="108" y2="113" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" />
-            <line x1="132" y1="113" x2="142" y2="113" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M -11 -16 Q -8 -14 -5 -16" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
+            <path d="M 5 -16 Q 8 -14 11 -16" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" />
           </>
         ) : (
           <>
-            <circle cx="103" cy="113" r="3.5" fill="#1a1a1a" />
-            <circle cx="137" cy="113" r="3.5" fill="#1a1a1a" />
-            <circle cx="104" cy="111" r="1.2" fill="#fff" />
-            <circle cx="138" cy="111" r="1.2" fill="#fff" />
+            {/* Whites */}
+            <ellipse cx="-8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+            <ellipse cx="8" cy="-16" rx="4.5" ry="4" fill="white" opacity="0.95" />
+            {/* Pupils — matched to monkey style */}
+            <circle cx="-7.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
+            <circle cx="8.5" cy="-15.5" r="2.8" fill="#1a1a1a" />
+            {/* Highlights */}
+            <circle cx="-6.5" cy="-16.8" r="1.1" fill="white" />
+            <circle cx="9.5" cy="-16.8" r="1.1" fill="white" />
+            <circle cx="-8" cy="-14.5" r="0.6" fill="white" opacity="0.6" />
+            <circle cx="8" cy="-14.5" r="0.6" fill="white" opacity="0.6" />
           </>
         )}
 
-        {/* Nose */}
-        <ellipse cx="120" cy="128" rx="5" ry="3" fill="#7a4f1f" opacity="0.6" />
+        {/* ─── NOSE ─── same shape as monkey */}
+        <ellipse cx="0" cy="-8" rx="4" ry="3" fill="#a04020" />
+        <ellipse cx="0" cy="-8.5" rx="3" ry="2" fill="#7a2a10" opacity="0.3" />
+        <ellipse cx="-1.5" cy="-7.5" rx="1" ry="0.7" fill="#7a2a10" opacity="0.5" />
+        <ellipse cx="1.5" cy="-7.5" rx="1" ry="0.7" fill="#7a2a10" opacity="0.5" />
+        <ellipse cx="-0.5" cy="-9.5" rx="1.5" ry="0.8" fill="white" opacity="0.3" />
 
-        {/* Mouth — gentle wise smile */}
-        <path d="M 108 140 Q 120 148 132 140" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        {/* ─── MOUTH ─── gentle wise smile (slightly wider than monkey) */}
+        <path d="M -6 -2 Q 0 3 6 -2" fill="none" stroke="#5a2a10"
+              strokeWidth="2" strokeLinecap="round" opacity="0.8" />
 
-        {/* Tuft of hair */}
-        <path d="M 110 50 Q 120 38 130 50 Q 125 56 120 55 Q 115 56 110 50 Z" fill="#7a4f1f" />
+        {/* ─── HAIR TUFT ─── tiny sensei wisp on top of head */}
+        <g filter="url(#watercolorSoft)">
+          <ellipse cx="0" cy="-42" rx="6" ry="4" fill={oFur3} opacity="0.85" />
+          <ellipse cx="-2" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
+          <ellipse cx="3" cy="-44" rx="2" ry="3" fill={oFur3} opacity="0.7" />
+        </g>
 
-        {/* Smile crinkles */}
-        <path d="M 85 120 Q 88 122 90 124" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
-        <path d="M 150 124 Q 152 122 155 120" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
-
-        {/* Water ripple at the base — visually anchors them in the pool */}
-        <ellipse cx="120" cy="245" rx="55" ry="5" fill="rgba(120,200,200,0.35)" />
-        <ellipse cx="120" cy="252" rx="40" ry="3" fill="rgba(120,200,200,0.25)" />
+        {/* ─── WATER RIPPLE ─── anchors them in the pool */}
+        <ellipse cx="0" cy="48" rx="38" ry="4" fill="rgba(120,200,200,0.35)" />
+        <ellipse cx="0" cy="52" rx="28" ry="2.5" fill="rgba(120,200,200,0.25)" />
       </svg>
     </div>
   );
