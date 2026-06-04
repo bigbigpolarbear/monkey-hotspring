@@ -11864,6 +11864,165 @@ function OrangutanMascot({ size = 96 }) {
   );
 }
 
+/* ─── ORANGUTAN IN POOL ─── scene-ready version of the orangutan mascot.
+   Drifts and bobs like the student monkeys, but bigger (the teacher is the
+   wisest, largest character in the hot spring). Renders an animated wrapper
+   around the same SVG art as OrangutanMascot. */
+function OrangutanInPool({ size = 160, name, delay = 0, variant = 99, onClick, selected }) {
+  const [bob, setBob] = useState(0);
+  const [sway, setSway] = useState(0);
+  const [drift, setDrift] = useState({ x: 0, y: 0 });
+  const [blink, setBlink] = useState(false);
+  const frameRef = useRef(0);
+  const blinkTimer = useRef(null);
+
+  // Same animation pattern as MonkeySVG but slower (the orangutan is calm, wise)
+  useEffect(() => {
+    let running = true;
+    const t0 = performance.now() + delay * 1000;
+    const speed1 = 0.6;  // bob — slower than monkeys
+    const speed2 = 0.4;  // sway
+    const driftSpeedX = 0.12;
+    const driftSpeedY = 0.09;
+    const tick = (now) => {
+      if (!running) return;
+      const t = (now - t0) / 1000;
+      setBob(Math.sin(t * speed1) * 4);
+      setSway(Math.sin(t * speed2) * 2);
+      setDrift({
+        x: Math.sin(t * driftSpeedX) * 14,
+        y: Math.sin(t * driftSpeedY) * 6,
+      });
+      frameRef.current = requestAnimationFrame(tick);
+    };
+    frameRef.current = requestAnimationFrame(tick);
+    return () => { running = false; cancelAnimationFrame(frameRef.current); };
+  }, [delay]);
+
+  // Blink occasionally
+  useEffect(() => {
+    const scheduleBlink = () => {
+      blinkTimer.current = setTimeout(() => {
+        setBlink(true);
+        setTimeout(() => setBlink(false), 150);
+        scheduleBlink();
+      }, 3000 + Math.random() * 4000);
+    };
+    scheduleBlink();
+    return () => clearTimeout(blinkTimer.current);
+  }, []);
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        cursor: onClick ? "pointer" : "default",
+        transform: `translate(${drift.x}px, ${drift.y + bob}px) rotate(${sway}deg)`,
+        transition: "transform 0.05s linear",
+        position: "relative",
+        filter: selected ? "drop-shadow(0 0 12px rgba(255,180,80,0.7))" : "drop-shadow(0 4px 8px rgba(0,0,0,0.15))",
+      }}
+    >
+      {/* "Sensei" label badge — clearly marks the teacher in the pool */}
+      <div style={{
+        position: "absolute", top: -22, left: "50%",
+        transform: "translateX(-50%)",
+        background: "linear-gradient(135deg, #c47835, #a05c1e)",
+        color: "white",
+        fontFamily: "'Patrick Hand', cursive",
+        fontSize: 12, fontWeight: 700,
+        padding: "3px 12px", borderRadius: 999,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+        letterSpacing: 0.5,
+        whiteSpace: "nowrap",
+        zIndex: 2,
+      }}>
+        🦧 {name ? `${name} (Sensei)` : "Sensei"}
+      </div>
+
+      <svg viewBox="0 0 240 280" style={{ width: size, height: size * (280 / 240), display: "block" }}>
+        <defs>
+          <radialGradient id={`oranFur-pool-${variant}`} cx="50%" cy="40%" r="65%">
+            <stop offset="0%" stopColor="#e0a065" />
+            <stop offset="60%" stopColor="#c47835" />
+            <stop offset="100%" stopColor="#a05c1e" />
+          </radialGradient>
+          <radialGradient id={`oranFace-pool-${variant}`} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor="#f7dcae" />
+            <stop offset="100%" stopColor="#dbb482" />
+          </radialGradient>
+          <linearGradient id={`cardiganGrad-pool-${variant}`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#7a9fc0" />
+            <stop offset="100%" stopColor="#5e85a8" />
+          </linearGradient>
+        </defs>
+
+        {/* Cardigan body (shows below head) */}
+        <path d="M 60 230 Q 50 195 70 175 L 170 175 Q 190 195 180 230 Z" fill={`url(#cardiganGrad-pool-${variant})`} />
+        <path d="M 120 175 L 120 230" stroke="#4a6b88" strokeWidth="2" opacity="0.6" />
+        <circle cx="120" cy="195" r="2.5" fill="#dbe4ed" />
+        <circle cx="120" cy="210" r="2.5" fill="#dbe4ed" />
+        <circle cx="120" cy="225" r="2.5" fill="#dbe4ed" />
+        <path d="M 90 175 L 110 195 L 130 195 L 150 175" stroke="#4a6b88" strokeWidth="2" fill="none" strokeLinejoin="round" />
+
+        {/* Body fur peeking under cardigan */}
+        <ellipse cx="120" cy="180" rx="48" ry="12" fill={`url(#oranFur-pool-${variant})`} />
+
+        {/* Side wisps of fur on cheeks — orangutan's face flange */}
+        <path d="M 50 130 Q 30 115 38 90 Q 50 75 70 90 Z" fill={`url(#oranFur-pool-${variant})`} />
+        <path d="M 190 130 Q 210 115 202 90 Q 190 75 170 90 Z" fill={`url(#oranFur-pool-${variant})`} />
+
+        {/* Head */}
+        <ellipse cx="120" cy="100" rx="62" ry="58" fill={`url(#oranFur-pool-${variant})`} />
+
+        {/* Face */}
+        <ellipse cx="120" cy="115" rx="42" ry="40" fill={`url(#oranFace-pool-${variant})`} />
+
+        {/* Brow ridge */}
+        <path d="M 92 95 Q 102 88 112 96" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M 128 96 Q 138 88 148 95" stroke="#7a4f1f" strokeWidth="3" fill="none" strokeLinecap="round" />
+
+        {/* Glasses */}
+        <circle cx="103" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
+        <circle cx="137" cy="113" r="11" fill="#fff" fillOpacity="0.25" stroke="#3a2410" strokeWidth="2.5" />
+        <line x1="114" y1="113" x2="126" y2="113" stroke="#3a2410" strokeWidth="2.5" />
+
+        {/* Eyes — blink toggles */}
+        {blink ? (
+          <>
+            <line x1="98" y1="113" x2="108" y2="113" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="132" y1="113" x2="142" y2="113" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <circle cx="103" cy="113" r="3.5" fill="#1a1a1a" />
+            <circle cx="137" cy="113" r="3.5" fill="#1a1a1a" />
+            <circle cx="104" cy="111" r="1.2" fill="#fff" />
+            <circle cx="138" cy="111" r="1.2" fill="#fff" />
+          </>
+        )}
+
+        {/* Nose */}
+        <ellipse cx="120" cy="128" rx="5" ry="3" fill="#7a4f1f" opacity="0.6" />
+
+        {/* Mouth — gentle wise smile */}
+        <path d="M 108 140 Q 120 148 132 140" stroke="#5a3520" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+
+        {/* Tuft of hair */}
+        <path d="M 110 50 Q 120 38 130 50 Q 125 56 120 55 Q 115 56 110 50 Z" fill="#7a4f1f" />
+
+        {/* Smile crinkles */}
+        <path d="M 85 120 Q 88 122 90 124" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
+        <path d="M 150 124 Q 152 122 155 120" stroke="#a08560" strokeWidth="1.5" fill="none" opacity="0.6" strokeLinecap="round" />
+
+        {/* Water ripple at the base — visually anchors them in the pool */}
+        <ellipse cx="120" cy="245" rx="55" ry="5" fill="rgba(120,200,200,0.35)" />
+        <ellipse cx="120" cy="252" rx="40" ry="3" fill="rgba(120,200,200,0.25)" />
+      </svg>
+    </div>
+  );
+}
+
 function CrushGame({ studentName, mission, savedProgress, missionFullCount, missionAlreadyAnswered, onClose, onComplete, onSaveProgress, onQuestionAnswered, onAnswerAttempt, onShop }) {
   const [confettiTrigger, setConfettiTrigger] = useState(0); // bump on correct answers to fire confetti
   const [grid, setGrid] = useState(() => savedProgress?.grid || generateCrushGrid());
@@ -17078,6 +17237,23 @@ function SnowMonkeyTrackerInner() {
                 <MonkeySVG size={110} mood="neutral" delay={0} variant={0} /><p style={{ fontSize: 20, marginTop: 8 }}>The hot spring is empty...<br />Add some students!</p>
               </div>
             )}
+            {/* ── Teacher orangutan in the pool — biggest character, centered.
+                Rendered before students so students sit at higher z above
+                and around them. ── */}
+            {user && (
+              <div style={{
+                position: "absolute",
+                left: "50%", top: "32%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 14,
+              }}>
+                <OrangutanInPool
+                  size={180}
+                  name={user.name}
+                  delay={0}
+                />
+              </div>
+            )}
             {myClassStudents.map((s, i) => {
               const pos = monkeyPositions[i % monkeyPositions.length];
               return (
@@ -18915,6 +19091,26 @@ function SnowMonkeyTrackerInner() {
           {/* All monkeys in the scene (view only, student's own monkey glows).
               Shows just THIS student's class — same set used for the class rank pill above. */}
           <div style={{ position: "absolute", top: "28%", left: "5%", right: "5%", bottom: "5%", zIndex: 10 }}>
+            {/* ── Their teacher's orangutan in the pool — biggest, centered.
+                Found by matching the student's teacherId to the teachers list. ── */}
+            {(() => {
+              const myTeacher = me?.teacherId ? teachers.find(t => t.id === me.teacherId) : null;
+              if (!myTeacher) return null;
+              return (
+                <div style={{
+                  position: "absolute",
+                  left: "50%", top: "32%",
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 14,
+                }}>
+                  <OrangutanInPool
+                    size={180}
+                    name={myTeacher.name}
+                    delay={0}
+                  />
+                </div>
+              );
+            })()}
             {myClassmates.map((s, i) => {
               const pos = monkeyPositions[i % monkeyPositions.length];
               const isMe = s.id === me?.id;
