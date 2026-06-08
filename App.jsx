@@ -18289,36 +18289,211 @@ function SnowMonkeyTrackerInner() {
         <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
         <WatercolorFilters /><GlobalKeyframes /><SnowParticles />
 
-        {/* Top bar */}
-        <div style={{ display: "flex", alignItems: "center", padding: "14px 28px", position: "relative", zIndex: 20, background: `${C.card}cc`, backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.fur2}20`, gap: 12 }}>
-          {/* LEFT: Big A Star brand + student stats pill */}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* ─── TOP BAR (redesigned) ──
+            Left:   Big A Star logo · student name · stars · rank
+            Center: pill nav (Daily Challenge · Missions · Packs · Join Live)
+            Right:  small icon utilities (World View · Theme · Sound · Logout)
+            The daily-income pill and jail status pill drop below the bar so the
+            main nav stays clean. Names/Points toggles moved into the icon row. */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 16,
+          padding: "12px 24px", position: "relative", zIndex: 20,
+          background: `${C.card}ee`,
+          backdropFilter: "blur(10px)",
+          borderBottom: `1px solid ${C.fur2}25`,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+        }}>
+          {/* ── LEFT: Brand + student identity ── */}
+          <div style={{
+            flex: "0 1 auto", minWidth: 0,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <WatercolorIcon name="brand_monkey" size={32} />
               <span style={{
-                fontSize: 20, fontWeight: 700, color: C.text,
+                fontSize: 19, fontWeight: 700, color: C.text,
                 fontFamily: "'Patrick Hand', cursive",
-                letterSpacing: 0.3,
+                letterSpacing: 0.3, whiteSpace: "nowrap",
               }}>Big A Star</span>
             </div>
-            <div style={{ background: `${C.gold}18`, borderRadius: 12, padding: "4px 12px", display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start" }}>
-              <span style={{ fontSize: 16, color: C.text, fontWeight: 600 }}>{me?.name}</span>
-              <span style={{ fontSize: 16, color: C.gold, fontWeight: 700 }}>★ {me?.points || 0}</span>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "5px 12px", borderRadius: 999,
+              background: `${C.gold}18`,
+              border: `1.5px solid ${C.gold}30`,
+              whiteSpace: "nowrap",
+            }}>
+              <span style={{ fontSize: 14, color: C.text, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>{me?.name}</span>
+              <span style={{ width: 1, height: 14, background: `${C.fur2}40` }} />
+              <span style={{ fontSize: 14, color: C.gold, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>★ {me?.points || 0}</span>
               <span
-                title={`Class rank #${classRank} of ${classSize} · Global rank #${rank} of ${students.length}`}
-                style={{ fontSize: 13, color: C.accent, fontWeight: 600, cursor: "help" }}
+                title={`Class rank #${classRank} of ${classSize} · Global #${rank} of ${students.length}`}
+                style={{ fontSize: 12, color: C.accent, fontWeight: 700, fontFamily: "'Patrick Hand', cursive", cursor: "help" }}
               >
-                #{classRank}{classSize !== students.length && <span style={{ opacity: 0.55, marginLeft: 4 }}>· 🌍 #{rank}</span>}
+                #{classRank}
               </span>
             </div>
-            {/* DAILY INCOME PILL — shows challenge progress + collect button.
-                Three visual states: locked (in progress), ready (claim), or done. */}
+            {isStarUser && (
+              <span title="Star User · Premium" style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "5px 10px", borderRadius: 999,
+                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
+                color: "white", fontSize: 12, fontWeight: 700,
+                boxShadow: `0 2px 6px ${C.gold}40`,
+                fontFamily: "'Patrick Hand', cursive",
+                whiteSpace: "nowrap",
+              }}>⭐ Star</span>
+            )}
+          </div>
+
+          {/* ── CENTER: pill nav (the 4 main actions) ── */}
+          <div style={{
+            flex: "1 1 auto",
+            display: "flex", justifyContent: "center",
+          }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: 4, borderRadius: 999,
+              background: `${C.fur2}12`,
+              border: `1.5px solid ${C.fur2}20`,
+            }}>
+              {[
+                {
+                  label: "🎯 Daily Challenge",
+                  onClick: () => { SFX.click(); setShowMissionPicker(true); },
+                  highlight: collectionUnlocked && !collectionCollected,
+                },
+                {
+                  label: "🚀 Missions",
+                  onClick: () => { SFX.click(); setShowMissionPicker(true); },
+                  highlight: false,
+                },
+                {
+                  label: "📚 Packs",
+                  onClick: () => { SFX.click(); setShowStudyPacks(true); },
+                  highlight: false,
+                },
+                {
+                  label: "🍜 Join Live",
+                  onClick: () => { SFX.click(); setShowJoinGame(true); },
+                  highlight: false,
+                },
+              ].map((item, i) => (
+                <button
+                  key={i}
+                  onClick={item.onClick}
+                  style={{
+                    padding: "8px 16px", borderRadius: 999,
+                    background: item.highlight
+                      ? `linear-gradient(135deg, ${C.green}, #4a9550)`
+                      : "transparent",
+                    color: item.highlight ? "white" : C.text,
+                    border: "none",
+                    fontFamily: "'Patrick Hand', cursive",
+                    fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.18s ease",
+                    boxShadow: item.highlight ? `0 3px 10px ${C.green}50` : "none",
+                  }}
+                  onMouseEnter={e => {
+                    if (!item.highlight) e.currentTarget.style.background = `${C.card}cc`;
+                  }}
+                  onMouseLeave={e => {
+                    if (!item.highlight) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── RIGHT: icon-only utilities ── */}
+          <div style={{
+            flex: "0 1 auto",
+            display: "flex", alignItems: "center", gap: 4,
+          }}>
+            {/* Consistent icon-button styling shared by all utilities */}
+            {(() => {
+              const iconBtnStyle = (active = false) => ({
+                width: 38, height: 38, padding: 0,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 10,
+                border: active
+                  ? `1.5px solid ${C.water1}80`
+                  : `1.5px solid ${C.fur2}25`,
+                background: active ? `${C.water1}15` : "transparent",
+                color: C.text, fontFamily: "'Patrick Hand', cursive",
+                fontSize: 17, cursor: "pointer", lineHeight: 1,
+                transition: "all 0.15s ease",
+              });
+              return (
+                <>
+                  <button
+                    onClick={() => {
+                      SFX.click();
+                      if (studentView === "hotspring") {
+                        setStudentView("classroom");
+                        setShowMyPool(false);
+                      } else {
+                        setStudentView("hotspring");
+                        setShowMyPool(true);
+                      }
+                    }}
+                    title={studentView === "hotspring" ? "Switch to Classroom view" : "Back to My Hot Spring"}
+                    style={iconBtnStyle(studentView === "hotspring")}
+                  >
+                    {studentView === "hotspring" ? "♨️" : "🌍"}
+                  </button>
+                  <button onClick={toggleTheme} title={themeTitle} style={iconBtnStyle()}>
+                    {themeIcon}
+                  </button>
+                  <button onClick={toggleSound} title={soundOn ? "Mute sounds" : "Unmute sounds"} style={iconBtnStyle()}>
+                    {soundOn ? "🔊" : "🔇"}
+                  </button>
+                  <button onClick={toggleShowNames} title={showNames ? "Hide names" : "Show names"} style={iconBtnStyle(showNames)}>
+                    {showNames ? "🏷️" : "🚫"}
+                  </button>
+                  <button onClick={toggleShowPoints} title={showPoints ? "Hide points" : "Show points"} style={iconBtnStyle(showPoints)}>
+                    {showPoints ? "★" : "☆"}
+                  </button>
+                  {/* Visual divider before Logout */}
+                  <span style={{ width: 1, height: 22, background: `${C.fur2}30`, margin: "0 4px" }} />
+                  <button
+                    onClick={logout}
+                    title="Logout"
+                    style={{
+                      padding: "8px 14px", borderRadius: 10,
+                      border: `1.5px solid ${C.accent}40`,
+                      background: `${C.accent}10`,
+                      color: C.accent,
+                      fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      whiteSpace: "nowrap", lineHeight: 1,
+                    }}
+                  >
+                    🚪 Logout
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* ─── STATUS STRIP (under top bar) ──
+            Holds the daily-income pill + jail status pill. Outside the main nav
+            so the nav stays uncluttered. Only appears when something to show. */}
+        {(!monkeyInJail && dailyIncome.total > 0) || monkeyInJail ? (
+          <div style={{
+            display: "flex", justifyContent: "center", gap: 10,
+            padding: "10px 20px 0", flexWrap: "wrap",
+          }}>
             {!monkeyInJail && dailyIncome.total > 0 && (
               <div style={{
                 background: collectionUnlocked ? `${C.green}22` : collectionCollected ? "rgba(0,0,0,0.04)" : `${C.gold}15`,
                 border: `2px solid ${collectionUnlocked ? C.green : collectionCollected ? "rgba(0,0,0,0.12)" : C.gold + "60"}`,
-                borderRadius: 12, padding: "4px 12px",
-                display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+                borderRadius: 999, padding: "5px 14px",
+                display: "inline-flex", alignItems: "center", gap: 8,
               }}>
                 {collectionCollected ? (
                   <>
@@ -18332,7 +18507,7 @@ function SnowMonkeyTrackerInner() {
                     <button onClick={handleCollectDaily}
                       style={{
                         background: C.green, color: "white", border: "none",
-                        borderRadius: 999, padding: "4px 14px",
+                        borderRadius: 999, padding: "3px 14px",
                         fontFamily: "'Patrick Hand', cursive", fontWeight: 700, fontSize: 13,
                         cursor: "pointer", marginLeft: 4,
                       }}>
@@ -18352,8 +18527,8 @@ function SnowMonkeyTrackerInner() {
             {monkeyInJail && (
               <div style={{
                 background: "rgba(120,80,80,0.15)", border: "2px solid rgba(120,80,80,0.4)",
-                borderRadius: 12, padding: "4px 12px",
-                display: "inline-flex", alignItems: "center", gap: 8, alignSelf: "flex-start",
+                borderRadius: 999, padding: "5px 14px",
+                display: "inline-flex", alignItems: "center", gap: 8,
               }}>
                 <span style={{ fontSize: 16 }}>🚨</span>
                 <span style={{ fontSize: 13, color: "#7a3030", fontWeight: 700 }}>
@@ -18362,109 +18537,8 @@ function SnowMonkeyTrackerInner() {
               </div>
             )}
           </div>
-          {/* CENTER: title — flex:0 stays centered between equal-width sides */}
-          <h1 style={{
-            flex: "0 0 auto",
-            fontSize: 24, color: C.text, margin: 0,
-            fontFamily: "'Patrick Hand', cursive", fontWeight: 700,
-            whiteSpace: "nowrap",
-          }}>♨️ Monkey Hot Spring</h1>
-          {/* RIGHT: controls */}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
-            {/* WORLD VIEW TOGGLE — students land on their personal Hot Spring;
-                they can switch to the wider classroom view via this button.
-                Highlighted with the current-view's accent colour. */}
-            <button onClick={() => {
-                SFX.click();
-                if (studentView === "hotspring") {
-                  setStudentView("classroom");
-                  setShowMyPool(false);
-                } else {
-                  setStudentView("hotspring");
-                  setShowMyPool(true);
-                }
-              }}
-              title={studentView === "hotspring" ? "Switch to Classroom view" : "Back to My Hot Spring"}
-              style={{
-                padding: "9px 14px", borderRadius: 12,
-                border: `2px solid ${studentView === "hotspring" ? C.water1 + "80" : C.gold + "80"}`,
-                background: studentView === "hotspring" ? `${C.water1}18` : `${C.gold}18`,
-                color: C.text, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1,
-                display: "inline-flex", alignItems: "center", gap: 6,
-              }}>
-              {studentView === "hotspring" ? "🌍 World" : "♨️ My Hot Spring"}
-            </button>
-            <button onClick={toggleTheme}
-              title={themeTitle}
-              style={{
-                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
-                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
-              }}>
-              {themeIcon}
-            </button>
-            <button onClick={toggleSound}
-              title={soundOn ? "Mute sounds" : "Unmute sounds"}
-              style={{
-                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
-                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
-              }}>
-              {soundOn ? "🔊" : "🔇"}
-            </button>
-            <button onClick={toggleShowNames}
-              title={showNames ? "Hide names" : "Show names"}
-              style={{
-                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
-                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
-              }}>
-              {showNames ? "🏷️" : "🚫"}
-            </button>
-            <button onClick={toggleShowPoints}
-              title={showPoints ? "Hide points" : "Show points"}
-              style={{
-                padding: "9px 12px", borderRadius: 12, border: `2px solid ${C.fur2}30`,
-                background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 18, cursor: "pointer", lineHeight: 1, minWidth: 42,
-              }}>
-              {showPoints ? "★" : "☆"}
-            </button>
-            <button onClick={() => { SFX.click(); setShowStudyPacks(true); }}
-              title="Study Packs"
-              style={{
-                padding: "9px 14px", borderRadius: 12,
-                border: `2px solid ${C.gold}40`, background: `${C.gold}15`,
-                color: "#a07820", fontFamily: "'Patrick Hand', cursive",
-                fontSize: 15, cursor: "pointer", fontWeight: 700,
-              }}>
-              📚 Packs
-            </button>
-            <button onClick={() => { SFX.click(); setShowJoinGame(true); }}
-              title="Join a live game"
-              style={{
-                padding: "9px 14px", borderRadius: 12,
-                border: `2px solid ${C.accent}60`,
-                background: `linear-gradient(135deg, ${C.accent}15, ${C.accent}25)`,
-                color: C.accent, fontFamily: "'Patrick Hand', cursive",
-                fontSize: 15, cursor: "pointer", fontWeight: 700,
-              }}>
-              🍜 Join Live
-            </button>
-            {isStarUser && (
-              <span title="Star User · Premium" style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                padding: "8px 12px", borderRadius: 999,
-                background: `linear-gradient(135deg, ${C.gold}, #ffa820)`,
-                color: "white", fontSize: 13, fontWeight: 700,
-                boxShadow: `0 3px 10px ${C.gold}50`,
-                fontFamily: "'Patrick Hand', cursive",
-              }}>⭐ Star</span>
-            )}
-            <button onClick={logout} style={{ padding: "9px 18px", borderRadius: 12, border: `2px solid ${C.fur2}40`, background: `${C.card}dd`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 15, cursor: "pointer" }}>🚪 Logout</button>
-          </div>
-        </div>
+        ) : null}
+
 
         {/* STUDENT: Study Packs Browser (read-only — students can't assign or upload) */}
         {showStudyPacks && (
@@ -20219,7 +20293,6 @@ function SnowMonkeyTrackerInner() {
             </div>
           )}
 
-          
 
           {/* My stats badge - bottom left */}
           <div style={{
