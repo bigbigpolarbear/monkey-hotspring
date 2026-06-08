@@ -4197,6 +4197,10 @@ function ExamCountdown({
   personalQuotes,
   onAddPersonalQuote,
   onDeletePersonalQuote,
+  // When true, the card renders inline (no position:absolute, no collapsed-pill state)
+  // so it can sit inside a sidebar column. Legacy floating usage (teacher view) is
+  // unaffected — that path doesn't pass `inline`.
+  inline = false,
 }) {
   const active = getActiveExams(exams || []);
   const nearest = active[0];
@@ -4214,8 +4218,9 @@ function ExamCountdown({
 
   const currentQuote = quotes && quotes.length > 0 ? quotes[quoteIdx % quotes.length] : null;
 
-  // Collapsed pill state
-  if (!isOpen) {
+  // Collapsed pill state — only used in floating (non-inline) mode.
+  // Inline mode skips this entirely and always renders the open card.
+  if (!isOpen && !inline) {
     return (
       <button
         onClick={onToggleOpen}
@@ -4246,7 +4251,14 @@ function ExamCountdown({
   }
 
   return (
-    <div style={{
+    <div style={inline ? {
+      // Inline mode — sits in a sidebar, no absolute positioning
+      background: `${C.card}f8`, borderRadius: 14, padding: "12px 14px",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      border: `1.5px solid ${C.accent}20`,
+      width: "100%", boxSizing: "border-box",
+    } : {
+      // Floating mode (legacy) — used by teacher view
       position: "absolute", top: 16, left: 16, zIndex: 30,
       background: `${C.card}f0`, borderRadius: 18, padding: "12px 14px",
       boxShadow: "0 8px 28px rgba(0,0,0,0.15)", backdropFilter: "blur(10px)",
@@ -4255,11 +4267,14 @@ function ExamCountdown({
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>📅 Exam Countdown</div>
+        {/* Close button only shown in floating mode */}
+        {!inline && (
         <button
           onClick={onToggleOpen}
           style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 18, color: C.textLight, padding: "0 4px", lineHeight: 1, fontWeight: 700 }}
           title="Hide"
         >×</button>
+        )}
       </div>
 
       {/* Nearest exam display */}
@@ -4486,6 +4501,136 @@ function NearestExamCard({ exam, canEdit, onDelete }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── STUDENT LEFT SIDEBAR ─── a clean stacked-card panel that replaces
+   the floating exam/quotes cards over the pool. Holds:
+   1. Mini student profile (avatar pet · name · stars · class rank)
+   2. Exam Countdown (uses ExamCountdown component in `inline` mode)
+   3. Daily Streak card with motivational nudge
+   4. Quotes card (rotating + add-your-own)
+   Pure presentational wrapper — all data + handlers passed in via props so
+   we don't change any state logic. */
+function StudentLeftSidebar({
+  student, classRank, classSize,
+  exams, quotes, examsListExpanded, onToggleExamsExpanded,
+  onAddExamClick, onDeleteExam,
+  personalQuotes, onAddPersonalQuote, onDeletePersonalQuote,
+}) {
+  const streak = getEffectiveStreak(student);
+  const streakLevel = getStreakLevel(streak);
+  const cardBase = {
+    background: `${C.card}f8`, borderRadius: 14, padding: "12px 14px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+    border: `1.5px solid rgba(0,0,0,0.06)`,
+  };
+  // Pick a friendly daily nudge based on streak length
+  const motivational =
+    streak === 0      ? "Start a new streak today! 🌱" :
+    streak < 3        ? "Nice start! Keep it going 🌿" :
+    streak < 7        ? "You're on a roll! 🔥" :
+    streak < 14       ? "Streak warrior! 💪" :
+    streak < 30       ? "Unstoppable! 🚀" :
+                         "Legendary dedication! ⭐";
+
+  return (
+    <aside style={{
+      width: 240, flexShrink: 0,
+      display: "flex", flexDirection: "column", gap: 10,
+      padding: "12px 0 12px 12px",
+      maxHeight: "calc(100vh - 90px)",
+      overflowY: "auto",
+    }}>
+      {/* 1. STUDENT PROFILE CARD */}
+      <div style={cardBase}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 999,
+            background: `linear-gradient(135deg, ${C.gold}40, ${C.accent}30)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 24, flexShrink: 0,
+            border: `2px solid ${C.gold}50`,
+          }}>
+            🐵
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{
+              fontSize: 14, fontWeight: 700, color: C.text,
+              fontFamily: "'Patrick Hand', cursive",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>{student?.name || "Student"}</div>
+            <div style={{
+              fontSize: 12, color: C.textLight,
+              fontFamily: "'Patrick Hand', cursive",
+              marginTop: 1,
+            }}>
+              ⭐ {student?.points || 0} · #{classRank} of {classSize}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. EXAM COUNTDOWN CARD — uses ExamCountdown in inline mode */}
+      <ExamCountdown
+        exams={exams}
+        quotes={quotes}
+        isOpen={true}                 // inline mode always shows the open card
+        isExpanded={examsListExpanded}
+        onToggleExpanded={onToggleExamsExpanded}
+        onAddClick={onAddExamClick}
+        onDelete={onDeleteExam}
+        canEdit={true}
+        personalQuotes={personalQuotes}
+        onAddPersonalQuote={onAddPersonalQuote}
+        onDeletePersonalQuote={onDeletePersonalQuote}
+        inline={true}
+      />
+
+      {/* 3. STREAK / GOAL CARD */}
+      <div style={cardBase}>
+        <div style={{
+          fontSize: 12, color: C.textLight,
+          letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 700,
+          fontFamily: "'Patrick Hand', cursive", marginBottom: 6,
+        }}>Daily Streak</div>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          marginBottom: 6,
+        }}>
+          <div style={{
+            fontSize: 28, fontWeight: 700, color: C.text,
+            fontFamily: "'Patrick Hand', cursive", lineHeight: 1,
+          }}>
+            {streak}
+          </div>
+          <div>
+            <div style={{
+              fontSize: 13, color: C.text, fontWeight: 700,
+              fontFamily: "'Patrick Hand', cursive",
+            }}>
+              {streak === 1 ? "day" : "days"} {streakLevel.emoji}
+            </div>
+            <div style={{
+              fontSize: 11, color: C.textLight,
+              fontFamily: "'Patrick Hand', cursive",
+            }}>
+              {streakLevel.label || streakLevel.name}
+            </div>
+          </div>
+        </div>
+        <div style={{
+          fontSize: 12, color: C.green, fontWeight: 600,
+          fontFamily: "'Patrick Hand', cursive",
+          padding: "4px 8px",
+          background: `${C.green}12`,
+          borderRadius: 8,
+          textAlign: "center",
+        }}>
+          {motivational}
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -19867,28 +20012,41 @@ function SnowMonkeyTrackerInner() {
           );
         })()}
 
+        {/* ── DASHBOARD LAYOUT ── two-column: left sidebar + main scene.
+            Sidebar holds the student profile + exam countdown + streak,
+            which used to float over the pool. Pool stays as the center
+            game area, slightly narrower to make room for the 240px sidebar. */}
+        <div style={{
+          display: "flex", gap: 0,
+          width: "100%", maxWidth: 1400, margin: "0 auto",
+          alignItems: "flex-start",
+        }}>
+          {/* LEFT SIDEBAR — stacked cards */}
+          <StudentLeftSidebar
+            student={me}
+            classRank={classRank}
+            classSize={classSize}
+            exams={me?.exams || []}
+            quotes={getQuotePool(me)}
+            examsListExpanded={examsListExpanded}
+            onToggleExamsExpanded={() => setExamsListExpanded(e => !e)}
+            onAddExamClick={() => { setExamTargetStudentId(me?.id); setShowAddExam(true); }}
+            onDeleteExam={(eid) => deleteExam(me?.id, eid)}
+            personalQuotes={me?.personalQuotes || []}
+            onAddPersonalQuote={(text) => addPersonalQuote(me?.id, text)}
+            onDeletePersonalQuote={(idx) => deletePersonalQuote(me?.id, idx)}
+          />
+
+          {/* CENTER: hot spring scene — UNCHANGED behaviour, just sits in a column now */}
+          <div style={{ flex: 1, minWidth: 0, padding: "8px 12px 12px 12px" }}>
         {/* Full scene (same as teacher but no click actions) */}
-        <div style={{ position: "relative", margin: "8px auto 0", width: "96%", maxWidth: 1300, height: "calc(100vh - 90px)", borderRadius: 20, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
+        <div style={{ position: "relative", margin: "0 auto", width: "100%", maxWidth: 1100, height: "calc(100vh - 90px)", borderRadius: 20, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
           <BackgroundScene w={1300} h={800} />
           <div style={{ position: "absolute", top: "30%", left: "6%", right: "6%", bottom: "6%", borderRadius: 20, overflow: "hidden" }}>
             <WaterCanvas width={1150} height={550} />
           </div>
           <SteamParticles count={18} />
           <BirdFlock getMessage={getFlockMessage} />
-          <ExamCountdown
-            exams={me?.exams || []}
-            quotes={getQuotePool(me)}
-            isOpen={examsOpen}
-            onToggleOpen={() => setExamsOpen(o => !o)}
-            isExpanded={examsListExpanded}
-            onToggleExpanded={() => setExamsListExpanded(e => !e)}
-            onAddClick={() => { setExamTargetStudentId(me?.id); setShowAddExam(true); }}
-            onDelete={(eid) => deleteExam(me?.id, eid)}
-            canEdit={true}
-            personalQuotes={me?.personalQuotes || []}
-            onAddPersonalQuote={(text) => addPersonalQuote(me?.id, text)}
-            onDeletePersonalQuote={(idx) => deletePersonalQuote(me?.id, idx)}
-          />
 
           {/* All monkeys in the scene (view only, student's own monkey glows).
               Shows just THIS student's class — same set used for the class rank pill above. */}
@@ -19980,160 +20138,6 @@ function SnowMonkeyTrackerInner() {
             })}
           </div>
 
-          {/* Streak Tracker - top-left, collapsible */}
-          {(() => {
-            const myStreak = getEffectiveStreak(me);
-            const myLevel = getStreakLevel(myStreak);
-            const nextLevel = getNextStreakLevel(myStreak);
-            const daysToNext = nextLevel ? nextLevel.days - myStreak : 0;
-            const progress = nextLevel ? Math.min(100, ((myStreak - myLevel.days) / (nextLevel.days - myLevel.days)) * 100) : 100;
-
-            return !streakOpen ? (
-              <button
-                onClick={() => setStreakOpen(true)}
-                style={{
-                  position: "absolute", top: examsOpen ? 280 : 70, left: 16, zIndex: 30,
-                  background: `${C.card}e8`, borderRadius: 999, padding: "8px 16px",
-                  boxShadow: `0 6px 20px ${myLevel.color}40`, backdropFilter: "blur(10px)",
-                  border: `2px solid ${myLevel.color}80`, cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 8,
-                  fontFamily: "'Patrick Hand', cursive", fontSize: 16, fontWeight: 700, color: C.text,
-                  transition: "top 0.3s ease",
-                }}
-                title="Show streak progress"
-              >
-                <span style={{ fontSize: 18 }}>🔥</span>
-                <span>{myStreak} day{myStreak !== 1 ? "s" : ""}</span>
-                <span style={{ fontSize: 14 }}>{myLevel.icon}</span>
-              </button>
-            ) : (
-              <div style={{
-                position: "absolute", top: examsOpen ? 280 : 70, left: 16, zIndex: 30,
-                background: `${C.card}f0`, borderRadius: 18, padding: "14px 18px",
-                boxShadow: `0 8px 28px ${myLevel.color}30`, backdropFilter: "blur(10px)",
-                border: `2px solid ${myLevel.color}60`, width: 260,
-                transition: "top 0.3s ease",
-              }}>
-                {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>🔥 Streak Roadmap</div>
-                  <button
-                    onClick={() => setStreakOpen(false)}
-                    style={{
-                      background: "transparent", border: "none", cursor: "pointer",
-                      fontSize: 20, color: C.textLight, padding: "0 4px",
-                      lineHeight: 1, fontWeight: 700,
-                    }}
-                    title="Hide"
-                  >×</button>
-                </div>
-
-                {/* Current status */}
-                <div style={{
-                  background: `${myLevel.color}20`,
-                  borderRadius: 14,
-                  padding: "10px 12px",
-                  marginBottom: 12,
-                  border: `1.5px solid ${myLevel.color}50`,
-                  textAlign: "center",
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 2 }}>{myLevel.icon}</div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 2 }}>
-                    {myStreak} day{myStreak !== 1 ? "s" : ""} · {myLevel.name}
-                  </div>
-                  <div style={{ fontSize: 12, color: C.textLight }}>{myLevel.desc}</div>
-                  {(me?.bestStreak || 0) > myStreak && (
-                    <div style={{ fontSize: 11, color: C.textLight, marginTop: 4, opacity: 0.8 }}>
-                      Best: {me.bestStreak} day{me.bestStreak !== 1 ? "s" : ""}
-                    </div>
-                  )}
-                </div>
-
-                {/* Progress to next */}
-                {nextLevel && (
-                  <>
-                    <div style={{ fontSize: 12, color: C.textLight, marginBottom: 5, textAlign: "center" }}>
-                      {daysToNext} day{daysToNext !== 1 ? "s" : ""} to <strong style={{ color: nextLevel.color }}>{nextLevel.icon} {nextLevel.name}</strong>
-                    </div>
-                    <div style={{
-                      height: 8,
-                      background: `${C.fur2}30`,
-                      borderRadius: 4,
-                      overflow: "hidden",
-                      marginBottom: 14,
-                    }}>
-                      <div style={{
-                        height: "100%",
-                        width: `${progress}%`,
-                        background: `linear-gradient(90deg, ${myLevel.color}, ${nextLevel.color})`,
-                        transition: "width 0.6s ease",
-                        borderRadius: 4,
-                      }} />
-                    </div>
-                  </>
-                )}
-
-                {/* Roadmap of all levels */}
-                <div style={{
-                  maxHeight: 180,
-                  overflowY: "auto",
-                  paddingRight: 4,
-                }}>
-                  <style>{`
-                    .streak-scroll::-webkit-scrollbar { width: 5px; }
-                    .streak-scroll::-webkit-scrollbar-track { background: transparent; }
-                    .streak-scroll::-webkit-scrollbar-thumb { background: ${C.fur2}80; border-radius: 4px; }
-                  `}</style>
-                  <div className="streak-scroll" style={{ maxHeight: 180, overflowY: "auto" }}>
-                    {STREAK_LEVELS.map((lvl, i) => {
-                      const reached = myStreak >= lvl.days;
-                      const isCurrent = lvl.id === myLevel.id;
-                      return (
-                        <div key={lvl.id} style={{
-                          display: "flex", alignItems: "center", gap: 8,
-                          padding: "7px 9px",
-                          borderRadius: 10,
-                          background: isCurrent ? `${lvl.color}25` : reached ? `${lvl.color}10` : "transparent",
-                          border: isCurrent ? `1.5px solid ${lvl.color}` : "1.5px solid transparent",
-                          marginBottom: 3,
-                          opacity: reached ? 1 : 0.55,
-                        }}>
-                          <span style={{ width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {reached ? (
-                              <WatercolorIcon name={`rank_${lvl.id}`} size={24} />
-                            ) : (
-                              <span style={{ fontSize: 16 }}>🔒</span>
-                            )}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: 13,
-                              fontWeight: 700,
-                              color: reached ? C.text : C.textLight,
-                              lineHeight: 1.2,
-                            }}>
-                              {lvl.name}
-                            </div>
-                            <div style={{ fontSize: 11, color: C.textLight, lineHeight: 1.2 }}>
-                              {lvl.days === 0 ? "Start" : `${lvl.days} day${lvl.days !== 1 ? "s" : ""}`}
-                            </div>
-                          </div>
-                          {reached && !isCurrent && (
-                            <span style={{ fontSize: 11, color: lvl.color, fontWeight: 700 }}>✓</span>
-                          )}
-                          {isCurrent && (
-                            <span style={{ fontSize: 10, color: lvl.color, fontWeight: 700, background: `${lvl.color}20`, padding: "2px 6px", borderRadius: 8 }}>
-                              YOU
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Leaderboard - top-right, collapsible */}
           {!leaderboardOpen ? (
@@ -20319,6 +20323,10 @@ function SnowMonkeyTrackerInner() {
               </div>
             </div>
           </div>
+        </div>
+          {/* end of center scene column */}
+          </div>
+        {/* end of dashboard 2-column flex */}
         </div>
       </div>
     );
