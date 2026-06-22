@@ -4533,6 +4533,7 @@ function NearestExamCard({ exam, canEdit, onDelete }) {
    Pure presentational wrapper — all data + handlers passed in via props so
    we don't change any state logic. */
 function StudentLeftSidebar({
+  collapsed = false, onToggleCollapsed,
   student, classRank, classSize,
   exams, quotes, examsListExpanded, onToggleExamsExpanded,
   onAddExamClick, onDeleteExam,
@@ -4545,6 +4546,31 @@ function StudentLeftSidebar({
     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
     border: `1.5px solid rgba(0,0,0,0.06)`,
   };
+
+  // ── COLLAPSED STATE ──
+  // Render a slim rail with just an expand button so students can reclaim the
+  // horizontal space for the hot-spring scene. Choice is persisted by the parent.
+  if (collapsed) {
+    return (
+      <aside style={{
+        width: 40, flexShrink: 0,
+        display: "flex", flexDirection: "column", alignItems: "center",
+        padding: "12px 0 12px 8px",
+      }}>
+        <button
+          onClick={onToggleCollapsed}
+          title="Show sidebar"
+          style={{
+            width: 32, height: 32, borderRadius: 10,
+            border: `1.5px solid ${C.fur2}30`, background: `${C.card}f8`,
+            color: C.text, fontFamily: "'Patrick Hand', cursive",
+            fontSize: 16, fontWeight: 700, cursor: "pointer", lineHeight: 1,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+          }}
+        >»</button>
+      </aside>
+    );
+  }
   // Pick a friendly daily nudge based on streak length
   const motivational =
     streak === 0      ? "Start a new streak today! 🌱" :
@@ -4588,6 +4614,18 @@ function StudentLeftSidebar({
               ⭐ {student?.points || 0} · #{classRank} of {classSize}
             </div>
           </div>
+          {/* Collapse the whole sidebar to reclaim space for the scene */}
+          <button
+            onClick={onToggleCollapsed}
+            title="Hide sidebar"
+            style={{
+              flexShrink: 0,
+              width: 26, height: 26, borderRadius: 8,
+              border: `1.5px solid ${C.fur2}30`, background: "transparent",
+              color: C.textLight, fontFamily: "'Patrick Hand', cursive",
+              fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1,
+            }}
+          >«</button>
         </div>
       </div>
 
@@ -14849,6 +14887,19 @@ function SnowMonkeyTrackerInner() {
   // Default student landing: their personal Hot Spring (not the classroom).
   // Students can toggle to "classroom" via the World View button in the top nav.
   const [studentView, setStudentView] = useState("hotspring"); // "hotspring" | "classroom"
+  // Left sidebar collapse — persisted so the student's choice sticks across sessions.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("monkeyTracker_sidebarCollapsed") === "true"; }
+    catch { return false; }
+  });
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem("monkeyTracker_sidebarCollapsed", String(next)); } catch {}
+      return next;
+    });
+    SFX.click();
+  };
   // Show the full Monkey Jail modal automatically on login when jail is active,
   // and let the student dismiss it (they still see the top-bar pill).
   const [showJailModal, setShowJailModal] = useState(false);
@@ -18548,7 +18599,7 @@ function SnowMonkeyTrackerInner() {
                   highlight: false,
                 },
                 {
-                  label: "📚 Packs",
+                  label: "📚 Study Packs",
                   onClick: () => { SFX.click(); setShowStudyPacks(true); },
                   highlight: false,
                 },
@@ -18586,6 +18637,73 @@ function SnowMonkeyTrackerInner() {
                   {item.label}
                 </button>
               ))}
+
+              {/* Pet Packs — moved here from the old floating action row.
+                  Keeps its pending-income badge. */}
+              <button
+                onClick={() => { SFX.click(); setPetMartTab("packs"); setShowPetMart(true); }}
+                style={{
+                  position: "relative",
+                  padding: "8px 16px", borderRadius: 999,
+                  background: "transparent", color: C.text, border: "none",
+                  fontFamily: "'Patrick Hand', cursive",
+                  fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  whiteSpace: "nowrap", transition: "all 0.18s ease",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = `${C.card}cc`; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+              >
+                🎁 Pet Packs
+                {calculatePendingIncome(me) > 0 && (
+                  <span style={{
+                    position: "absolute", top: -2, right: -2,
+                    background: `linear-gradient(135deg, ${C.gold}, #ff8030)`,
+                    color: "white", fontSize: 10, fontWeight: 700,
+                    padding: "1px 6px", borderRadius: 999,
+                    boxShadow: `0 2px 8px ${C.gold}80`,
+                    animation: "incomeBadgePulse 1.4s ease-in-out infinite",
+                  }}>+{calculatePendingIncome(me)} ★</span>
+                )}
+              </button>
+
+              {/* My Hot Spring — moved here from the old floating action row.
+                  Kept prominent (gradient) and retains the pet-care badge. */}
+              {(() => {
+                const myCare = getPetCare(me);
+                const careLbl = myCare ? getCareLabel(myCare.avgCare) : null;
+                const needsAttention = me.pet && myCare && myCare.avgCare < 30;
+                return (
+                  <button
+                    onClick={() => { SFX.click(); setShowMyPool(true); }}
+                    style={{
+                      position: "relative",
+                      padding: "8px 18px", borderRadius: 999,
+                      background: `linear-gradient(135deg, #ff80c0 0%, #ff9050 50%, #ffc430 100%)`,
+                      color: "white", border: "none",
+                      fontFamily: "'Patrick Hand', cursive",
+                      fontSize: 14, fontWeight: 700, cursor: "pointer",
+                      whiteSpace: "nowrap", transition: "all 0.18s ease",
+                      boxShadow: `0 3px 10px #ff80c060`,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
+                  >
+                    ♨️ My Hot Spring
+                    {careLbl && me.pet && <span style={{ fontSize: 13 }}>{careLbl.emoji}</span>}
+                    {needsAttention && (
+                      <span style={{
+                        position: "absolute", top: -2, right: -2,
+                        background: C.accent, color: "white", fontSize: 10, fontWeight: 700,
+                        padding: "1px 6px", borderRadius: 999,
+                        boxShadow: `0 2px 8px ${C.accent}80`,
+                        animation: "incomeBadgePulse 1.4s ease-in-out infinite",
+                      }}>!</span>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
@@ -19337,131 +19455,6 @@ function SnowMonkeyTrackerInner() {
           />
         )}
 
-        {/* Action buttons - top center */}
-        {(() => {
-          const done = hasCompletedChallenge(me?.id);
-          const myMissions = missions[me?.id] || [];
-          const hasMission = myMissions.length > 0;
-          return (
-            <div style={{ position: "absolute", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 25, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", maxWidth: "90%" }}>
-              <button onClick={() => !done && setShowWordle(true)}
-                style={{
-                  padding: "10px 22px", borderRadius: 16, border: `2px solid ${done ? C.green + "40" : C.gold + "50"}`,
-                  background: done ? `${C.green}15` : `${C.card}ee`,
-                  color: done ? C.green : C.text,
-                  fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: done ? "default" : "pointer",
-                  boxShadow: done ? "none" : `0 4px 14px ${C.gold}30`,
-                  transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
-                  backdropFilter: "blur(8px)",
-                }}>
-                {done ? (
-                  <>
-                    <span style={{ fontSize: 18 }}>✅</span>
-                    Daily Done!
-                  </>
-                ) : (
-                  <>
-                    <WatercolorIcon name="btn_daily" size={22} />
-                    Daily Challenge
-                  </>
-                )}
-              </button>
-              <button onClick={async () => {
-                  // Always allow opening the picker — even with 0 missions —
-                  // and trigger a refresh so newly assigned missions appear immediately.
-                  setShowMissionPicker(true);
-                  refreshMissionsAndStudents();
-                }}
-                style={{
-                  padding: "10px 22px", borderRadius: 16,
-                  border: `2px solid ${hasMission ? C.green + "70" : C.fur2 + "70"}`,
-                  background: `${C.card}ee`,
-                  color: C.text,
-                  fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: "pointer",
-                  boxShadow: hasMission ? `0 4px 14px ${C.green}30` : "none",
-                  transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
-                  backdropFilter: "blur(8px)",
-                }}>
-                <WatercolorIcon name="btn_mission" size={22} />
-                {hasMission ? `Missions (${myMissions.length})` : "Missions"}
-              </button>
-              <button onClick={() => { setPetMartTab("packs"); setShowPetMart(true); }}
-                style={{
-                  padding: "10px 22px", borderRadius: 16,
-                  border: `2px solid ${C.green}60`,
-                  background: `${C.card}ee`,
-                  color: C.text,
-                  fontFamily: "'Patrick Hand', cursive", fontSize: 17, fontWeight: 700,
-                  cursor: "pointer",
-                  boxShadow: `0 4px 14px ${C.green}30`,
-                  transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
-                  backdropFilter: "blur(8px)",
-                  position: "relative",
-                }}>
-                🎁 Pet Packs
-                {calculatePendingIncome(me) > 0 && (
-                  <span style={{
-                    position: "absolute", top: -6, right: -6,
-                    background: `linear-gradient(135deg, ${C.gold}, #ff8030)`,
-                    color: "white", fontSize: 11, fontWeight: 700,
-                    padding: "2px 7px", borderRadius: 999,
-                    boxShadow: `0 2px 8px ${C.gold}80`,
-                    animation: "incomeBadgePulse 1.4s ease-in-out infinite",
-                  }}>
-                    
-                    +{calculatePendingIncome(me)} ★
-                  </span>
-                )}
-              </button>
-              {/* My Hot Spring button - prominent gradient + soft glow pulse */}
-              {(() => {
-                const myCare = getPetCare(me);
-                const careLbl = myCare ? getCareLabel(myCare.avgCare) : null;
-                const needsAttention = me.pet && myCare && myCare.avgCare < 30;
-                return (
-                  <button onClick={() => { SFX.click(); setShowMyPool(true); }}
-                    style={{
-                      padding: "12px 26px", borderRadius: 18,
-                      border: "none",
-                      background: `linear-gradient(135deg, #ff80c0 0%, #ff9050 50%, #ffc430 100%)`,
-                      color: "white",
-                      fontFamily: "'Patrick Hand', cursive", fontSize: 19, fontWeight: 700,
-                      cursor: "pointer",
-                      boxShadow: `0 4px 18px #ff80c080, 0 0 0 0 #ff80c060`,
-                      transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8,
-                      position: "relative",
-                      letterSpacing: 0.3,
-                      animation: "hotSpringGlow 2.4s ease-in-out infinite",
-                      textShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px) scale(1.03)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; }}>
-                    <style>{`
-                      @keyframes hotSpringGlow {
-                        0%, 100% { box-shadow: 0 4px 18px #ff80c080, 0 0 0 0 #ff80c060; }
-                        50% { box-shadow: 0 6px 26px #ff80c0c0, 0 0 0 6px #ff80c020; }
-                      }
-                    `}</style>
-                    <WatercolorIcon name="btn_hotspring" size={26} />
-                    My Hot Spring
-                    {careLbl && me.pet && <span style={{ fontSize: 14 }}>{careLbl.emoji}</span>}
-                    {needsAttention && (
-                      <span style={{
-                        position: "absolute", top: -6, right: -6,
-                        background: C.accent, color: "white", fontSize: 11, fontWeight: 700,
-                        padding: "2px 7px", borderRadius: 999,
-                        boxShadow: `0 2px 8px ${C.accent}80`,
-                        animation: "incomeBadgePulse 1.4s ease-in-out infinite",
-                      }}>!</span>
-                    )}
-                  </button>
-                );
-              })()}
-            </div>
-          );
-        })()}
 
         {/* Customize Monkey modal - student dresses up own monkey (pet customization is in Hot Spring) */}
         {showCustomize && me && (() => {
@@ -20059,6 +20052,8 @@ function SnowMonkeyTrackerInner() {
         }}>
           {/* LEFT SIDEBAR — stacked cards */}
           <StudentLeftSidebar
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebar}
             student={me}
             classRank={classRank}
             classSize={classSize}
