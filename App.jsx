@@ -18599,11 +18599,6 @@ function SnowMonkeyTrackerInner() {
                   highlight: false,
                 },
                 {
-                  label: "📚 Study Packs",
-                  onClick: () => { SFX.click(); setShowStudyPacks(true); },
-                  highlight: false,
-                },
-                {
                   label: "🍜 Join Live",
                   onClick: () => { SFX.click(); setShowJoinGame(true); },
                   highlight: false,
