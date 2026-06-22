@@ -144,6 +144,20 @@ function useIsMobile(breakpoint = 640) {
   return isMobile;
 }
 
+// Lightweight self-contained clock. Each component that shows a live countdown
+// owns its own interval, so a ticking timer re-renders ONLY that small
+// component — not the whole app. (A single root-level 1s interval used to
+// re-render the entire ~6000-line tree every second, which made the quiz and
+// the rest of the UI lag badly.) Returns a counter so callers can depend on it.
+function useNowTick(intervalMs = 1000) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return tick;
+}
+
 function WatercolorFilters() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }}>
@@ -4202,6 +4216,10 @@ function ExamCountdown({
   // unaffected — that path doesn't pass `inline`.
   inline = false,
 }) {
+  // Own a per-second clock so the live countdown (incl. the collapsed pill)
+  // stays current without relying on the whole app re-rendering every second.
+  useNowTick(1000);
+
   const active = getActiveExams(exams || []);
   const nearest = active[0];
   const others = active.slice(1);
@@ -4415,6 +4433,8 @@ function PersonalQuotesSection({ quotes, onAdd, onDelete }) {
 }
 
 function NearestExamCard({ exam, canEdit, onDelete }) {
+  // Live HH:MM:SS — tick once a second, locally, so only this card updates.
+  useNowTick(1000);
   const cd = getCountdown(exam.dateMs);
   const examDate = new Date(exam.dateMs);
   const dateLabel = examDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -12361,6 +12381,10 @@ function MessageSenseiModal({ student, teacher, onClose, onSend, lastSentAt }) {
   const [freeText, setFreeText] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Tick locally so the cooldown counter ("wait Xs") counts down live without
+  // depending on a global per-second re-render of the whole app.
+  useNowTick(1000);
+
   // Rate limit: max 1 message every 5 minutes (client-side, advisory).
   // The truly determined kid can refresh and bypass — that's fine for v1.
   const RATE_LIMIT_MS = 5 * 60 * 1000;
@@ -14884,10 +14908,13 @@ function SnowMonkeyTrackerInner() {
   const [examDate, setExamDate] = useState("");
   const [examTime, setExamTime] = useState("09:00");
   const [examEmoji, setExamEmoji] = useState("📝");
-  // Real-time tick for countdown — updates every second
+  // Coarse real-time tick for "X min ago" / day-and-hour displays. Runs once a
+  // minute (not every second) so we don't re-render the entire app tree 60×/min.
+  // Components that need a live HH:MM:SS counter (exam countdown, message
+  // cooldown) use their own local `useNowTick(1000)` instead — see below.
   const [, setNowTick] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    const id = setInterval(() => setNowTick(Date.now()), 60000);
     return () => clearInterval(id);
   }, []);
   const [soundOn, setSoundOn] = useState(getSoundsEnabled());
@@ -18428,6 +18455,7 @@ function SnowMonkeyTrackerInner() {
     const dc = getDailyChallengeState(me);
     const collectionUnlocked = isDailyCollectionUnlocked(me);
     const collectionCollected = isDailyCollectionCollected(me);
+    const dailyDone = hasCompletedChallenge(me?.id);
     const monkeyInJail = me?.jail?.active === true;
     return (
       <div style={{ minHeight: "100vh", background: C.bg, backgroundSize: themeMode === "rainbow" ? "400% 400%" : undefined, animation: themeMode === "rainbow" ? "rainbowShift 18s ease infinite" : undefined, fontFamily: "'Patrick Hand', cursive", position: "relative", overflow: "hidden" }}>
@@ -18442,6 +18470,7 @@ function SnowMonkeyTrackerInner() {
             main nav stays clean. Names/Points toggles moved into the icon row. */}
         <div style={{
           display: "flex", alignItems: "center", gap: 16,
+          flexWrap: "wrap", rowGap: 10,
           padding: "12px 24px", position: "relative", zIndex: 20,
           background: `${C.card}ee`,
           backdropFilter: "blur(10px)",
@@ -18498,19 +18527,24 @@ function SnowMonkeyTrackerInner() {
           }}>
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 4,
+              flexWrap: "wrap", justifyContent: "center",
               padding: 4, borderRadius: 999,
               background: `${C.fur2}12`,
               border: `1.5px solid ${C.fur2}20`,
             }}>
               {[
                 {
-                  label: "🎯 Daily Challenge",
-                  onClick: () => { SFX.click(); setShowMissionPicker(true); },
-                  highlight: collectionUnlocked && !collectionCollected,
+                  // Daily Challenge launches the Wordle game (not the mission
+                  // picker). Once finished for the day it shows a "done" state.
+                  label: dailyDone ? "✅ Daily Done!" : "🎯 Daily Challenge",
+                  onClick: () => { if (dailyDone) return; SFX.click(); setShowWordle(true); },
+                  highlight: !dailyDone,
+                  disabled: dailyDone,
                 },
                 {
                   label: "🚀 Missions",
-                  onClick: () => { SFX.click(); setShowMissionPicker(true); },
+                  // Open the picker AND refresh so newly-assigned missions appear.
+                  onClick: () => { SFX.click(); setShowMissionPicker(true); refreshMissionsAndStudents(); },
                   highlight: false,
                 },
                 {
@@ -18531,20 +18565,22 @@ function SnowMonkeyTrackerInner() {
                     padding: "8px 16px", borderRadius: 999,
                     background: item.highlight
                       ? `linear-gradient(135deg, ${C.green}, #4a9550)`
-                      : "transparent",
-                    color: item.highlight ? "white" : C.text,
+                      : item.disabled ? `${C.green}12` : "transparent",
+                    color: item.highlight ? "white" : item.disabled ? C.green : C.text,
                     border: "none",
                     fontFamily: "'Patrick Hand', cursive",
-                    fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    fontSize: 14, fontWeight: 700,
+                    cursor: item.disabled ? "default" : "pointer",
+                    opacity: item.disabled ? 0.85 : 1,
                     whiteSpace: "nowrap",
                     transition: "all 0.18s ease",
                     boxShadow: item.highlight ? `0 3px 10px ${C.green}50` : "none",
                   }}
                   onMouseEnter={e => {
-                    if (!item.highlight) e.currentTarget.style.background = `${C.card}cc`;
+                    if (!item.highlight && !item.disabled) e.currentTarget.style.background = `${C.card}cc`;
                   }}
                   onMouseLeave={e => {
-                    if (!item.highlight) e.currentTarget.style.background = "transparent";
+                    if (!item.highlight && !item.disabled) e.currentTarget.style.background = "transparent";
                   }}
                 >
                   {item.label}
