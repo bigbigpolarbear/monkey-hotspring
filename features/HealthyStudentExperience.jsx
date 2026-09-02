@@ -81,9 +81,26 @@ export default function HealthyStudentExperience() {
   useEffect(() => {
     setDrawerOpen(false);
     setSittersOpen(false);
-    if (!studentId) { setStudent(null); return; }
-    completeDueJobsForStudent(studentId).catch(err => console.warn('Sitter completion check failed:', err));
-    return subscribeStudent(studentId, setStudent, err => console.warn('Student live sync failed:', err));
+    setStudent(null);
+    if (!studentId) return;
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+    (async () => {
+      try {
+        await completeDueJobsForStudent(studentId);
+      } catch (error) {
+        console.warn('Sitter completion check failed:', error);
+      }
+      if (!cancelled) {
+        unsubscribe = subscribeStudent(studentId, setStudent, error => console.warn('Student live sync failed:', error));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [studentId]);
 
   const pending = useMemo(() => student ? buildPendingPassiveIncome(student, localDayKey()) : null, [student]);
