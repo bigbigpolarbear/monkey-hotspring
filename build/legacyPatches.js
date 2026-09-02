@@ -24,8 +24,7 @@ export function patchLegacyApp(source) {
   next = replaceOnce(next, /(const monkeyInJail = me\?\.jail\?\.active === true;\s*return \(\s*)<div style=\{\{ minHeight:/, '$1<div data-monkey-student-id={me.id} data-monkey-student-name={me.name || ""} style={{ minHeight:', 'student root marker');
   next = replaceOnce(next, /(\{\/\* ─── TOP BAR \(redesigned\)[\s\S]{0,650}?\*\/\}\s*)<div style=\{\{/, '$1<div data-monkey-legacy-topbar style={{', 'legacy student top bar marker');
   next = replaceOnce(next, /(\{\/\* ── DASHBOARD LAYOUT ──[\s\S]{0,520}?\*\/\}\s*)<div style=\{\{/, '$1<div data-monkey-dashboard-layout style={{', 'student dashboard layout marker');
-  next = replaceOnce(next, /(\{\/\* ─── STATUS STRIP \(under top bar\)[\s\S]{0,420}?\*\/\}\s*)\{\(!monkeyInJail/, '$1<div data-monkey-legacy-status-strip>{(!monkeyInJail', 'legacy daily status strip start');
-  next = replaceOnce(next, /(\) : null\}\s*)(\{\/\* ── DASHBOARD LAYOUT ──)/, '$1</div>\n        $2', 'legacy daily status strip end');
+  next = replaceOnce(next, /(\{\/\* ─── STATUS STRIP \(under top bar\)[\s\S]{0,420}?\*\/\}\s*\{\(!monkeyInJail[\s\S]{0,180}?)<div style=\{\{/, '$1<div data-monkey-legacy-status-strip style={{', 'legacy daily status strip marker');
   next = replaceOnce(next, /function shouldBeInJail\(student\) \{[\s\S]*?\n\}/, `function shouldBeInJail() {\n  // Missing days are handled by the 7-day passive-income cap. No guilt or punitive jail.\n  return false;\n}`, 'punitive jail trigger');
   next = next.replace('const jailMul = student.jail?.active ? 0.1 : 1.0;', 'const jailMul = 1.0;');
   next = next.replace("🎉 Challenge complete! Your pets are awake — go collect today's stars.", '🎉 Challenge complete! Your bonus Stars are ready.');
