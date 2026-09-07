@@ -8,3 +8,18 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
 }
+
+/* The student reward hub is rendered beside the preserved legacy app. On wide
+   screens reserve real layout space for non-modal panels instead of covering
+   the leaderboard/world content with z-index stacking. */
+@media (min-width: 1101px) {
+  html.mh-student-active:has(#mh-student-layer[data-panel="today"], #mh-student-layer[data-panel="leaderboard"]) [data-monkey-student-id] {
+    padding-right: 390px !important;
+    box-sizing: border-box !important;
+  }
+
+  html.mh-student-active:has(#mh-student-layer[data-panel="rules"], #mh-student-layer[data-panel="vocabLog"], #mh-student-layer[data-panel="reading"]) [data-monkey-student-id] {
+    padding-right: 590px !important;
+    box-sizing: border-box !important;
+  }
+}
