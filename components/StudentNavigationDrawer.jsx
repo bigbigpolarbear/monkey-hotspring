@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 
-export default function StudentNavigationDrawer({ open, onClose, student, onOpenSitters, onLegacyAction }) {
+export default function StudentNavigationDrawer({
+  open, onClose, student, onOpenSitters, onOpenChallenge, onOpenRules, onOpenVocab, onLegacyAction,
+}) {
   useEffect(() => {
     if (!open) return;
     const onKey = e => { if (e.key === 'Escape') onClose(); };
@@ -24,7 +26,9 @@ export default function StudentNavigationDrawer({ open, onClose, student, onOpen
           <button className="mh-icon-button" onClick={onClose} aria-label="Close menu">✕</button>
         </div>
         <nav className="mh-drawer-actions">
-          <button onClick={() => action('Daily Challenge')}>☀️ Today’s challenge</button>
+          <button onClick={onOpenChallenge}>☀️ Today’s challenge</button>
+          <button onClick={onOpenRules}>⭐ How to earn Stars</button>
+          <button onClick={onOpenVocab}>🧠 My Vocabulary</button>
           <button onClick={() => action('Missions')}>🎯 Missions</button>
           <button onClick={() => action('Food')}>🍙 Food & feeding</button>
           <button onClick={onOpenSitters}>🐒 Monkey Sitters — Coming Soon</button>
