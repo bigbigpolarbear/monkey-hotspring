@@ -5,7 +5,6 @@ import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import MonkeySitters from '../components/MonkeySitters.jsx';
 import { buildPendingPassiveIncome, getChallengeBonus, localDayKey } from '../game/petEconomy.js';
 import { collectChallengeBonus, collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
-import { completeDueJobsForStudent } from '../services/sitterService.js';
 import '../styles/student-experience.css';
 
 function findStudentMarker() {
@@ -84,23 +83,16 @@ export default function HealthyStudentExperience() {
     setStudent(null);
     if (!studentId) return;
 
-    let cancelled = false;
-    let unsubscribe = () => {};
-    (async () => {
-      try {
-        await completeDueJobsForStudent(studentId);
-      } catch (error) {
-        console.warn('Sitter completion check failed:', error);
-      }
-      if (!cancelled) {
-        unsubscribe = subscribeStudent(studentId, setStudent, error => console.warn('Student live sync failed:', error));
-      }
-    })();
+    // Student access must never wait on optional features. Subscribe to the
+    // student's Firestore record immediately so the dashboard can appear as
+    // soon as the authenticated legacy app exposes the student marker.
+    const unsubscribe = subscribeStudent(
+      studentId,
+      setStudent,
+      error => console.warn('Student live sync failed:', error),
+    );
 
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [studentId]);
 
   const pending = useMemo(() => student ? buildPendingPassiveIncome(student, localDayKey()) : null, [student]);

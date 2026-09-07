@@ -27,7 +27,7 @@ export default function StudentNavigationDrawer({ open, onClose, student, onOpen
           <button onClick={() => action('Daily Challenge')}>☀️ Today’s challenge</button>
           <button onClick={() => action('Missions')}>🎯 Missions</button>
           <button onClick={() => action('Food')}>🍙 Food & feeding</button>
-          <button onClick={onOpenSitters}>🐒 Monkey Sitters</button>
+          <button onClick={onOpenSitters}>🐒 Monkey Sitters — Coming Soon</button>
           <button onClick={() => action('World View')}>♨️ Hot Spring / Classroom</button>
         </nav>
         <section className="mh-drawer-section">
