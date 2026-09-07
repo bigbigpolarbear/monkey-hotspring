@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StudentNavigationDrawer from '../components/StudentNavigationDrawer.jsx';
-import DailyPetIncome from '../components/DailyPetIncome.jsx';
 import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import MonkeySitters from '../components/MonkeySitters.jsx';
-import { buildPendingPassiveIncome, getChallengeBonus, localDayKey } from '../game/petEconomy.js';
-import { collectChallengeBonus, collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
+import {
+  DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
+  StarRulesPanel, TodayPanel, VocabularyLogPanel,
+} from '../components/StudentHubPanels.jsx';
+import { buildPendingPassiveIncome, localDayKey } from '../game/petEconomy.js';
+import { collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
+import { getStudents } from '../firebase.js';
 import '../styles/student-experience.css';
+import '../styles/student-hub.css';
 
 function findStudentMarker() {
   return document.querySelector('[data-monkey-student-id]');
@@ -13,10 +18,30 @@ function findStudentMarker() {
 
 function clickLegacyAction(label) {
   const needle = String(label).toLowerCase();
-  const buttons = [...document.querySelectorAll('button')].filter(btn => btn.offsetParent !== null);
-  const preferred = buttons.find(btn => (btn.getAttribute('title') || '').toLowerCase().includes(needle));
-  const fallback = buttons.find(btn => (btn.textContent || '').trim().toLowerCase().includes(needle));
-  (preferred || fallback)?.click();
+  const buttons = [...document.querySelectorAll('button')];
+  const visible = buttons.filter(btn => btn.offsetParent !== null);
+  const find = list => list.find(btn => (btn.getAttribute('title') || '').toLowerCase().includes(needle))
+    || list.find(btn => (btn.textContent || '').trim().toLowerCase().includes(needle));
+  (find(visible) || find(buttons))?.click();
+}
+
+function tagLegacyLeaderboard(marker) {
+  if (!marker) return;
+  const candidates = [...marker.querySelectorAll('button,div')].filter(node => {
+    const text = (node.textContent || '').trim();
+    return text === '🏆 Leaderboard' || text === 'Leaderboard';
+  });
+  for (const candidate of candidates) {
+    let node = candidate;
+    while (node && node !== marker) {
+      const position = window.getComputedStyle(node).position;
+      if (position === 'absolute' || position === 'fixed') break;
+      node = node.parentElement;
+    }
+    if (node && node !== marker && !node.hasAttribute('data-monkey-legacy-leaderboard')) {
+      node.setAttribute('data-monkey-legacy-leaderboard', 'true');
+    }
+  }
 }
 
 function ThoughtBubble({ active }) {
@@ -41,6 +66,9 @@ export default function HealthyStudentExperience() {
   const [student, setStudent] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sittersOpen, setSittersOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState(null);
+  const [leaderboardStudents, setLeaderboardStudents] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [burst, setBurst] = useState({ key: 0, amount: 0 });
   const [toast, setToast] = useState('');
@@ -49,13 +77,13 @@ export default function HealthyStudentExperience() {
   });
 
   useEffect(() => {
-    // Double safety: legacy navigation also starts collapsed after the build patch.
     try { localStorage.setItem('monkeyTracker_sidebarCollapsed', 'true'); } catch {}
     const detect = () => {
       const marker = findStudentMarker();
       const id = marker?.getAttribute('data-monkey-student-id') || null;
       setStudentId(prev => prev === id ? prev : id);
       document.documentElement.classList.toggle('mh-student-active', !!id);
+      if (marker) tagLegacyLeaderboard(marker);
     };
     detect();
     const observer = new MutationObserver(detect);
@@ -80,28 +108,39 @@ export default function HealthyStudentExperience() {
   useEffect(() => {
     setDrawerOpen(false);
     setSittersOpen(false);
+    setActivePanel(null);
     setStudent(null);
     if (!studentId) return;
-
-    // Student access must never wait on optional features. Subscribe to the
-    // student's Firestore record immediately so the dashboard can appear as
-    // soon as the authenticated legacy app exposes the student marker.
-    const unsubscribe = subscribeStudent(
-      studentId,
-      setStudent,
-      error => console.warn('Student live sync failed:', error),
-    );
-
-    return () => unsubscribe();
+    return subscribeStudent(studentId, setStudent, error => console.warn('Student live sync failed:', error));
   }, [studentId]);
 
+  useEffect(() => {
+    if (activePanel !== 'leaderboard' || !student) return;
+    let cancelled = false;
+    setLeaderboardLoading(true);
+    getStudents().then(all => {
+      if (cancelled) return;
+      const teacherId = student.teacherId || null;
+      const filtered = teacherId ? all.filter(item => item.teacherId === teacherId) : all.filter(item => item.id === student.id);
+      setLeaderboardStudents(filtered.some(item => item.id === student.id) ? filtered : [student, ...filtered]);
+    }).catch(error => {
+      console.warn('Leaderboard load failed:', error);
+      if (!cancelled) setLeaderboardStudents([student]);
+    }).finally(() => { if (!cancelled) setLeaderboardLoading(false); });
+    return () => { cancelled = true; };
+  }, [activePanel, student?.id, student?.teacherId]);
+
   const pending = useMemo(() => student ? buildPendingPassiveIncome(student, localDayKey()) : null, [student]);
-  const challengeBonus = useMemo(() => student ? getChallengeBonus(student, localDayKey()) : null, [student]);
   const collectedToday = student?.dailyEconomy?.lastPassiveCollectionDate === localDayKey();
 
   const notify = useCallback(message => {
     setToast(message);
-    window.setTimeout(() => setToast(''), 2300);
+    window.setTimeout(() => setToast(''), 2600);
+  }, []);
+
+  const rewardBurst = useCallback(amount => {
+    const safe = Math.max(0, Number(amount) || 0);
+    if (safe) setBurst(prev => ({ key: prev.key + 1, amount: safe }));
   }, []);
 
   const collect = useCallback(async () => {
@@ -110,58 +149,61 @@ export default function HealthyStudentExperience() {
     try {
       const result = await collectPassiveIncome(studentId);
       if (result.amount > 0) {
-        setBurst(prev => ({ key: prev.key + 1, amount: result.amount }));
+        rewardBurst(result.amount);
         notify(`${result.amount} ★ collected! Your pets worked hard today.`);
       } else notify('Pet Stars are already collected for today.');
     } catch (error) { notify(error.message || 'Could not collect Stars'); }
     finally { setBusy(false); }
-  }, [studentId, busy, notify]);
+  }, [studentId, busy, notify, rewardBurst]);
 
-  const collectBonus = useCallback(async () => {
-    if (!studentId || busy) return;
-    setBusy(true);
-    try {
-      const result = await collectChallengeBonus(studentId);
-      if (result.amount > 0) { setBurst(prev => ({ key: prev.key + 1, amount: result.amount })); notify(`Challenge bonus: +${result.amount} ★`); }
-      else notify(result.alreadyCollected ? 'Challenge bonus already collected.' : 'Finish today’s challenge first.');
-    } catch (error) { notify(error.message || 'Could not collect bonus'); }
-    finally { setBusy(false); }
-  }, [studentId, busy, notify]);
+  const openPanel = useCallback(name => {
+    setDrawerOpen(false);
+    setSittersOpen(false);
+    setActivePanel(current => current === name ? null : name);
+  }, []);
 
   if (!studentId || !student) return null;
   const ready = collectedToday ? 0 : (pending?.total || 0);
   const report = student.latestSittingReport || null;
+  const panelCommon = { student, onClose: () => setActivePanel(null) };
 
   return (
-    <div id="mh-student-layer" data-active="true" data-theme={themeMode}>
-      <header className="mh-topbar">
-        <button className="mh-menu-button" onClick={() => setDrawerOpen(true)} aria-label="Open menu">☰</button>
+    <div id="mh-student-layer" data-active="true" data-theme={themeMode} data-panel={activePanel || 'none'}>
+      <header className="mh-topbar mh-hub-topbar">
+        <button className="mh-menu-button" onClick={() => { setActivePanel(null); setDrawerOpen(true); }} aria-label="Open menu">☰</button>
         <div className="mh-brand">Monkey Hotspring</div>
-        <button className="mh-stat" onClick={() => { if (ready) document.querySelector('.mh-today-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>⭐ {Number(student.points || 0).toLocaleString()}{ready ? <small>+{ready} ready</small> : null}</button>
-        <div className="mh-stat">🔥 {Number(student.streak || 0)}</div>
-        <button className="mh-world" onClick={() => clickLegacyAction('World View')}>World View</button>
-        <button className="mh-profile" onClick={() => setDrawerOpen(true)} aria-label="Open profile">🐒</button>
+        <button className="mh-stat mh-star-stat" onClick={() => openPanel('rules')} aria-label="Open ways to earn Stars">⭐ {Number(student.points || 0).toLocaleString()}<small>Earn Stars</small></button>
+        <button className={`mh-stat mh-hub-nav${activePanel === 'today' ? ' is-active' : ''}`} onClick={() => openPanel('today')}>☀️ Today</button>
+        <button className={`mh-stat mh-hub-nav${activePanel === 'leaderboard' ? ' is-active' : ''}`} onClick={() => openPanel('leaderboard')}>🏆 <span>Leaderboard</span></button>
+        <div className="mh-stat mh-streak-stat">🔥 {Number(student.streak || 0)}</div>
+        <button className="mh-world" onClick={() => { setActivePanel(null); clickLegacyAction('World View'); }}>World View</button>
+        <button className="mh-profile" onClick={() => { setActivePanel(null); setDrawerOpen(true); }} aria-label="Open profile">🐒</button>
       </header>
 
-      <div className="mh-today-wrap">
-        <DailyPetIncome
-          pending={pending}
-          challengeBonus={challengeBonus}
-          collectedToday={collectedToday}
-          onCollect={collect}
-          onCollectBonus={collectBonus}
-          onPlayChallenge={() => clickLegacyAction('Daily Challenge')}
-          busy={busy}
-        />
-      </div>
+      {activePanel === 'today' && <TodayPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenRules={() => setActivePanel('rules')} />}
+      {activePanel === 'rules' && <StarRulesPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenVocabLog={() => setActivePanel('vocabLog')} />}
+      {activePanel === 'challenge' && <DailyChallengePanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
+      {activePanel === 'vocab' && <DailyVocabularyPanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenLog={() => setActivePanel('vocabLog')} />}
+      {activePanel === 'vocabLog' && <VocabularyLogPanel {...panelCommon} />}
+      {activePanel === 'reading' && <ReadingPanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
+      {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
 
-      <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} report={report} burstKey={burst.key} />
-      <ThoughtBubble active={!drawerOpen && !sittersOpen} />
+      {!activePanel && !drawerOpen && !sittersOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} report={report} burstKey={burst.key} />}
+      <ThoughtBubble active={!activePanel && !drawerOpen && !sittersOpen} />
 
       {burst.key > 0 && <div key={burst.key} className="mh-star-burst" aria-hidden="true"><span>★</span><span>★</span><span>★</span><b>+{burst.amount}</b></div>}
       {toast && <div className="mh-toast" role="status">{toast}</div>}
 
-      <StudentNavigationDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} student={student} onOpenSitters={() => { setDrawerOpen(false); setSittersOpen(true); }} onLegacyAction={clickLegacyAction} />
+      <StudentNavigationDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        student={student}
+        onOpenSitters={() => { setDrawerOpen(false); setActivePanel(null); setSittersOpen(true); }}
+        onOpenChallenge={() => { setDrawerOpen(false); setActivePanel('challenge'); }}
+        onOpenRules={() => { setDrawerOpen(false); setActivePanel('rules'); }}
+        onOpenVocab={() => { setDrawerOpen(false); setActivePanel('vocabLog'); }}
+        onLegacyAction={label => { setActivePanel(null); clickLegacyAction(label); }}
+      />
       {sittersOpen && <MonkeySitters student={student} onClose={() => setSittersOpen(false)} />}
     </div>
   );
