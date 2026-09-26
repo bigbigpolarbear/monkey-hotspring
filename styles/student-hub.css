@@ -15,3 +15,27 @@ html.mh-student-active [data-monkey-legacy-leaderboard="true"]{display:none!impo
 @media(max-width:768px){.mh-hub-topbar{overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.mh-hub-topbar::-webkit-scrollbar{display:none}.mh-hub-topbar .mh-brand{margin-right:2px}.mh-hub-topbar .mh-stat,.mh-hub-topbar .mh-world{flex:0 0 auto}.mh-hub-nav span{display:none}.mh-streak-stat{display:none}.mh-hub-backdrop{z-index:2250;background:rgba(41,31,23,.16);backdrop-filter:blur(2px)}.mh-hub-panel,.mh-hub-panel-wide,.mh-hub-panel-modal{left:6px;right:6px;top:auto;bottom:6px;transform:none;width:auto;max-height:calc(100vh - 72px);border-radius:20px;padding:14px;animation:mhSheetIn .2s ease-out}.mh-hub-panel-modal{z-index:auto}.mh-vocab-grid{grid-template-columns:1fr}.mh-reading-layout{grid-template-columns:1fr}.mh-reading-history{border-top:1px dashed var(--mh-line);padding-top:12px}.mh-filter-bar{grid-template-columns:1fr}.mh-rules-tools{align-items:flex-start;flex-direction:column}.mh-rules-tools span{text-align:left;max-width:none}.mh-action-row{grid-template-columns:34px minmax(0,1fr) auto}.mh-action-row .mh-secondary{grid-column:2/4}.mh-word-card h3{font-size:27px}@keyframes mhSheetIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}}
 @media(max-width:430px){.mh-hub-topbar .mh-star-stat small{display:none}.mh-hub-topbar .mh-world{display:none}.mh-hub-panel-head h2{font-size:20px}.mh-question{font-size:18px}.mh-reading-pages{grid-template-columns:1fr 1fr}.mh-rules-progress{align-items:flex-start;flex-direction:column}.mh-book-group>div{flex-direction:column;gap:1px}}
 @media(prefers-reduced-motion:reduce){.mh-hub-panel,.mh-hub-panel-modal,.mh-answer,.mh-challenge-progress span{animation:none!important;transition:none!important}}
+
+
+/* Daily Toilet Fact — shown once per student per local day. */
+.mh-toilet-backdrop{z-index:2450;background:rgba(41,31,23,.34);backdrop-filter:blur(4px)}
+.mh-toilet-panel{width:min(540px,calc(100vw - 28px));overflow:auto}
+.mh-toilet-head{align-items:center}
+.mh-toilet-reward{flex:0 0 auto;border:1px solid rgba(231,173,53,.28);border-radius:999px;background:#fff3ce;color:#765c20;padding:7px 10px;font:800 13px 'Patrick Hand',cursive;white-space:nowrap}
+.mh-toilet-fact{display:grid;gap:13px}
+.mh-toilet-category{justify-self:start;border-radius:999px;background:rgba(95,159,104,.11);color:var(--mh-green);padding:5px 9px;font-size:11px;font-weight:800}
+.mh-toilet-fact>p{margin:0;border:1px solid var(--mh-line);border-radius:18px;background:rgba(255,255,255,.62);padding:17px;font-size:18px;line-height:1.5}
+.mh-toilet-read-note,.mh-toilet-mini{color:var(--mh-muted);font-size:12px;line-height:1.35}
+.mh-toilet-continue{justify-self:end}
+.mh-toilet-question{display:grid;gap:11px}
+.mh-toilet-mini{text-align:center;background:rgba(231,173,53,.09);border-radius:11px;padding:7px 9px}
+.mh-answer.is-selected{border-color:var(--mh-gold);background:rgba(231,173,53,.12)}
+.mh-toilet-result{text-align:center;display:grid;gap:10px}
+.mh-toilet-result-icon{font-size:46px;line-height:1;margin-top:4px}
+.mh-toilet-result h3{margin:0;font-size:24px}
+.mh-toilet-result>p{margin:0;color:var(--mh-muted);font-size:14px;line-height:1.45}
+.mh-toilet-result>.mh-primary{justify-self:center;min-width:100px}
+#mh-student-layer[data-theme="dark"] .mh-toilet-fact>p{background:#20212c;color:var(--mh-ink)}
+#mh-student-layer[data-theme="dark"] .mh-toilet-reward{background:#3a3324;color:#f1d78c}
+@media(max-width:768px){.mh-toilet-panel{left:6px;right:6px;bottom:6px;width:auto}.mh-toilet-fact>p{font-size:17px}.mh-toilet-continue{justify-self:stretch}}
+@media(prefers-reduced-motion:reduce){.mh-toilet-panel{animation:none!important}}
