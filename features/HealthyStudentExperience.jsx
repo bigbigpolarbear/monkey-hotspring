@@ -4,7 +4,7 @@ import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import DailyToiletFact from '../components/DailyToiletFact.jsx';
 import MonaBirthdayGift from '../components/MonaBirthdayGift.jsx';
 import AnonymousMonkeyChooser from '../components/AnonymousMonkeyChooser.jsx';
-import { ChallengeWordlePanel, DailyWordlePanel } from '../components/DailyWordles.jsx';
+import { ChallengeWordlePanel, DailyWordlePanel, ToughestWordlePanel } from '../components/DailyWordles.jsx';
 import {
   DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
   StarRulesPanel, TodayPanel, VocabularyLogPanel,
@@ -214,7 +214,7 @@ export default function HealthyStudentExperience() {
       {activePanel === 'reading' && <ReadingPanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
       {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
       {activePanel === 'wordle' && <DailyWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenChallenge={() => setActivePanel('challengeWordle')} />}
-      {activePanel === 'challengeWordle' && <ChallengeWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenStandard={() => setActivePanel('wordle')} />}
+      {activePanel === 'challengeWordle' && <ChallengeWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenStandard={() => setActivePanel('wordle')} onOpenToughest={() => setActivePanel('toughestWordle')} />}
       {activePanel === 'identity' && <AnonymousMonkeyChooser
         student={student}
         notify={notify}
@@ -224,6 +224,7 @@ export default function HealthyStudentExperience() {
         }}
       />}
       {activePanel === 'monaBirthday' && <MonaBirthdayGift student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(student.dailyLearning?.toiletFactDate !== localDayKey() ? 'toiletFact' : null)} />}
+      {activePanel === 'toughestWordle' && <ToughestWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenChallenge={() => setActivePanel('challengeWordle')} />}
       {activePanel === 'toiletFact' && <DailyToiletFact student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(null)} />}
 
       {!activePanel && !drawerOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} burstKey={burst.key} />}
@@ -239,6 +240,7 @@ export default function HealthyStudentExperience() {
         onOpenChallenge={() => { setDrawerOpen(false); setActivePanel('challenge'); }}
         onOpenWordle={() => { setDrawerOpen(false); setActivePanel('wordle'); }}
         onOpenChallengeWordle={() => { setDrawerOpen(false); setActivePanel('challengeWordle'); }}
+        onOpenToughestWordle={() => { setDrawerOpen(false); setActivePanel('toughestWordle'); }}
         onOpenRules={() => { setDrawerOpen(false); setActivePanel('rules'); }}
         onOpenVocab={() => { setDrawerOpen(false); setActivePanel('vocabLog'); }}
         onLegacyAction={label => { setActivePanel(null); clickLegacyAction(label); }}
