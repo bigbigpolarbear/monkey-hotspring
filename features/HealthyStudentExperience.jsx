@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StudentNavigationDrawer from '../components/StudentNavigationDrawer.jsx';
 import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
-import MonkeySitters from '../components/MonkeySitters.jsx';
+import DailyToiletFact from '../components/DailyToiletFact.jsx';
 import {
   DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
   StarRulesPanel, TodayPanel, VocabularyLogPanel,
@@ -65,7 +65,6 @@ export default function HealthyStudentExperience() {
   const [studentId, setStudentId] = useState(null);
   const [student, setStudent] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sittersOpen, setSittersOpen] = useState(false);
   const [activePanel, setActivePanel] = useState(null);
   const [leaderboardStudents, setLeaderboardStudents] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -107,7 +106,6 @@ export default function HealthyStudentExperience() {
 
   useEffect(() => {
     setDrawerOpen(false);
-    setSittersOpen(false);
     setActivePanel(null);
     setStudent(null);
     if (!studentId) return;
@@ -132,6 +130,14 @@ export default function HealthyStudentExperience() {
 
   const pending = useMemo(() => student ? buildPendingPassiveIncome(student, localDayKey()) : null, [student]);
   const collectedToday = student?.dailyEconomy?.lastPassiveCollectionDate === localDayKey();
+
+  useEffect(() => {
+    if (!studentId || !student) return;
+    const today = localDayKey();
+    if (student.dailyLearning?.toiletFactDate !== today) {
+      setActivePanel(current => current || 'toiletFact');
+    }
+  }, [studentId, student?.dailyLearning?.toiletFactDate]);
 
   const notify = useCallback(message => {
     setToast(message);
@@ -158,13 +164,11 @@ export default function HealthyStudentExperience() {
 
   const openPanel = useCallback(name => {
     setDrawerOpen(false);
-    setSittersOpen(false);
     setActivePanel(current => current === name ? null : name);
   }, []);
 
   if (!studentId || !student) return null;
   const ready = collectedToday ? 0 : (pending?.total || 0);
-  const report = student.latestSittingReport || null;
   const panelCommon = { student, onClose: () => setActivePanel(null) };
 
   return (
@@ -187,9 +191,10 @@ export default function HealthyStudentExperience() {
       {activePanel === 'vocabLog' && <VocabularyLogPanel {...panelCommon} />}
       {activePanel === 'reading' && <ReadingPanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
       {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
+      {activePanel === 'toiletFact' && <DailyToiletFact student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(null)} />}
 
-      {!activePanel && !drawerOpen && !sittersOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} report={report} burstKey={burst.key} />}
-      <ThoughtBubble active={!activePanel && !drawerOpen && !sittersOpen} />
+      {!activePanel && !drawerOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} burstKey={burst.key} />}
+      <ThoughtBubble active={!activePanel && !drawerOpen} />
 
       {burst.key > 0 && <div key={burst.key} className="mh-star-burst" aria-hidden="true"><span>★</span><span>★</span><span>★</span><b>+{burst.amount}</b></div>}
       {toast && <div className="mh-toast" role="status">{toast}</div>}
@@ -198,13 +203,11 @@ export default function HealthyStudentExperience() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         student={student}
-        onOpenSitters={() => { setDrawerOpen(false); setActivePanel(null); setSittersOpen(true); }}
         onOpenChallenge={() => { setDrawerOpen(false); setActivePanel('challenge'); }}
         onOpenRules={() => { setDrawerOpen(false); setActivePanel('rules'); }}
         onOpenVocab={() => { setDrawerOpen(false); setActivePanel('vocabLog'); }}
         onLegacyAction={label => { setActivePanel(null); clickLegacyAction(label); }}
       />
-      {sittersOpen && <MonkeySitters student={student} onClose={() => setSittersOpen(false)} />}
     </div>
   );
 }
