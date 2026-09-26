@@ -137,7 +137,7 @@ export default function HealthyStudentExperience() {
     if (student.dailyLearning?.toiletFactDate !== today) {
       setActivePanel(current => current || 'toiletFact');
     }
-  }, [studentId, student?.dailyLearning?.toiletFactDate]);
+  }, [studentId, student?.id, student?.dailyLearning?.toiletFactDate]);
 
   const notify = useCallback(message => {
     setToast(message);
