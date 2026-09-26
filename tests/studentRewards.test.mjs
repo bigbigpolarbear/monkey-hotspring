@@ -93,6 +93,6 @@ test('challenge Wordle has three valid five-letter subject banks and is worth th
 });
 
 test('Wordle letter states handle duplicate letters correctly', () => {
-  assert.deepEqual(letterStates('SHEEP', 'PEARL'), ['absent','absent','present','present','absent']);
-  assert.deepEqual(letterStates('APPLE', 'AMPLE'), ['correct','present','absent','correct','correct']);
+  assert.deepEqual(letterStates('SHEEP', 'PEARL'), ['absent','absent','present','absent','present']);
+  assert.deepEqual(letterStates('APPLE', 'AMPLE'), ['correct','absent','correct','correct','correct']);
 });
