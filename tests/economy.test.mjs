@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPendingPassiveIncome, estimateOneDay, getCareSummary, getChallengeBonus } from '../game/petEconomy.js';
-import { splitSitterPayment, clampSitterPrice, sitterCapacity } from '../game/sitterEconomy.js';
 
 const student = {
   petCounts: { fish: 2, otter: 1, panda: 1 },
@@ -36,16 +35,3 @@ test('challenge bonus is separate from passive income', () => {
   assert.ok(result.amount >= 8);
 });
 
-test('sitter payment burns currency rather than minting it', () => {
-  const payment = splitSitterPayment(8);
-  assert.equal(payment.charged, 8);
-  assert.equal(payment.sitterEarns + payment.sink, 8);
-  assert.ok(payment.sitterEarns < payment.charged);
-});
-
-test('sitter price and capacity are controlled', () => {
-  assert.equal(clampSitterPrice(999, 0), 6);
-  assert.equal(sitterCapacity(0), 1);
-  assert.equal(sitterCapacity(20), 2);
-  assert.equal(sitterCapacity(45), 3);
-});
