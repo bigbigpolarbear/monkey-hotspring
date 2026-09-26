@@ -4,6 +4,7 @@ import { buildDailyChallenge, getDailyVocab, masteryLabel } from '../game/dailyC
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward } from '../game/rewardConfig.js';
 import { getDailyToiletFact, TOILET_FACTS } from '../game/toiletFacts.js';
 import { getChallengeWordle, getStandardWordle, letterStates, STANDARD_WORDS, WORDLE_THEMES } from '../game/wordleContent.js';
+import { hasClaimedMonaBirthday, isMonaStudent, MONA_BIRTHDAY } from '../game/birthdaySurprise.js';
 
 test('daily challenge always returns four valid questions', () => {
   const questions = buildDailyChallenge('2026-09-07', { id: 'student-1', vocabulary: [] });
@@ -95,4 +96,20 @@ test('challenge Wordle has three valid five-letter subject banks and is worth th
 test('Wordle letter states handle duplicate letters correctly', () => {
   assert.deepEqual(letterStates('SHEEP', 'PEARL'), ['absent','absent','present','absent','present']);
   assert.deepEqual(letterStates('APPLE', 'AMPLE'), ['correct','absent','correct','correct','correct']);
+});
+
+
+test('Mona birthday surprise targets Mona only and is worth 100 points', () => {
+  assert.equal(isMonaStudent({ name:'Mona', username:'student7' }), true);
+  assert.equal(isMonaStudent({ name:'Mona Smith', username:'student7' }), true);
+  assert.equal(isMonaStudent({ name:'Latte', username:'mona' }), true);
+  assert.equal(isMonaStudent({ name:'Monica', username:'student7' }), false);
+  assert.equal(isMonaStudent({ name:'Monae', username:'student7' }), false);
+  assert.equal(REWARD_CONFIG.monaBirthday, 100);
+  assert.equal(MONA_BIRTHDAY.tapsToOpen, 8);
+});
+
+test('Mona birthday gift claimed state is persistent', () => {
+  assert.equal(hasClaimedMonaBirthday({}), false);
+  assert.equal(hasClaimedMonaBirthday({ specialRewards:{ monaBirthday2026Claimed:true } }), true);
 });
