@@ -307,11 +307,11 @@ export async function submitWordleGuess(studentId, rawGuess, {
 
     let effectiveTheme = null;
     if (mode === 'challenge') {
-      effectiveTheme = sameDay && saved.theme ? saved.theme : theme;
-      if (!WORDLE_THEMES[effectiveTheme]) throw new Error('Choose Science, Humanities or Maths first.');
-      if (sameDay && saved.theme && saved.theme !== effectiveTheme) {
+      if (sameDay && saved.theme && theme && saved.theme !== theme) {
         throw new Error(`You already chose ${WORDLE_THEMES[saved.theme].label} for today’s Challenge Wordle.`);
       }
+      effectiveTheme = sameDay && saved.theme ? saved.theme : theme;
+      if (!WORDLE_THEMES[effectiveTheme]) throw new Error('Choose Science, Humanities or Maths first.');
     }
 
     const answer = mode === 'standard'
