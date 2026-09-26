@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDailyChallenge, getDailyVocab, masteryLabel } from '../game/dailyContent.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward } from '../game/rewardConfig.js';
+import { getDailyToiletFact, TOILET_FACTS } from '../game/toiletFacts.js';
 
 test('daily challenge always returns four valid questions', () => {
   const questions = buildDailyChallenge('2026-09-07', { id: 'student-1', vocabulary: [] });
@@ -49,4 +50,20 @@ test('reading dedupe id is stable for identical sessions', () => {
 
 test('mastery labels stay child-friendly', () => {
   assert.deepEqual([0,1,2,3].map(masteryLabel), ['New','Learning','Familiar','Mastered']);
+});
+
+
+test('daily toilet fact is deterministic and always quiz-ready', () => {
+  const a = getDailyToiletFact('2026-09-26');
+  const b = getDailyToiletFact('2026-09-26');
+  assert.deepEqual(a, b);
+  assert.ok(TOILET_FACTS.length >= 28);
+  assert.ok(a.fact);
+  assert.ok(a.question);
+  assert.equal(a.options.length, 4);
+  assert.ok(a.correctIndex >= 0 && a.correctIndex < a.options.length);
+});
+
+test('toilet fact reward is exactly one Star', () => {
+  assert.equal(REWARD_CONFIG.toiletFact, 1);
 });

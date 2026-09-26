@@ -1,6 +1,7 @@
 export const REWARD_CONFIG = Object.freeze({
   dailyChallenge: 8,
   dailyVocab: 3,
+  toiletFact: 1,
   preIGCSE: 10,
   reading: Object.freeze({
     minPages: 5,

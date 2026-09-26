@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 
 export default function StudentNavigationDrawer({
-  open, onClose, student, onOpenSitters, onOpenChallenge, onOpenRules, onOpenVocab, onLegacyAction,
+  open, onClose, student, onOpenChallenge, onOpenRules, onOpenVocab, onLegacyAction,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -31,7 +31,6 @@ export default function StudentNavigationDrawer({
           <button onClick={onOpenVocab}>🧠 My Vocabulary</button>
           <button onClick={() => action('Missions')}>🎯 Missions</button>
           <button onClick={() => action('Food')}>🍙 Food & feeding</button>
-          <button onClick={onOpenSitters}>🐒 Monkey Sitters — Coming Soon</button>
           <button onClick={() => action('World View')}>♨️ Hot Spring / Classroom</button>
         </nav>
         <section className="mh-drawer-section">

@@ -2,6 +2,7 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward, normalizeBookTitle } from '../game/rewardConfig.js';
+import { getDailyToiletFact } from '../game/toiletFacts.js';
 
 function safeLedgerId(value) {
   return String(value).replaceAll('/', '_').slice(0, 480);
@@ -197,5 +198,67 @@ export async function claimVerifiedPreIGCSEReading(studentId, resourceId, { date
     activityId: `${dateKey}:${String(resourceId || 'resource')}`,
     amount: REWARD_CONFIG.preIGCSE,
     metadata: { resourceId: String(resourceId || ''), verified: true },
+  });
+}
+
+
+export async function answerDailyToiletFact(studentId, answerIndex, { dateKey = localDayKey() } = {}) {
+  if (!studentId) throw new Error('Missing student id');
+  const fact = getDailyToiletFact(dateKey);
+  const chosen = Math.floor(Number(answerIndex));
+  if (!Number.isInteger(chosen) || chosen < 0 || chosen >= fact.options.length) {
+    throw new Error('Choose one answer first.');
+  }
+  const correct = chosen === fact.correctIndex;
+
+  return runTransaction(db, async tx => {
+    const studentRef = doc(db, 'students', studentId);
+    const ledgerRef = rewardLedgerRef('daily-toilet-fact', studentId, dateKey);
+    const studentSnap = await tx.get(studentRef);
+    const ledgerSnap = await tx.get(ledgerRef);
+    if (!studentSnap.exists()) throw new Error('Student account not found');
+
+    const student = { id: studentSnap.id, ...studentSnap.data() };
+    if (student.dailyLearning?.toiletFactDate === dateKey) {
+      return {
+        amount: 0,
+        duplicate: true,
+        alreadyAnswered: true,
+        correct: student.dailyLearning?.toiletFactCorrect === true,
+        fact,
+      };
+    }
+
+    const answeredAt = new Date().toISOString();
+    const learningPatch = {
+      'dailyLearning.toiletFactDate': dateKey,
+      'dailyLearning.toiletFactId': fact.id,
+      'dailyLearning.toiletFactCorrect': correct,
+      'dailyLearning.toiletFactAnswerIndex': chosen,
+      'dailyLearning.toiletFactAnsweredAt': answeredAt,
+    };
+
+    if (!correct) {
+      tx.update(studentRef, learningPatch);
+      return { amount: 0, duplicate: false, alreadyAnswered: false, correct: false, fact };
+    }
+
+    if (ledgerSnap.exists()) {
+      tx.update(studentRef, { ...learningPatch, 'dailyLearning.toiletFactCorrect': true });
+      return { amount: 0, duplicate: true, alreadyAnswered: true, correct: true, fact };
+    }
+
+    const amount = REWARD_CONFIG.toiletFact;
+    const currentPoints = Math.max(0, Number(student.points) || 0);
+    tx.update(studentRef, { points: currentPoints + amount, ...learningPatch });
+    tx.set(ledgerRef, {
+      studentId,
+      rewardType: 'daily-toilet-fact',
+      activityId: dateKey,
+      amount,
+      metadata: { factId: fact.id, answerIndex: chosen },
+      createdAt: serverTimestamp(),
+    });
+    return { amount, duplicate: false, alreadyAnswered: false, correct: true, fact, newBalance: currentPoints + amount };
   });
 }
