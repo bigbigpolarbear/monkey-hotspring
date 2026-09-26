@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { getAnonymousDisplayEmoji, getAnonymousDisplayName } from '../game/anonymousIdentity.js';
 
 export default function StudentNavigationDrawer({
   open, onClose, student, onOpenChallenge, onOpenWordle, onOpenChallengeWordle, onOpenRules, onOpenVocab, onLegacyAction,
@@ -20,7 +21,7 @@ export default function StudentNavigationDrawer({
         <div className="mh-drawer-head">
           <div>
             <div className="mh-kicker">Monkey Hotspring</div>
-            <h2>{student?.name || 'Your Hot Spring'}</h2>
+            <h2>{getAnonymousDisplayEmoji(student)} {getAnonymousDisplayName(student)}</h2>
             <div className="mh-muted">⭐ {Number(student?.points || 0).toLocaleString()} · 🔥 {streak} day streak</div>
           </div>
           <button className="mh-icon-button" onClick={onClose} aria-label="Close menu">✕</button>

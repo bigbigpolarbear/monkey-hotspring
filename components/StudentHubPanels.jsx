@@ -3,6 +3,7 @@ import { buildDailyChallenge, getDailyVocab, masteryLabel, VOCABULARY } from '..
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, calculateReadingReward } from '../game/rewardConfig.js';
 import { completeDailyChallenge, completeDailyVocab, logReadingAndReward, recordVocabReview } from '../services/rewardService.js';
+import { getAnonymousDisplayName } from '../game/anonymousIdentity.js';
 
 function todayFlags(student = {}) {
   const today = localDayKey();
@@ -260,7 +261,7 @@ export function LeaderboardPanel({ students, student, loading, onClose }) {
   const sorted = useMemo(() => [...(students || [])].sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)).slice(0, 20), [students]);
   return (
     <PanelFrame title="🏆 Leaderboard" kicker="Your troop" onClose={onClose}>
-      {loading ? <div className="mh-empty">Loading the troop…</div> : <div className="mh-leaderboard-list">{sorted.length ? sorted.map((entry, index) => <div className={`mh-leader-row${entry.id === student.id ? ' is-me' : ''}`} key={entry.id}><span>{index < 3 ? ['🥇','🥈','🥉'][index] : `#${index + 1}`}</span><strong>{entry.name || entry.username || 'Student'}</strong><b>⭐ {Number(entry.points || 0).toLocaleString()}</b></div>) : <div className="mh-empty">No classmates to show yet.</div>}</div>}
+      {loading ? <div className="mh-empty">Loading the troop…</div> : <div className="mh-leaderboard-list">{sorted.length ? sorted.map((entry, index) => <div className={`mh-leader-row${entry.id === student.id ? ' is-me' : ''}`} key={entry.id}><span>{index < 3 ? ['🥇','🥈','🥉'][index] : `#${index + 1}`}</span><strong>{getAnonymousDisplayName(entry)}</strong><b>⭐ {Number(entry.points || 0).toLocaleString()}</b></div>) : <div className="mh-empty">No classmates to show yet.</div>}</div>}
     </PanelFrame>
   );
 }
