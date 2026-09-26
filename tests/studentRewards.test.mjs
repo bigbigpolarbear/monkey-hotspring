@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildDailyChallenge, getDailyVocab, masteryLabel } from '../game/dailyContent.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward } from '../game/rewardConfig.js';
 import { getDailyToiletFact, TOILET_FACTS } from '../game/toiletFacts.js';
-import { getChallengeWordle, getStandardWordle, letterStates, STANDARD_WORDS, WORDLE_THEMES } from '../game/wordleContent.js';
+import { getChallengeWordle, getStandardWordle, getToughestWordle, letterStates, STANDARD_WORDS, TOUGHEST_WORDS, validateWordleGuess, WORDLE_THEMES } from '../game/wordleContent.js';
 import { hasClaimedMonaBirthday, isMonaStudent, MONA_BIRTHDAY } from '../game/birthdaySurprise.js';
 import { getAnonymousDisplayName, hasAnonymousMonkeyIdentity, MONKEY_IDENTITIES, normalizeMonkeyIdentity } from '../game/anonymousIdentity.js';
 
@@ -129,4 +129,38 @@ test('anonymous identity choices come only from the fixed monkey catalog', () =>
   assert.equal(normalizeMonkeyIdentity('gorilla')?.name, 'Gorilla');
   assert.equal(normalizeMonkeyIdentity('Pearie'), null);
   assert.equal(normalizeMonkeyIdentity('Mona'), null);
+});
+
+
+test('all configured Wordle answers are accepted by the dictionary', () => {
+  for (const word of STANDARD_WORDS) assert.equal(validateWordleGuess(word, 5), true, word);
+  for (const data of Object.values(WORDLE_THEMES)) {
+    for (const word of data.words) assert.equal(validateWordleGuess(word, 5), true, word);
+  }
+  for (const word of TOUGHEST_WORDS) assert.equal(validateWordleGuess(word, 10), true, word);
+});
+
+test('random letter spam is rejected without becoming a valid guess', () => {
+  assert.equal(validateWordleGuess('QWERT', 5), false);
+  assert.equal(validateWordleGuess('ZXCVB', 5), false);
+  assert.equal(validateWordleGuess('QWERTYUIOP', 10), false);
+  assert.equal(validateWordleGuess('ZXCVBNMASD', 10), false);
+  assert.equal(validateWordleGuess('APPLE', 5), true);
+  assert.equal(validateWordleGuess('SCIENTIFIC', 10), true);
+});
+
+test('toughest Wordle is deterministic, ten letters, and worth seven Stars', () => {
+  const word = getToughestWordle('2026-09-27');
+  assert.equal(word, getToughestWordle('2026-09-27'));
+  assert.equal(word.length, 10);
+  assert.match(word, /^[A-Z]{10}$/);
+  assert.equal(REWARD_CONFIG.toughestWordle, 7);
+  assert.ok(TOUGHEST_WORDS.length >= 25);
+  assert.ok(TOUGHEST_WORDS.every(item => /^[a-z]{10}$/.test(item)));
+});
+
+test('letter scoring works for ten-letter words too', () => {
+  const result = letterStates('SCIENTIFIC', 'SCIENTIFIC');
+  assert.equal(result.length, 10);
+  assert.ok(result.every(state => state === 'correct'));
 });
