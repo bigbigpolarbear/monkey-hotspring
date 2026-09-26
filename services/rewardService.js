@@ -1,16 +1,54 @@
-import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward, normalizeBookTitle } from '../game/rewardConfig.js';
 import { getDailyToiletFact } from '../game/toiletFacts.js';
 import { getChallengeWordle, getStandardWordle, WORDLE_THEMES } from '../game/wordleContent.js';
 
-function safeLedgerId(value) {
-  return String(value).replaceAll('/', '_').slice(0, 480);
+function safeClaimPart(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 160) || 'reward';
 }
 
-export function rewardLedgerRef(rewardType, studentId, activityId) {
-  return doc(db, 'starTransactions', safeLedgerId(`${rewardType}:${studentId}:${activityId}`));
+export function rewardClaimKey(rewardType, activityId) {
+  return `${safeClaimPart(rewardType)}__${safeClaimPart(activityId)}`;
+}
+
+export function compactRewardClaims(raw = {}, maxClaims = 240) {
+  const entries = Object.entries(raw && typeof raw === 'object' ? raw : {});
+  if (entries.length <= maxClaims) return Object.fromEntries(entries);
+  entries.sort((a, b) => String(a[1]?.createdAt || '').localeCompare(String(b[1]?.createdAt || '')));
+  return Object.fromEntries(entries.slice(-maxClaims));
+}
+
+function rewardClaimsFor(student = {}) {
+  return student.rewardClaims && typeof student.rewardClaims === 'object'
+    ? { ...student.rewardClaims }
+    : {};
+}
+
+function claimRewardOnStudent(student, { rewardType, activityId, amount, metadata = {} }) {
+  const claims = rewardClaimsFor(student);
+  const key = rewardClaimKey(rewardType, activityId);
+  if (claims[key]) {
+    return {
+      duplicate: true,
+      previousAmount: Math.max(0, Number(claims[key].amount) || Number(amount) || 0),
+      claims,
+      key,
+    };
+  }
+  claims[key] = {
+    rewardType,
+    activityId: String(activityId),
+    amount: Math.max(0, Math.floor(Number(amount) || 0)),
+    metadata,
+    createdAt: new Date().toISOString(),
+  };
+  return { duplicate: false, claims: compactRewardClaims(claims), key };
 }
 
 async function awardReward({ studentId, rewardType, activityId, amount, patchBuilder, metadata = {} }) {
@@ -20,26 +58,26 @@ async function awardReward({ studentId, rewardType, activityId, amount, patchBui
 
   return runTransaction(db, async tx => {
     const studentRef = doc(db, 'students', studentId);
-    const ledgerRef = rewardLedgerRef(rewardType, studentId, activityId);
     const studentSnap = await tx.get(studentRef);
-    const ledgerSnap = await tx.get(ledgerRef);
     if (!studentSnap.exists()) throw new Error('Student account not found');
-    if (ledgerSnap.exists()) {
-      const existing = ledgerSnap.data();
-      return { amount: 0, duplicate: true, previousAmount: Number(existing.amount) || fixedAmount };
-    }
 
     const student = { id: studentSnap.id, ...studentSnap.data() };
-    const patch = patchBuilder ? patchBuilder(student) : {};
-    const currentPoints = Math.max(0, Number(student.points) || 0);
-    tx.update(studentRef, { points: currentPoints + fixedAmount, ...patch });
-    tx.set(ledgerRef, {
-      studentId,
+    const claim = claimRewardOnStudent(student, {
       rewardType,
       activityId,
       amount: fixedAmount,
       metadata,
-      createdAt: serverTimestamp(),
+    });
+    if (claim.duplicate) {
+      return { amount: 0, duplicate: true, previousAmount: claim.previousAmount };
+    }
+
+    const patch = patchBuilder ? patchBuilder(student) : {};
+    const currentPoints = Math.max(0, Number(student.points) || 0);
+    tx.update(studentRef, {
+      points: currentPoints + fixedAmount,
+      rewardClaims: claim.claims,
+      ...patch,
     });
     return { amount: fixedAmount, duplicate: false, newBalance: currentPoints + fixedAmount };
   });
@@ -145,13 +183,17 @@ export async function logReadingAndReward(studentId, input, { dateKey = localDay
 
   return runTransaction(db, async tx => {
     const studentRef = doc(db, 'students', studentId);
-    const ledgerRef = doc(db, 'starTransactions', safeLedgerId(activityId));
     const studentSnap = await tx.get(studentRef);
-    const ledgerSnap = await tx.get(ledgerRef);
     if (!studentSnap.exists()) throw new Error('Student account not found');
-    if (ledgerSnap.exists()) return { amount: 0, duplicate: true, reason: 'That reading session is already logged.' };
 
     const student = { id: studentSnap.id, ...studentSnap.data() };
+    const claim = claimRewardOnStudent(student, {
+      rewardType: 'reading',
+      activityId,
+      amount: 1,
+      metadata: { bookTitle: title, startPage, endPage },
+    });
+    if (claim.duplicate) return { amount: 0, duplicate: true, reason: 'That reading session is already logged.' };
     const readingLog = Array.isArray(student.readingLog) ? [...student.readingLog] : [];
     const normalized = title.toLowerCase();
     const overlaps = readingLog.some(entry => {
@@ -166,7 +208,7 @@ export async function logReadingAndReward(studentId, input, { dateKey = localDay
     if (!reward.valid) throw new Error(reward.reason);
 
     const session = {
-      id: safeLedgerId(activityId),
+      id: rewardClaimKey('reading', activityId),
       date: dateKey,
       bookTitle: title,
       normalizedTitle: normalized,
@@ -178,14 +220,19 @@ export async function logReadingAndReward(studentId, input, { dateKey = localDay
       createdAt: new Date().toISOString(),
     };
     const currentPoints = Math.max(0, Number(student.points) || 0);
-    tx.update(studentRef, { points: currentPoints + reward.stars, readingLog: [session, ...readingLog].slice(0, 300) });
-    tx.set(ledgerRef, {
-      studentId,
+    const claims = rewardClaimsFor(student);
+    const claimKey = rewardClaimKey('reading', activityId);
+    claims[claimKey] = {
       rewardType: 'reading',
       activityId,
       amount: reward.stars,
       metadata: { bookTitle: title, startPage, endPage, pages: reward.pages },
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
+    };
+    tx.update(studentRef, {
+      points: currentPoints + reward.stars,
+      readingLog: [session, ...readingLog].slice(0, 300),
+      rewardClaims: compactRewardClaims(claims),
     });
     return { amount: reward.stars, duplicate: false, session, newBalance: currentPoints + reward.stars };
   });
@@ -214,9 +261,7 @@ export async function answerDailyToiletFact(studentId, answerIndex, { dateKey = 
 
   return runTransaction(db, async tx => {
     const studentRef = doc(db, 'students', studentId);
-    const ledgerRef = rewardLedgerRef('daily-toilet-fact', studentId, dateKey);
     const studentSnap = await tx.get(studentRef);
-    const ledgerSnap = await tx.get(ledgerRef);
     if (!studentSnap.exists()) throw new Error('Student account not found');
 
     const student = { id: studentSnap.id, ...studentSnap.data() };
@@ -244,21 +289,23 @@ export async function answerDailyToiletFact(studentId, answerIndex, { dateKey = 
       return { amount: 0, duplicate: false, alreadyAnswered: false, correct: false, fact };
     }
 
-    if (ledgerSnap.exists()) {
-      tx.update(studentRef, { ...learningPatch, 'dailyLearning.toiletFactCorrect': true });
-      return { amount: 0, duplicate: true, alreadyAnswered: true, correct: true, fact };
-    }
-
     const amount = REWARD_CONFIG.toiletFact;
-    const currentPoints = Math.max(0, Number(student.points) || 0);
-    tx.update(studentRef, { points: currentPoints + amount, ...learningPatch });
-    tx.set(ledgerRef, {
-      studentId,
+    const claim = claimRewardOnStudent(student, {
       rewardType: 'daily-toilet-fact',
       activityId: dateKey,
       amount,
       metadata: { factId: fact.id, answerIndex: chosen },
-      createdAt: serverTimestamp(),
+    });
+    if (claim.duplicate) {
+      tx.update(studentRef, { ...learningPatch, 'dailyLearning.toiletFactCorrect': true });
+      return { amount: 0, duplicate: true, alreadyAnswered: true, correct: true, fact };
+    }
+
+    const currentPoints = Math.max(0, Number(student.points) || 0);
+    tx.update(studentRef, {
+      points: currentPoints + amount,
+      rewardClaims: claim.claims,
+      ...learningPatch,
     });
     return { amount, duplicate: false, alreadyAnswered: false, correct: true, fact, newBalance: currentPoints + amount };
   });
@@ -283,9 +330,7 @@ export async function submitWordleGuess(studentId, rawGuess, {
   return runTransaction(db, async tx => {
     const studentRef = doc(db, 'students', studentId);
     const rewardType = mode === 'standard' ? 'daily-wordle' : 'challenge-wordle';
-    const ledgerRef = rewardLedgerRef(rewardType, studentId, dateKey);
     const studentSnap = await tx.get(studentRef);
-    const ledgerSnap = await tx.get(ledgerRef);
     if (!studentSnap.exists()) throw new Error('Student account not found');
 
     const student = { id: studentSnap.id, ...studentSnap.data() };
@@ -342,20 +387,22 @@ export async function submitWordleGuess(studentId, rawGuess, {
     }
 
     const configuredAmount = mode === 'standard' ? REWARD_CONFIG.dailyWordle : REWARD_CONFIG.challengeWordle;
-    if (ledgerSnap.exists()) {
+    const claim = claimRewardOnStudent(student, {
+      rewardType,
+      activityId: dateKey,
+      amount: configuredAmount,
+      metadata: { answer, guesses: guesses.length, ...(effectiveTheme ? { theme: effectiveTheme } : {}) },
+    });
+    if (claim.duplicate) {
       tx.update(studentRef, progressPatch);
       return { amount: 0, duplicate: true, progress, answer };
     }
 
     const currentPoints = Math.max(0, Number(student.points) || 0);
-    tx.update(studentRef, { points: currentPoints + configuredAmount, ...progressPatch });
-    tx.set(ledgerRef, {
-      studentId,
-      rewardType,
-      activityId: dateKey,
-      amount: configuredAmount,
-      metadata: { answer, guesses: guesses.length, ...(effectiveTheme ? { theme: effectiveTheme } : {}) },
-      createdAt: serverTimestamp(),
+    tx.update(studentRef, {
+      points: currentPoints + configuredAmount,
+      rewardClaims: claim.claims,
+      ...progressPatch,
     });
     return {
       amount: configuredAmount,
