@@ -9,6 +9,7 @@ import {
   advanceLiveGameQuestion, endLiveGame, submitLiveAnswer, deleteLiveGame,
   sendMessage, getMessagesForTeacher, markMessageRead, deleteMessage
 } from "./firebase";
+import { getAnonymousDisplayName } from "../game/anonymousIdentity.js";
 
 /* ─── Hover context: tells penguins to pause when any monkey is hovered ─── */
 const HoverContext = createContext({ anyHovering: false, setAnyHovering: () => {} });
@@ -18548,7 +18549,7 @@ function SnowMonkeyTrackerInner() {
               border: `1.5px solid ${C.gold}30`,
               whiteSpace: "nowrap",
             }}>
-              <span style={{ fontSize: 14, color: C.text, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>{me?.name}</span>
+              <span style={{ fontSize: 14, color: C.text, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>{getAnonymousDisplayName(me)}</span>
               <span style={{ width: 1, height: 14, background: `${C.fur2}40` }} />
               <span style={{ fontSize: 14, color: C.gold, fontWeight: 700, fontFamily: "'Patrick Hand', cursive" }}>★ {me?.points || 0}</span>
               <span
@@ -18898,7 +18899,7 @@ function SnowMonkeyTrackerInner() {
         {/* STUDENT: Join live game modal */}
         {showJoinGame && (
           <JoinGameModal
-            defaultName={user?.name || ""}
+            defaultName={getAnonymousDisplayName(me) || ""}
             onJoin={handleJoinGame}
             onClose={() => setShowJoinGame(false)}
           />
@@ -19331,7 +19332,7 @@ function SnowMonkeyTrackerInner() {
             const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <RunnerGame
-                studentName={me.name}
+                studentName={getAnonymousDisplayName(me)}
                 mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19349,7 +19350,7 @@ function SnowMonkeyTrackerInner() {
             const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <FlappyGame
-                studentName={me.name}
+                studentName={getAnonymousDisplayName(me)}
                 mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19367,7 +19368,7 @@ function SnowMonkeyTrackerInner() {
             const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <CrushGame
-                studentName={me.name}
+                studentName={getAnonymousDisplayName(me)}
                 mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19386,7 +19387,7 @@ function SnowMonkeyTrackerInner() {
             return (
               <QuizGame
                 studentId={me.id}
-                studentName={me.name}
+                studentName={getAnonymousDisplayName(me)}
                 mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19404,7 +19405,7 @@ function SnowMonkeyTrackerInner() {
             const savedProgress = me.completions?.[progressKey]?.progress || null;
             return (
               <TetrisGame
-                studentName={me.name}
+                studentName={getAnonymousDisplayName(me)}
                 mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19422,7 +19423,7 @@ function SnowMonkeyTrackerInner() {
           const savedProgressBB = me.completions?.[progressKey]?.progress || null;
           return (
             <MissionGame
-              studentName={me.name}
+              studentName={getAnonymousDisplayName(me)}
               mission={playableMission}
                 missionFullCount={totalQuestions}
                 missionAlreadyAnswered={totalAnswered}
@@ -19487,7 +19488,7 @@ function SnowMonkeyTrackerInner() {
             <div style={modalBackdropStyle} onClick={() => setShowCustomize(false)}>
               <div style={{ ...modalCardStyle, width: 720, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🎨 Customize {me.name}</h2>
+                  <h2 style={{ margin: 0, color: C.text, fontSize: 24 }}>🎨 Customize {getAnonymousDisplayName(me)}</h2>
                   <button onClick={() => setShowCustomize(false)} style={{ background: "none", border: "none", fontSize: 22, color: C.textLight, cursor: "pointer" }}>✕</button>
                 </div>
 
@@ -20149,7 +20150,7 @@ function SnowMonkeyTrackerInner() {
                   <MonkeySVG
                     size={students.length > 10 ? 80 : students.length > 6 ? 95 : 110}
                     mood={s.points > 20 ? "excited" : s.points > 5 ? "happy" : "neutral"}
-                    label={showNames ? s.name : null} points={showPoints ? s.points : undefined}
+                    label={showNames ? getAnonymousDisplayName(s) : null} points={showPoints ? s.points : undefined}
                     delay={i * 0.4} variant={i}
                     accessories={s.accessories || []}
                     pet={s.pet}
@@ -20260,7 +20261,7 @@ function SnowMonkeyTrackerInner() {
                         fontWeight: 700,
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       }}>
-                        {s.name}{isMe ? " ✦" : ""}
+                        {getAnonymousDisplayName(s)}{isMe ? " ✦" : ""}
                       </span>
                       <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
                     </div>
@@ -20307,7 +20308,7 @@ function SnowMonkeyTrackerInner() {
                               fontWeight: isMe ? 700 : 400,
                               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                             }}>
-                              {s.name}{isMe ? " ✦" : ""}
+                              {getAnonymousDisplayName(s)}{isMe ? " ✦" : ""}
                             </span>
                             <span style={{ fontSize: 13, color: C.gold, fontWeight: 700, flexShrink: 0 }}>★{s.points}</span>
                           </div>
@@ -20335,7 +20336,7 @@ function SnowMonkeyTrackerInner() {
               <MonkeySVG size={50} mood={me?.points > 20 ? "excited" : me?.points > 5 ? "happy" : "neutral"} delay={0} variant={myIndex >= 0 ? myIndex : 0} accessories={me?.accessories || []} pet={me?.pet} streakLevel={getStreakLevel(getEffectiveStreak(me)).id} />
             </div>
             <div>
-              <div style={{ fontSize: 16, color: C.text, fontWeight: 700 }}>{me?.name}</div>
+              <div style={{ fontSize: 16, color: C.text, fontWeight: 700 }}>{getAnonymousDisplayName(me)}</div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <span style={{ fontSize: 22, color: C.gold, fontWeight: 700 }}>★ {me?.points || 0}</span>
                 <span style={{ fontSize: 14, color: C.accent, fontWeight: 600 }} title={`Class rank #${classRank} of ${classSize}`}>
