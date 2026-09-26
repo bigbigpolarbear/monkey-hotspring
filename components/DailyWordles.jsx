@@ -1,13 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG } from '../game/rewardConfig.js';
-import { getChallengeWordle, getStandardWordle, letterStates, WORDLE_THEMES } from '../game/wordleContent.js';
+import {
+  getChallengeWordle, getStandardWordle, getToughestWordle,
+  letterStates, validateWordleGuess, WORDLE_THEMES,
+} from '../game/wordleContent.js';
 import { submitWordleGuess } from '../services/rewardService.js';
 
 const KEY_ROWS = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L'],
   ['ENTER','Z','X','C','V','B','N','M','DEL'],
+];
+
+const INVALID_MONKEY_LINES = [
+  'WTF was that word?! 😭',
+  'Bro just invented a new language 💀',
+  'The dictionary monkey says: absolutely not 🐒',
+  'That word came straight from another dimension 👽',
+  'My monkey brain cannot process that one 😵‍💫',
 ];
 
 function sameDayProgress(student, field, dateKey) {
@@ -28,9 +39,44 @@ function keyboardState(guesses, answer) {
   return state;
 }
 
+function playInvalidWordSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(190, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.18);
+    gain.gain.setValueAtTime(0.07, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+    osc.addEventListener('ended', () => ctx.close().catch(() => {}), { once:true });
+  } catch {}
+}
+
+function InvalidWordMonkey({ message, onHide }) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(onHide, 2100);
+    return () => window.clearTimeout(timer);
+  }, [message, onHide]);
+  if (!message) return null;
+  return (
+    <div className="mh-invalid-monkey" role="status" aria-live="polite">
+      <div className="mh-invalid-monkey-face" aria-hidden="true">🐒</div>
+      <div className="mh-invalid-monkey-bubble">{message}</div>
+    </div>
+  );
+}
+
 function WordleBoard({
   title, kicker, reward, answer, initialProgress, themeMeta, onClose, onSubmitGuess,
-  onReward, notify, afterCompletion,
+  onReward, notify, afterCompletion, wordLength = 5, maxGuesses = 6, toughest = false,
 }) {
   const [guesses, setGuesses] = useState(() => Array.isArray(initialProgress?.guesses) ? initialProgress.guesses : []);
   const [current, setCurrent] = useState('');
@@ -38,6 +84,7 @@ function WordleBoard({
   const [completed, setCompleted] = useState(initialProgress?.completed === true);
   const [won, setWon] = useState(initialProgress?.won === true);
   const [error, setError] = useState('');
+  const [monkeyMessage, setMonkeyMessage] = useState('');
   const keys = useMemo(() => keyboardState(guesses, answer), [guesses, answer]);
 
   useEffect(() => {
@@ -48,12 +95,23 @@ function WordleBoard({
     }
   }, [initialProgress?.updatedAt, initialProgress?.completed, initialProgress?.won]);
 
+  function rejectGuess(message) {
+    playInvalidWordSound();
+    setError(message);
+    setMonkeyMessage(INVALID_MONKEY_LINES[Math.floor(Math.random() * INVALID_MONKEY_LINES.length)]);
+  }
+
   async function submit() {
     if (busy || completed) return;
-    if (!/^[A-Z]{5}$/.test(current)) {
-      setError('Enter five letters first.');
+    if (!new RegExp(`^[A-Z]{${wordLength}}$`).test(current)) {
+      rejectGuess(`Enter exactly ${wordLength} letters first.`);
       return;
     }
+    if (!validateWordleGuess(current, wordLength)) {
+      rejectGuess('That is not a real word in our Wordle dictionary — try another one.');
+      return;
+    }
+
     setBusy(true);
     setError('');
     try {
@@ -70,7 +128,9 @@ function WordleBoard({
         notify('Good try — today’s Wordle is complete.');
       }
     } catch (e) {
-      setError(e.message || 'Could not submit that guess.');
+      const message = e.message || 'Could not submit that guess.';
+      if (/dictionary|letter word/i.test(message)) rejectGuess(message);
+      else setError(message);
     } finally {
       setBusy(false);
     }
@@ -79,8 +139,12 @@ function WordleBoard({
   function press(key) {
     if (busy || completed) return;
     if (key === 'ENTER') { submit(); return; }
-    if (key === 'DEL') { setCurrent(value => value.slice(0, -1)); setError(''); return; }
-    if (/^[A-Z]$/.test(key) && current.length < 5) {
+    if (key === 'DEL') {
+      setCurrent(value => value.slice(0, -1));
+      setError('');
+      return;
+    }
+    if (/^[A-Z]$/.test(key) && current.length < wordLength) {
       setCurrent(value => value + key);
       setError('');
     }
@@ -98,7 +162,7 @@ function WordleBoard({
 
   return (
     <div className="mh-hub-backdrop mh-hub-backdrop-modal mh-wordle-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="mh-hub-panel mh-hub-panel-modal mh-wordle-panel" role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`mh-hub-panel mh-hub-panel-modal mh-wordle-panel${toughest ? ' mh-wordle-panel-toughest' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="mh-hub-panel-head">
           <div>
             <div className="mh-kicker">{kicker}</div>
@@ -111,18 +175,19 @@ function WordleBoard({
         </header>
 
         {themeMeta && <div className="mh-wordle-theme-chip">{themeMeta.icon} {themeMeta.label} · {themeMeta.description}</div>}
+        {toughest && <div className="mh-toughest-warning">💀 10 letters · 12 chances · dictionary words only</div>}
 
-        <div className="mh-wordle-grid" aria-label="Wordle guesses">
-          {Array.from({ length: 6 }, (_, row) => {
+        <div className={`mh-wordle-grid${toughest ? ' is-toughest' : ''}`} aria-label="Wordle guesses">
+          {Array.from({ length: maxGuesses }, (_, row) => {
             const guess = guesses[row];
             const active = row === guesses.length && !completed;
             const states = guess ? letterStates(guess, answer) : null;
             return (
               <div className="mh-wordle-row" key={row}>
-                {Array.from({ length: 5 }, (_, col) => {
+                {Array.from({ length: wordLength }, (_, col) => {
                   const letter = guess?.[col] || (active ? current[col] || '' : '');
                   const state = states?.[col] || '';
-                  return <div className={`mh-wordle-tile ${state ? `is-${state}` : ''} ${letter && !state ? 'is-filled' : ''}`} key={col}>{letter}</div>;
+                  return <div className={`mh-wordle-tile${toughest ? ' is-toughest-tile' : ''} ${state ? `is-${state}` : ''} ${letter && !state ? 'is-filled' : ''}`} key={col}>{letter}</div>;
                 })}
               </div>
             );
@@ -132,6 +197,7 @@ function WordleBoard({
         {!completed && (
           <>
             {error && <div className="mh-wordle-error" role="status">{error}</div>}
+            <InvalidWordMonkey message={monkeyMessage} onHide={() => setMonkeyMessage('')} />
             <div className="mh-wordle-keyboard" aria-label="Wordle keyboard">
               {KEY_ROWS.map((row, rowIndex) => (
                 <div className="mh-wordle-key-row" key={rowIndex}>
@@ -139,7 +205,7 @@ function WordleBoard({
                 </div>
               ))}
             </div>
-            <div className="mh-wordle-footnote">{guesses.length}/6 guesses used · progress is saved after every submitted guess</div>
+            <div className="mh-wordle-footnote">{guesses.length}/{maxGuesses} valid guesses used · nonsense words do not use a chance</div>
           </>
         )}
 
@@ -182,7 +248,7 @@ export function DailyWordlePanel({ student, onClose, onReward, notify, onOpenCha
   );
 }
 
-export function ChallengeWordlePanel({ student, onClose, onReward, notify, onOpenStandard }) {
+export function ChallengeWordlePanel({ student, onClose, onReward, notify, onOpenStandard, onOpenToughest }) {
   const dateKey = localDayKey();
   const standard = sameDayProgress(student, 'wordleProgress', dateKey);
   const saved = sameDayProgress(student, 'challengeWordleProgress', dateKey);
@@ -231,7 +297,48 @@ export function ChallengeWordlePanel({ student, onClose, onReward, notify, onOpe
       onReward={onReward}
       notify={notify}
       onSubmitGuess={guess => submitWordleGuess(student.id, guess, { dateKey, mode:'challenge', theme })}
-      afterCompletion={<button className="mh-primary" onClick={onClose}>Done</button>}
+      afterCompletion={
+        <div className="mh-wordle-unlock">
+          <strong>💀 TOUGHEST CHALLENGE unlocked</strong>
+          <span>One 10-letter word. Twelve chances. Worth +{REWARD_CONFIG.toughestWordle} ⭐.</span>
+          <button className="mh-primary" onClick={onOpenToughest}>I’m ready 💀</button>
+        </div>
+      }
+    />
+  );
+}
+
+export function ToughestWordlePanel({ student, onClose, onReward, notify, onOpenChallenge }) {
+  const dateKey = localDayKey();
+  const challenge = sameDayProgress(student, 'challengeWordleProgress', dateKey);
+  const saved = sameDayProgress(student, 'toughestWordleProgress', dateKey);
+
+  if (!challenge.completed) {
+    return (
+      <div className="mh-hub-backdrop mh-hub-backdrop-modal mh-wordle-backdrop">
+        <section className="mh-hub-panel mh-hub-panel-modal mh-wordle-panel">
+          <header className="mh-hub-panel-head"><div><div className="mh-kicker">Final tier locked</div><h2>💀 TOUGHEST CHALLENGE</h2></div><button className="mh-icon-button" onClick={onClose}>✕</button></header>
+          <div className="mh-wordle-locked"><span>🔒</span><h3>Finish today’s Challenge Wordle first.</h3><p>Then the 10-letter nightmare unlocks.</p><button className="mh-primary" onClick={onOpenChallenge}>Go to Challenge Wordle</button></div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <WordleBoard
+      title="💀 TOUGHEST CHALLENGE"
+      kicker="Final boss Wordle"
+      reward={REWARD_CONFIG.toughestWordle}
+      answer={getToughestWordle(dateKey)}
+      initialProgress={saved}
+      onClose={onClose}
+      onReward={onReward}
+      notify={notify}
+      onSubmitGuess={guess => submitWordleGuess(student.id, guess, { dateKey, mode:'toughest' })}
+      wordLength={10}
+      maxGuesses={12}
+      toughest
+      afterCompletion={<button className="mh-primary" onClick={onClose}>I survived 💀</button>}
     />
   );
 }

@@ -4,6 +4,7 @@ export const REWARD_CONFIG = Object.freeze({
   toiletFact: 1,
   dailyWordle: 1,
   challengeWordle: 3,
+  toughestWordle: 7,
   monaBirthday: 100,
   preIGCSE: 10,
   reading: Object.freeze({

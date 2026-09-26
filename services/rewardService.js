@@ -3,7 +3,7 @@ import { db } from '../firebase.js';
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward, normalizeBookTitle } from '../game/rewardConfig.js';
 import { getDailyToiletFact } from '../game/toiletFacts.js';
-import { getChallengeWordle, getStandardWordle, WORDLE_THEMES } from '../game/wordleContent.js';
+import { getChallengeWordle, getStandardWordle, getToughestWordle, validateWordleGuess, WORDLE_THEMES } from '../game/wordleContent.js';
 import { hasClaimedMonaBirthday, isMonaStudent, MONA_BIRTHDAY } from '../game/birthdaySurprise.js';
 
 function safeClaimPart(value) {
@@ -313,9 +313,11 @@ export async function answerDailyToiletFact(studentId, answerIndex, { dateKey = 
 }
 
 
-function normalizeWordleGuess(value) {
+function normalizeWordleGuess(value, length) {
   const guess = String(value || '').trim().toUpperCase();
-  if (!/^[A-Z]{5}$/.test(guess)) throw new Error('Enter a five-letter word.');
+  const pattern = new RegExp('^[A-Z]{' + length + '}$');
+  if (!pattern.test(guess)) throw new Error('Enter a ' + length + '-letter word.');
+  if (!validateWordleGuess(guess, length)) throw new Error('That is not in the Wordle dictionary.');
   return guess;
 }
 
@@ -325,29 +327,48 @@ export async function submitWordleGuess(studentId, rawGuess, {
   theme = null,
 } = {}) {
   if (!studentId) throw new Error('Missing student id');
-  if (mode !== 'standard' && mode !== 'challenge') throw new Error('Unknown Wordle mode');
-  const guess = normalizeWordleGuess(rawGuess);
+  if (!['standard', 'challenge', 'toughest'].includes(mode)) throw new Error('Unknown Wordle mode');
+
+  const wordLength = mode === 'toughest' ? 10 : 5;
+  const maxGuesses = mode === 'toughest' ? 12 : 6;
+  const guess = normalizeWordleGuess(rawGuess, wordLength);
 
   return runTransaction(db, async tx => {
     const studentRef = doc(db, 'students', studentId);
-    const rewardType = mode === 'standard' ? 'daily-wordle' : 'challenge-wordle';
+    const rewardType = mode === 'standard'
+      ? 'daily-wordle'
+      : mode === 'challenge'
+        ? 'challenge-wordle'
+        : 'toughest-wordle';
     const studentSnap = await tx.get(studentRef);
     if (!studentSnap.exists()) throw new Error('Student account not found');
 
     const student = { id: studentSnap.id, ...studentSnap.data() };
     const standard = student.dailyLearning?.wordleProgress || {};
+    const themed = student.dailyLearning?.challengeWordleProgress || {};
+
     if (mode === 'challenge' && !(standard.date === dateKey && standard.completed === true)) {
       throw new Error('Finish today’s regular Wordle first.');
     }
+    if (mode === 'toughest' && !(themed.date === dateKey && themed.completed === true)) {
+      throw new Error('Finish today’s Challenge Wordle first.');
+    }
 
-    const field = mode === 'standard' ? 'wordleProgress' : 'challengeWordleProgress';
+    const field = mode === 'standard'
+      ? 'wordleProgress'
+      : mode === 'challenge'
+        ? 'challengeWordleProgress'
+        : 'toughestWordleProgress';
     const saved = student.dailyLearning?.[field] || {};
     const sameDay = saved.date === dateKey;
+
     if (sameDay && saved.completed === true) {
       const savedTheme = mode === 'challenge' ? saved.theme : null;
       const answer = mode === 'standard'
         ? getStandardWordle(dateKey)
-        : getChallengeWordle(dateKey, savedTheme);
+        : mode === 'challenge'
+          ? getChallengeWordle(dateKey, savedTheme)
+          : getToughestWordle(dateKey);
       return { amount: 0, duplicate: true, progress: saved, answer };
     }
 
@@ -362,15 +383,18 @@ export async function submitWordleGuess(studentId, rawGuess, {
 
     const answer = mode === 'standard'
       ? getStandardWordle(dateKey)
-      : getChallengeWordle(dateKey, effectiveTheme);
+      : mode === 'challenge'
+        ? getChallengeWordle(dateKey, effectiveTheme)
+        : getToughestWordle(dateKey);
+
     const guesses = sameDay && Array.isArray(saved.guesses) ? [...saved.guesses] : [];
-    if (guesses.length >= 6) {
+    if (guesses.length >= maxGuesses) {
       return { amount: 0, duplicate: true, progress: { ...saved, completed: true }, answer };
     }
 
     guesses.push(guess);
     const won = guess === answer;
-    const completed = won || guesses.length >= 6;
+    const completed = won || guesses.length >= maxGuesses;
     const progress = {
       date: dateKey,
       ...(mode === 'challenge' ? { theme: effectiveTheme } : {}),
@@ -387,13 +411,22 @@ export async function submitWordleGuess(studentId, rawGuess, {
       return { amount: 0, duplicate: false, progress, answer: completed ? answer : null };
     }
 
-    const configuredAmount = mode === 'standard' ? REWARD_CONFIG.dailyWordle : REWARD_CONFIG.challengeWordle;
+    const configuredAmount = mode === 'standard'
+      ? REWARD_CONFIG.dailyWordle
+      : mode === 'challenge'
+        ? REWARD_CONFIG.challengeWordle
+        : REWARD_CONFIG.toughestWordle;
     const claim = claimRewardOnStudent(student, {
       rewardType,
       activityId: dateKey,
       amount: configuredAmount,
-      metadata: { answer, guesses: guesses.length, ...(effectiveTheme ? { theme: effectiveTheme } : {}) },
+      metadata: {
+        answer,
+        guesses: guesses.length,
+        ...(effectiveTheme ? { theme: effectiveTheme } : {}),
+      },
     });
+
     if (claim.duplicate) {
       tx.update(studentRef, progressPatch);
       return { amount: 0, duplicate: true, progress, answer };
@@ -405,6 +438,7 @@ export async function submitWordleGuess(studentId, rawGuess, {
       rewardClaims: claim.claims,
       ...progressPatch,
     });
+
     return {
       amount: configuredAmount,
       duplicate: false,

@@ -1,3 +1,5 @@
+import { isAllowedWordleGuess } from './wordleDictionary.js';
+
 export const STANDARD_WORDS = Object.freeze([
   'happy','smile','cloud','dream','light','music','dance','heart','beach','plant',
   'ocean','tiger','brave','candy','frost','jolly','magic','noble','peace','quiet',
@@ -9,6 +11,13 @@ export const STANDARD_WORDS = Object.freeze([
   'winds','yield','plaza','acorn','berry','coral','daisy','elbow','flock','grain',
   'haste','inlet','joker','kayak','lilac','mango','nurse','oasis','patch','radar',
   'salad','table','urban','vault','wheat','album','badge','camel','delta','ember'
+]);
+
+export const TOUGHEST_WORDS = Object.freeze([
+  'analytical','atmosphere','curriculum','democratic','ecological','equivalent','foundation','historical',
+  'horizontal','initiative','instrument','journalism','leadership','literature','parliament','prediction',
+  'psychology','scientific','technology','vocabulary','wavelength','wilderness','compulsory','contagious',
+  'continuous','contribute','coordinate','correction','discipline','generation'
 ]);
 
 export const WORDLE_THEMES = Object.freeze({
@@ -63,20 +72,29 @@ export function getChallengeWordle(dateKey, theme) {
   return bucket.words[hashKey(`challenge:${theme}:${dateKey}`) % bucket.words.length].toUpperCase();
 }
 
+export function getToughestWordle(dateKey) {
+  return TOUGHEST_WORDS[hashKey(`toughest:${dateKey}`) % TOUGHEST_WORDS.length].toUpperCase();
+}
+
+export function validateWordleGuess(value, length = 5) {
+  return isAllowedWordleGuess(value, length);
+}
+
 export function letterStates(guess, answer) {
-  const g = String(guess || '').toUpperCase().slice(0, 5).split('');
-  const a = String(answer || '').toUpperCase().slice(0, 5).split('');
-  const result = Array(5).fill('absent');
-  const used = Array(5).fill(false);
-  for (let i = 0; i < 5; i += 1) {
+  const wordLength = String(answer || '').length || String(guess || '').length || 5;
+  const g = String(guess || '').toUpperCase().slice(0, wordLength).split('');
+  const a = String(answer || '').toUpperCase().slice(0, wordLength).split('');
+  const result = Array(wordLength).fill('absent');
+  const used = Array(wordLength).fill(false);
+  for (let i = 0; i < wordLength; i += 1) {
     if (g[i] && g[i] === a[i]) {
       result[i] = 'correct';
       used[i] = true;
     }
   }
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < wordLength; i += 1) {
     if (!g[i] || result[i] === 'correct') continue;
-    for (let j = 0; j < 5; j += 1) {
+    for (let j = 0; j < wordLength; j += 1) {
       if (!used[j] && g[i] === a[j]) {
         result[i] = 'present';
         used[j] = true;
