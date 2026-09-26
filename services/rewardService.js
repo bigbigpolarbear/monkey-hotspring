@@ -4,6 +4,7 @@ import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward, normalizeBookTitle } from '../game/rewardConfig.js';
 import { getDailyToiletFact } from '../game/toiletFacts.js';
 import { getChallengeWordle, getStandardWordle, WORDLE_THEMES } from '../game/wordleContent.js';
+import { hasClaimedMonaBirthday, isMonaStudent, MONA_BIRTHDAY } from '../game/birthdaySurprise.js';
 
 function safeClaimPart(value) {
   return String(value ?? '')
@@ -411,5 +412,47 @@ export async function submitWordleGuess(studentId, rawGuess, {
       answer,
       newBalance: currentPoints + configuredAmount,
     };
+  });
+}
+
+
+export async function claimMonaBirthdayGift(studentId) {
+  if (!studentId) throw new Error('Missing student id');
+  return runTransaction(db, async tx => {
+    const studentRef = doc(db, 'students', studentId);
+    const studentSnap = await tx.get(studentRef);
+    if (!studentSnap.exists()) throw new Error('Student account not found');
+
+    const student = { id: studentSnap.id, ...studentSnap.data() };
+    if (!isMonaStudent(student)) throw new Error('This birthday gift belongs to Mona.');
+    if (hasClaimedMonaBirthday(student)) {
+      return { amount: 0, duplicate: true, newBalance: Math.max(0, Number(student.points) || 0) };
+    }
+
+    const amount = REWARD_CONFIG.monaBirthday;
+    const claim = claimRewardOnStudent(student, {
+      rewardType: 'birthday-gift',
+      activityId: MONA_BIRTHDAY.campaignId,
+      amount,
+      metadata: { recipient: 'Mona', campaignId: MONA_BIRTHDAY.campaignId },
+    });
+    if (claim.duplicate) {
+      tx.update(studentRef, {
+        'specialRewards.monaBirthday2026Claimed': true,
+        'specialRewards.monaBirthday2026ClaimedAt': new Date().toISOString(),
+      });
+      return { amount: 0, duplicate: true, newBalance: Math.max(0, Number(student.points) || 0) };
+    }
+
+    const currentPoints = Math.max(0, Number(student.points) || 0);
+    const claimedAt = new Date().toISOString();
+    tx.update(studentRef, {
+      points: currentPoints + amount,
+      rewardClaims: claim.claims,
+      'specialRewards.monaBirthday2026Claimed': true,
+      'specialRewards.monaBirthday2026ClaimedAt': claimedAt,
+      'specialRewards.monaBirthday2026Amount': amount,
+    });
+    return { amount, duplicate: false, newBalance: currentPoints + amount };
   });
 }
