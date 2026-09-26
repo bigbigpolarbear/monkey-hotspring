@@ -5,6 +5,7 @@ import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward } from '../
 import { getDailyToiletFact, TOILET_FACTS } from '../game/toiletFacts.js';
 import { getChallengeWordle, getStandardWordle, letterStates, STANDARD_WORDS, WORDLE_THEMES } from '../game/wordleContent.js';
 import { hasClaimedMonaBirthday, isMonaStudent, MONA_BIRTHDAY } from '../game/birthdaySurprise.js';
+import { getAnonymousDisplayName, hasAnonymousMonkeyIdentity, MONKEY_IDENTITIES, normalizeMonkeyIdentity } from '../game/anonymousIdentity.js';
 
 test('daily challenge always returns four valid questions', () => {
   const questions = buildDailyChallenge('2026-09-07', { id: 'student-1', vocabulary: [] });
@@ -112,4 +113,20 @@ test('Mona birthday surprise targets Mona only and is worth 100 points', () => {
 test('Mona birthday gift claimed state is persistent', () => {
   assert.equal(hasClaimedMonaBirthday({}), false);
   assert.equal(hasClaimedMonaBirthday({ specialRewards:{ monaBirthday2026Claimed:true } }), true);
+});
+
+
+test('anonymous monkey identities never fall back to the real student name', () => {
+  assert.ok(MONKEY_IDENTITIES.length >= 15);
+  assert.equal(getAnonymousDisplayName({ name:'Mona', username:'mona123' }), 'Mystery Monkey');
+  assert.equal(hasAnonymousMonkeyIdentity({ name:'Mona' }), false);
+  assert.equal(getAnonymousDisplayName({ name:'Mona', anonymousMonkeyName:'Gorilla' }), 'Gorilla');
+  assert.equal(hasAnonymousMonkeyIdentity({ anonymousMonkeyId:'orangutan' }), true);
+});
+
+test('anonymous identity choices come only from the fixed monkey catalog', () => {
+  assert.equal(normalizeMonkeyIdentity('King Kong')?.id, 'king-kong');
+  assert.equal(normalizeMonkeyIdentity('gorilla')?.name, 'Gorilla');
+  assert.equal(normalizeMonkeyIdentity('Pearie'), null);
+  assert.equal(normalizeMonkeyIdentity('Mona'), null);
 });
