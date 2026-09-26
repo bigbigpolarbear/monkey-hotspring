@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildDailyChallenge, getDailyVocab, masteryLabel } from '../game/dailyContent.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward } from '../game/rewardConfig.js';
 import { getDailyToiletFact, TOILET_FACTS } from '../game/toiletFacts.js';
+import { getChallengeWordle, getStandardWordle, letterStates, STANDARD_WORDS, WORDLE_THEMES } from '../game/wordleContent.js';
 
 test('daily challenge always returns four valid questions', () => {
   const questions = buildDailyChallenge('2026-09-07', { id: 'student-1', vocabulary: [] });
@@ -66,4 +67,32 @@ test('daily toilet fact is deterministic and always quiz-ready', () => {
 
 test('toilet fact reward is exactly one Star', () => {
   assert.equal(REWARD_CONFIG.toiletFact, 1);
+});
+
+
+test('classic Wordle is deterministic and worth one Star', () => {
+  const word = getStandardWordle('2026-09-26');
+  assert.equal(word, getStandardWordle('2026-09-26'));
+  assert.equal(word.length, 5);
+  assert.match(word, /^[A-Z]{5}$/);
+  assert.equal(REWARD_CONFIG.dailyWordle, 1);
+  assert.ok(STANDARD_WORDS.every(item => /^[a-z]{5}$/.test(item)));
+});
+
+test('challenge Wordle has three valid five-letter subject banks and is worth three Stars', () => {
+  assert.deepEqual(Object.keys(WORDLE_THEMES), ['science','humanities','maths']);
+  for (const [theme, data] of Object.entries(WORDLE_THEMES)) {
+    assert.ok(data.words.length >= 25);
+    assert.ok(data.words.every(item => /^[a-z]{5}$/.test(item)), theme);
+    const word = getChallengeWordle('2026-09-26', theme);
+    assert.equal(word.length, 5);
+    assert.match(word, /^[A-Z]{5}$/);
+    assert.equal(word, getChallengeWordle('2026-09-26', theme));
+  }
+  assert.equal(REWARD_CONFIG.challengeWordle, 3);
+});
+
+test('Wordle letter states handle duplicate letters correctly', () => {
+  assert.deepEqual(letterStates('SHEEP', 'PEARL'), ['absent','absent','present','absent','present']);
+  assert.deepEqual(letterStates('APPLE', 'AMPLE'), ['correct','absent','correct','correct','correct']);
 });

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 
 export default function StudentNavigationDrawer({
-  open, onClose, student, onOpenChallenge, onOpenRules, onOpenVocab, onLegacyAction,
+  open, onClose, student, onOpenChallenge, onOpenWordle, onOpenChallengeWordle, onOpenRules, onOpenVocab, onLegacyAction,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -26,6 +26,8 @@ export default function StudentNavigationDrawer({
           <button className="mh-icon-button" onClick={onClose} aria-label="Close menu">✕</button>
         </div>
         <nav className="mh-drawer-actions">
+          <button onClick={onOpenWordle}>🔤 Daily Wordle · +1 ⭐</button>
+          <button onClick={onOpenChallengeWordle}>🔥 Challenge Wordle · +3 ⭐</button>
           <button onClick={onOpenChallenge}>☀️ Today’s challenge</button>
           <button onClick={onOpenRules}>⭐ How to earn Stars</button>
           <button onClick={onOpenVocab}>🧠 My Vocabulary</button>

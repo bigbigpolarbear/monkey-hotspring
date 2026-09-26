@@ -3,6 +3,7 @@ import { db } from '../firebase.js';
 import { localDayKey } from '../game/petEconomy.js';
 import { REWARD_CONFIG, buildReadingDedupeId, calculateReadingReward, normalizeBookTitle } from '../game/rewardConfig.js';
 import { getDailyToiletFact } from '../game/toiletFacts.js';
+import { getChallengeWordle, getStandardWordle, WORDLE_THEMES } from '../game/wordleContent.js';
 
 function safeLedgerId(value) {
   return String(value).replaceAll('/', '_').slice(0, 480);
@@ -260,5 +261,108 @@ export async function answerDailyToiletFact(studentId, answerIndex, { dateKey = 
       createdAt: serverTimestamp(),
     });
     return { amount, duplicate: false, alreadyAnswered: false, correct: true, fact, newBalance: currentPoints + amount };
+  });
+}
+
+
+function normalizeWordleGuess(value) {
+  const guess = String(value || '').trim().toUpperCase();
+  if (!/^[A-Z]{5}$/.test(guess)) throw new Error('Enter a five-letter word.');
+  return guess;
+}
+
+export async function submitWordleGuess(studentId, rawGuess, {
+  dateKey = localDayKey(),
+  mode = 'standard',
+  theme = null,
+} = {}) {
+  if (!studentId) throw new Error('Missing student id');
+  if (mode !== 'standard' && mode !== 'challenge') throw new Error('Unknown Wordle mode');
+  const guess = normalizeWordleGuess(rawGuess);
+
+  return runTransaction(db, async tx => {
+    const studentRef = doc(db, 'students', studentId);
+    const rewardType = mode === 'standard' ? 'daily-wordle' : 'challenge-wordle';
+    const ledgerRef = rewardLedgerRef(rewardType, studentId, dateKey);
+    const studentSnap = await tx.get(studentRef);
+    const ledgerSnap = await tx.get(ledgerRef);
+    if (!studentSnap.exists()) throw new Error('Student account not found');
+
+    const student = { id: studentSnap.id, ...studentSnap.data() };
+    const standard = student.dailyLearning?.wordleProgress || {};
+    if (mode === 'challenge' && !(standard.date === dateKey && standard.completed === true)) {
+      throw new Error('Finish today’s regular Wordle first.');
+    }
+
+    const field = mode === 'standard' ? 'wordleProgress' : 'challengeWordleProgress';
+    const saved = student.dailyLearning?.[field] || {};
+    const sameDay = saved.date === dateKey;
+    if (sameDay && saved.completed === true) {
+      const savedTheme = mode === 'challenge' ? saved.theme : null;
+      const answer = mode === 'standard'
+        ? getStandardWordle(dateKey)
+        : getChallengeWordle(dateKey, savedTheme);
+      return { amount: 0, duplicate: true, progress: saved, answer };
+    }
+
+    let effectiveTheme = null;
+    if (mode === 'challenge') {
+      if (sameDay && saved.theme && theme && saved.theme !== theme) {
+        throw new Error(`You already chose ${WORDLE_THEMES[saved.theme].label} for today’s Challenge Wordle.`);
+      }
+      effectiveTheme = sameDay && saved.theme ? saved.theme : theme;
+      if (!WORDLE_THEMES[effectiveTheme]) throw new Error('Choose Science, Humanities or Maths first.');
+    }
+
+    const answer = mode === 'standard'
+      ? getStandardWordle(dateKey)
+      : getChallengeWordle(dateKey, effectiveTheme);
+    const guesses = sameDay && Array.isArray(saved.guesses) ? [...saved.guesses] : [];
+    if (guesses.length >= 6) {
+      return { amount: 0, duplicate: true, progress: { ...saved, completed: true }, answer };
+    }
+
+    guesses.push(guess);
+    const won = guess === answer;
+    const completed = won || guesses.length >= 6;
+    const progress = {
+      date: dateKey,
+      ...(mode === 'challenge' ? { theme: effectiveTheme } : {}),
+      guesses,
+      completed,
+      won,
+      updatedAt: new Date().toISOString(),
+      ...(completed ? { completedAt: new Date().toISOString() } : {}),
+    };
+    const progressPatch = { [`dailyLearning.${field}`]: progress };
+
+    if (!won) {
+      tx.update(studentRef, progressPatch);
+      return { amount: 0, duplicate: false, progress, answer: completed ? answer : null };
+    }
+
+    const configuredAmount = mode === 'standard' ? REWARD_CONFIG.dailyWordle : REWARD_CONFIG.challengeWordle;
+    if (ledgerSnap.exists()) {
+      tx.update(studentRef, progressPatch);
+      return { amount: 0, duplicate: true, progress, answer };
+    }
+
+    const currentPoints = Math.max(0, Number(student.points) || 0);
+    tx.update(studentRef, { points: currentPoints + configuredAmount, ...progressPatch });
+    tx.set(ledgerRef, {
+      studentId,
+      rewardType,
+      activityId: dateKey,
+      amount: configuredAmount,
+      metadata: { answer, guesses: guesses.length, ...(effectiveTheme ? { theme: effectiveTheme } : {}) },
+      createdAt: serverTimestamp(),
+    });
+    return {
+      amount: configuredAmount,
+      duplicate: false,
+      progress,
+      answer,
+      newBalance: currentPoints + configuredAmount,
+    };
   });
 }

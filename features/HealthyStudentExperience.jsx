@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StudentNavigationDrawer from '../components/StudentNavigationDrawer.jsx';
 import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import DailyToiletFact from '../components/DailyToiletFact.jsx';
+import { ChallengeWordlePanel, DailyWordlePanel } from '../components/DailyWordles.jsx';
 import {
   DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
   StarRulesPanel, TodayPanel, VocabularyLogPanel,
@@ -184,13 +185,15 @@ export default function HealthyStudentExperience() {
         <button className="mh-profile" onClick={() => { setActivePanel(null); setDrawerOpen(true); }} aria-label="Open profile">🐒</button>
       </header>
 
-      {activePanel === 'today' && <TodayPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenRules={() => setActivePanel('rules')} />}
-      {activePanel === 'rules' && <StarRulesPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenVocabLog={() => setActivePanel('vocabLog')} />}
+      {activePanel === 'today' && <TodayPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenRules={() => setActivePanel('rules')} onOpenWordle={() => setActivePanel('wordle')} onOpenChallengeWordle={() => setActivePanel('challengeWordle')} />}
+      {activePanel === 'rules' && <StarRulesPanel {...panelCommon} pending={pending} busy={busy} onCollectPet={collect} onOpenChallenge={() => setActivePanel('challenge')} onOpenVocab={() => setActivePanel('vocab')} onOpenReading={() => setActivePanel('reading')} onOpenVocabLog={() => setActivePanel('vocabLog')} onOpenWordle={() => setActivePanel('wordle')} onOpenChallengeWordle={() => setActivePanel('challengeWordle')} />}
       {activePanel === 'challenge' && <DailyChallengePanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
       {activePanel === 'vocab' && <DailyVocabularyPanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenLog={() => setActivePanel('vocabLog')} />}
       {activePanel === 'vocabLog' && <VocabularyLogPanel {...panelCommon} />}
       {activePanel === 'reading' && <ReadingPanel {...panelCommon} notify={notify} onReward={rewardBurst} />}
       {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
+      {activePanel === 'wordle' && <DailyWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenChallenge={() => setActivePanel('challengeWordle')} />}
+      {activePanel === 'challengeWordle' && <ChallengeWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenStandard={() => setActivePanel('wordle')} />}
       {activePanel === 'toiletFact' && <DailyToiletFact student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(null)} />}
 
       {!activePanel && !drawerOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} burstKey={burst.key} />}
@@ -204,6 +207,8 @@ export default function HealthyStudentExperience() {
         onClose={() => setDrawerOpen(false)}
         student={student}
         onOpenChallenge={() => { setDrawerOpen(false); setActivePanel('challenge'); }}
+        onOpenWordle={() => { setDrawerOpen(false); setActivePanel('wordle'); }}
+        onOpenChallengeWordle={() => { setDrawerOpen(false); setActivePanel('challengeWordle'); }}
         onOpenRules={() => { setDrawerOpen(false); setActivePanel('rules'); }}
         onOpenVocab={() => { setDrawerOpen(false); setActivePanel('vocabLog'); }}
         onLegacyAction={label => { setActivePanel(null); clickLegacyAction(label); }}

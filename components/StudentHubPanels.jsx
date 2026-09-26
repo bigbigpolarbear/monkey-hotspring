@@ -11,14 +11,26 @@ function todayFlags(student = {}) {
   const petDone = student?.dailyEconomy?.lastPassiveCollectionDate === today;
   const toiletFactDone = student?.dailyLearning?.toiletFactDate === today;
   const toiletFactCorrect = toiletFactDone && student?.dailyLearning?.toiletFactCorrect === true;
+  const wordle = student?.dailyLearning?.wordleProgress || {};
+  const wordleDone = wordle.date === today && wordle.completed === true;
+  const wordleWon = wordleDone && wordle.won === true;
+  const challengeWordle = student?.dailyLearning?.challengeWordleProgress || {};
+  const challengeWordleDone = challengeWordle.date === today && challengeWordle.completed === true;
+  const challengeWordleWon = challengeWordleDone && challengeWordle.won === true;
   const readingToday = (Array.isArray(student?.readingLog) ? student.readingLog : []).filter(entry => entry?.date === today);
   const readingStars = readingToday.reduce((sum, entry) => sum + Math.max(0, Number(entry.stars) || 0), 0);
   const starsEarnedToday = (petDone ? Math.max(0, Number(student?.dailyEconomy?.lastPassiveAmount) || 0) : 0)
     + (challengeDone ? REWARD_CONFIG.dailyChallenge : 0)
     + (vocabDone ? REWARD_CONFIG.dailyVocab : 0)
     + (toiletFactCorrect ? REWARD_CONFIG.toiletFact : 0)
+    + (wordleWon ? REWARD_CONFIG.dailyWordle : 0)
+    + (challengeWordleWon ? REWARD_CONFIG.challengeWordle : 0)
     + readingStars;
-  return { today, challengeDone, vocabDone, petDone, toiletFactDone, toiletFactCorrect, readingToday, readingStars, starsEarnedToday };
+  return {
+    today, challengeDone, vocabDone, petDone, toiletFactDone, toiletFactCorrect,
+    wordleDone, wordleWon, challengeWordleDone, challengeWordleWon,
+    readingToday, readingStars, starsEarnedToday,
+  };
 }
 
 function PanelFrame({ title, kicker, onClose, children, wide = false, modal = false }) {
@@ -46,7 +58,7 @@ function ActionRow({ icon, title, subtitle, reward, done, actionLabel, onAction,
   );
 }
 
-export function TodayPanel({ student, pending, busy, onCollectPet, onOpenChallenge, onOpenVocab, onOpenReading, onOpenRules, onClose }) {
+export function TodayPanel({ student, pending, busy, onCollectPet, onOpenChallenge, onOpenVocab, onOpenReading, onOpenRules, onOpenWordle, onOpenChallengeWordle, onClose }) {
   const flags = todayFlags(student);
   const petAmount = Math.max(0, Number(pending?.total) || 0);
   return (
@@ -58,6 +70,14 @@ export function TodayPanel({ student, pending, busy, onCollectPet, onOpenChallen
         {flags.challengeDone ? <div className="mh-compact-done">✓ Daily Challenge <b>+{REWARD_CONFIG.dailyChallenge} ⭐</b></div> : <ActionRow icon="🎯" title="Daily Challenge" subtitle="Four quick questions" reward={`+${REWARD_CONFIG.dailyChallenge} ⭐`} actionLabel="Start Challenge" onAction={onOpenChallenge} />}
         {flags.vocabDone ? <div className="mh-compact-done">✓ Daily Vocab <b>+{REWARD_CONFIG.dailyVocab} ⭐</b></div> : <ActionRow icon="🧠" title="Daily Vocabulary" subtitle="Learn today’s word" reward={`+${REWARD_CONFIG.dailyVocab} ⭐`} actionLabel="Learn Word" onAction={onOpenVocab} />}
         {flags.toiletFactDone && <div className="mh-compact-done">✓ Toilet Fact <b>{flags.toiletFactCorrect ? `+${REWARD_CONFIG.toiletFact} ⭐` : 'Read'}</b></div>}
+        {flags.wordleDone
+          ? <div className="mh-compact-done">✓ Daily Wordle <b>{flags.wordleWon ? `+${REWARD_CONFIG.dailyWordle} ⭐` : 'Completed'}</b></div>
+          : <ActionRow icon="🔤" title="Daily Wordle" subtitle="Classic six-guess Wordle" reward={`+${REWARD_CONFIG.dailyWordle} ⭐`} actionLabel="Play Wordle" onAction={onOpenWordle} />}
+        {flags.challengeWordleDone
+          ? <div className="mh-compact-done">✓ Challenge Wordle <b>{flags.challengeWordleWon ? `+${REWARD_CONFIG.challengeWordle} ⭐` : 'Completed'}</b></div>
+          : flags.wordleDone
+            ? <ActionRow icon="🔥" title="Challenge Wordle" subtitle="Choose Science, Humanities or Maths" reward={`+${REWARD_CONFIG.challengeWordle} ⭐`} actionLabel="Choose Theme" onAction={onOpenChallengeWordle} />
+            : <ActionRow icon="🔒" title="Challenge Wordle" subtitle="Finish Daily Wordle to unlock" reward={`+${REWARD_CONFIG.challengeWordle} ⭐`} />}
         <ActionRow icon="📖" title="Reading" subtitle={flags.readingStars ? `${flags.readingStars} Stars from reading today` : 'Earn Stars from your own book'} actionLabel="View options" onAction={onOpenReading} />
       </div>
       <div className="mh-today-total"><span>Stars earned today</span><strong>{flags.starsEarnedToday} ⭐</strong></div>
@@ -220,12 +240,17 @@ export function ReadingPanel({ student, onClose, onReward, notify }) {
   );
 }
 
-export function StarRulesPanel({ student, pending, busy, onCollectPet, onOpenChallenge, onOpenVocab, onOpenReading, onOpenVocabLog, onClose }) {
-  const flags = todayFlags(student); const petAmount = Math.max(0, Number(pending?.total) || 0); const completedCount = [flags.challengeDone, flags.vocabDone, flags.petDone, flags.readingStars > 0].filter(Boolean).length;
+export function StarRulesPanel({ student, pending, busy, onCollectPet, onOpenChallenge, onOpenVocab, onOpenReading, onOpenVocabLog, onOpenWordle, onOpenChallengeWordle, onClose }) {
+  const flags = todayFlags(student); const petAmount = Math.max(0, Number(pending?.total) || 0); const completedCount = [flags.wordleDone, flags.challengeWordleDone, flags.challengeDone, flags.vocabDone, flags.petDone, flags.readingStars > 0].filter(Boolean).length;
   return (
     <PanelFrame title="⭐ How to Earn Stars" kicker="What can I do today?" onClose={onClose} wide>
-      <div className="mh-rules-progress"><div><strong>{completedCount} / 4 activities completed</strong><span>Stars earned today: {flags.starsEarnedToday} ⭐</span></div><div className="mh-progress-dots">{[0,1,2,3].map(i => <span key={i} className={i < completedCount ? 'done' : ''}>★</span>)}</div></div>
-      <div className="mh-rules-list"><ActionRow icon="☀️" title="Daily Challenge" subtitle="Complete today’s four-question challenge" reward={`+${REWARD_CONFIG.dailyChallenge} ⭐`} done={flags.challengeDone} actionLabel="Start" onAction={onOpenChallenge}/><ActionRow icon="🧠" title="Daily Vocabulary" subtitle="Learn and collect today’s word" reward={`+${REWARD_CONFIG.dailyVocab} ⭐`} done={flags.vocabDone} actionLabel="Learn" onAction={onOpenVocab}/><ActionRow icon="📚" title="Read on PreIGCSE" subtitle="Complete meaningful verified reading" reward={`+${REWARD_CONFIG.preIGCSE} ⭐`} actionLabel="Go Read" onAction={() => window.open('https://www.preigcse.com', '_blank', 'noopener,noreferrer')} note="Stars are awarded only after verified completion; opening the site alone never earns Stars."/><ActionRow icon="📖" title="Read Your Own Book" subtitle="Log genuine page progress" reward={flags.readingStars ? `+${flags.readingStars} ⭐ today` : 'Earn by pages'} done={false} actionLabel="Log Reading" onAction={onOpenReading}/><ActionRow icon="🐵" title="Pet earnings" subtitle={petAmount ? `${petAmount} Stars ready to collect` : 'Your pets earn every day'} reward={petAmount ? `+${petAmount} ⭐` : ''} done={flags.petDone} actionLabel={petAmount ? 'Collect' : ''} onAction={onCollectPet} disabled={busy || !petAmount}/></div>
+      <div className="mh-rules-progress"><div><strong>{completedCount} / 6 activities completed</strong><span>Stars earned today: {flags.starsEarnedToday} ⭐</span></div><div className="mh-progress-dots">{[0,1,2,3,4,5].map(i => <span key={i} className={i < completedCount ? 'done' : ''}>★</span>)}</div></div>
+      <div className="mh-rules-list">
+        <ActionRow icon="🔤" title="Daily Wordle" subtitle="Solve the classic five-letter word" reward={flags.wordleWon ? `+${REWARD_CONFIG.dailyWordle} ⭐` : flags.wordleDone ? '' : `+${REWARD_CONFIG.dailyWordle} ⭐`} done={flags.wordleDone} actionLabel="Play" onAction={onOpenWordle}/>
+        <ActionRow icon={flags.wordleDone ? "🔥" : "🔒"} title="Challenge Wordle" subtitle={flags.wordleDone ? "Pick Science, Humanities or Maths" : "Unlock after Daily Wordle"} reward={flags.challengeWordleWon ? `+${REWARD_CONFIG.challengeWordle} ⭐` : flags.challengeWordleDone ? '' : `+${REWARD_CONFIG.challengeWordle} ⭐`} done={flags.challengeWordleDone} actionLabel={flags.wordleDone ? "Choose Theme" : ""} onAction={onOpenChallengeWordle}/>
+        <ActionRow icon="☀️" title="Daily Challenge" subtitle="Complete today’s four-question challenge" reward={`+${REWARD_CONFIG.dailyChallenge} ⭐`} done={flags.challengeDone} actionLabel="Start" onAction={onOpenChallenge}/>
+        <ActionRow icon="🧠" title="Daily Vocabulary" subtitle="Learn and collect today’s word" reward={`+${REWARD_CONFIG.dailyVocab} ⭐`} done={flags.vocabDone} actionLabel="Learn" onAction={onOpenVocab}/>
+        <ActionRow icon="📚" title="Read on PreIGCSE" subtitle="Complete meaningful verified reading" reward={`+${REWARD_CONFIG.preIGCSE} ⭐`} actionLabel="Go Read" onAction={() => window.open('https://www.preigcse.com', '_blank', 'noopener,noreferrer')} note="Stars are awarded only after verified completion; opening the site alone never earns Stars."/><ActionRow icon="📖" title="Read Your Own Book" subtitle="Log genuine page progress" reward={flags.readingStars ? `+${flags.readingStars} ⭐ today` : 'Earn by pages'} done={false} actionLabel="Log Reading" onAction={onOpenReading}/><ActionRow icon="🐵" title="Pet earnings" subtitle={petAmount ? `${petAmount} Stars ready to collect` : 'Your pets earn every day'} reward={petAmount ? `+${petAmount} ⭐` : ''} done={flags.petDone} actionLabel={petAmount ? 'Collect' : ''} onAction={onCollectPet} disabled={busy || !petAmount}/></div>
       <div className="mh-rules-tools"><button className="mh-secondary" onClick={onOpenVocabLog}>📖 Open Vocabulary Log</button><span>Rewards update everywhere immediately after Firestore confirms them.</span></div>
     </PanelFrame>
   );
