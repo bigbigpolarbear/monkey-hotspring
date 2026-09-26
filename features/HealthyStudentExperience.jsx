@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StudentNavigationDrawer from '../components/StudentNavigationDrawer.jsx';
 import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import DailyToiletFact from '../components/DailyToiletFact.jsx';
+import MonaBirthdayGift from '../components/MonaBirthdayGift.jsx';
 import { ChallengeWordlePanel, DailyWordlePanel } from '../components/DailyWordles.jsx';
 import {
   DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
   StarRulesPanel, TodayPanel, VocabularyLogPanel,
 } from '../components/StudentHubPanels.jsx';
 import { buildPendingPassiveIncome, localDayKey } from '../game/petEconomy.js';
+import { hasClaimedMonaBirthday, isMonaStudent } from '../game/birthdaySurprise.js';
 import { collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
 import { getStudents } from '../firebase.js';
 import '../styles/student-experience.css';
@@ -135,10 +137,21 @@ export default function HealthyStudentExperience() {
   useEffect(() => {
     if (!studentId || !student) return;
     const today = localDayKey();
+    if (isMonaStudent(student) && !hasClaimedMonaBirthday(student)) {
+      setActivePanel(current => current === null || current === 'toiletFact' ? 'monaBirthday' : current);
+      return;
+    }
     if (student.dailyLearning?.toiletFactDate !== today) {
       setActivePanel(current => current || 'toiletFact');
     }
-  }, [studentId, student?.id, student?.dailyLearning?.toiletFactDate]);
+  }, [
+    studentId,
+    student?.id,
+    student?.name,
+    student?.username,
+    student?.specialRewards?.monaBirthday2026Claimed,
+    student?.dailyLearning?.toiletFactDate,
+  ]);
 
   const notify = useCallback(message => {
     setToast(message);
@@ -194,6 +207,7 @@ export default function HealthyStudentExperience() {
       {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
       {activePanel === 'wordle' && <DailyWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenChallenge={() => setActivePanel('challengeWordle')} />}
       {activePanel === 'challengeWordle' && <ChallengeWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenStandard={() => setActivePanel('wordle')} />}
+      {activePanel === 'monaBirthday' && <MonaBirthdayGift student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(student.dailyLearning?.toiletFactDate !== localDayKey() ? 'toiletFact' : null)} />}
       {activePanel === 'toiletFact' && <DailyToiletFact student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(null)} />}
 
       {!activePanel && !drawerOpen && <DailyReturnSummary studentId={studentId} amount={ready} days={pending?.days || 1} burstKey={burst.key} />}
