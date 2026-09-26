@@ -3,6 +3,7 @@ import StudentNavigationDrawer from '../components/StudentNavigationDrawer.jsx';
 import DailyReturnSummary from '../components/DailyReturnSummary.jsx';
 import DailyToiletFact from '../components/DailyToiletFact.jsx';
 import MonaBirthdayGift from '../components/MonaBirthdayGift.jsx';
+import AnonymousMonkeyChooser from '../components/AnonymousMonkeyChooser.jsx';
 import { ChallengeWordlePanel, DailyWordlePanel } from '../components/DailyWordles.jsx';
 import {
   DailyChallengePanel, DailyVocabularyPanel, LeaderboardPanel, ReadingPanel,
@@ -10,6 +11,7 @@ import {
 } from '../components/StudentHubPanels.jsx';
 import { buildPendingPassiveIncome, localDayKey } from '../game/petEconomy.js';
 import { hasClaimedMonaBirthday, isMonaStudent } from '../game/birthdaySurprise.js';
+import { hasAnonymousMonkeyIdentity } from '../game/anonymousIdentity.js';
 import { collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
 import { getStudents } from '../firebase.js';
 import '../styles/student-experience.css';
@@ -137,8 +139,12 @@ export default function HealthyStudentExperience() {
   useEffect(() => {
     if (!studentId || !student) return;
     const today = localDayKey();
+    if (!hasAnonymousMonkeyIdentity(student)) {
+      setActivePanel('identity');
+      return;
+    }
     if (isMonaStudent(student) && !hasClaimedMonaBirthday(student)) {
-      setActivePanel(current => current === null || current === 'toiletFact' ? 'monaBirthday' : current);
+      setActivePanel(current => current === null || current === 'identity' || current === 'toiletFact' ? 'monaBirthday' : current);
       return;
     }
     if (student.dailyLearning?.toiletFactDate !== today) {
@@ -149,6 +155,8 @@ export default function HealthyStudentExperience() {
     student?.id,
     student?.name,
     student?.username,
+    student?.anonymousMonkeyName,
+    student?.anonymousMonkeyId,
     student?.specialRewards?.monaBirthday2026Claimed,
     student?.dailyLearning?.toiletFactDate,
   ]);
@@ -207,6 +215,14 @@ export default function HealthyStudentExperience() {
       {activePanel === 'leaderboard' && <LeaderboardPanel {...panelCommon} students={leaderboardStudents} loading={leaderboardLoading} />}
       {activePanel === 'wordle' && <DailyWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenChallenge={() => setActivePanel('challengeWordle')} />}
       {activePanel === 'challengeWordle' && <ChallengeWordlePanel {...panelCommon} notify={notify} onReward={rewardBurst} onOpenStandard={() => setActivePanel('wordle')} />}
+      {activePanel === 'identity' && <AnonymousMonkeyChooser
+        student={student}
+        notify={notify}
+        onChosen={() => {
+          if (isMonaStudent(student) && !hasClaimedMonaBirthday(student)) setActivePanel('monaBirthday');
+          else setActivePanel(student.dailyLearning?.toiletFactDate !== localDayKey() ? 'toiletFact' : null);
+        }}
+      />}
       {activePanel === 'monaBirthday' && <MonaBirthdayGift student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(student.dailyLearning?.toiletFactDate !== localDayKey() ? 'toiletFact' : null)} />}
       {activePanel === 'toiletFact' && <DailyToiletFact student={student} notify={notify} onReward={rewardBurst} onDone={() => setActivePanel(null)} />}
 
