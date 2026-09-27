@@ -108,7 +108,7 @@ function WordleBoard({
       return;
     }
     if (!validateWordleGuess(current, wordLength)) {
-      rejectGuess('That is not a real word in our Wordle dictionary — try another one.');
+      rejectGuess('That looks like random letters — try a real word.');
       return;
     }
 
@@ -129,7 +129,7 @@ function WordleBoard({
       }
     } catch (e) {
       const message = e.message || 'Could not submit that guess.';
-      if (/dictionary|letter word/i.test(message)) rejectGuess(message);
+      if (/random letters|letter word/i.test(message)) rejectGuess(message);
       else setError(message);
     } finally {
       setBusy(false);
