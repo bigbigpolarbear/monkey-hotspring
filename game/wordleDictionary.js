@@ -30,10 +30,6 @@ function isObviousKeyboardSmash(word) {
   ];
   if (joinedRows.some(row => row.includes(word))) return true;
 
-  // A real English word almost always contains at least one vowel sound.
-  // Including Y keeps words such as MYRRH from being rejected.
-  if (!/[AEIOUY]/.test(word)) return true;
-
   return false;
 }
 
