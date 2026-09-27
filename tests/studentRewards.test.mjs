@@ -164,3 +164,26 @@ test('letter scoring works for ten-letter words too', () => {
   assert.equal(result.length, 10);
   assert.ok(result.every(state => state === 'correct'));
 });
+
+
+test('real words outside the original tiny Wordle list are accepted', () => {
+  assert.equal(validateWordleGuess('MANAGEMENT', 10), true);
+  assert.equal(validateWordleGuess('FRIENDSHIP', 10), true);
+  assert.equal(validateWordleGuess('DIFFERENCE', 10), true);
+  assert.equal(validateWordleGuess('CRWTH', 5), true);
+});
+
+test('only high-confidence keyboard-smash guesses are rejected', () => {
+  assert.equal(validateWordleGuess('QWERT', 5), false);
+  assert.equal(validateWordleGuess('ASDFG', 5), false);
+  assert.equal(validateWordleGuess('ZXCVB', 5), false);
+  assert.equal(validateWordleGuess('QWERTYUIOP', 10), false);
+  assert.equal(validateWordleGuess('ZXCVBNMASD', 10), false);
+  assert.equal(validateWordleGuess('AAAAAAAAAA', 10), false);
+});
+
+test('unknown but plausible alphabetic guesses are allowed rather than falsely rejected', () => {
+  assert.equal(validateWordleGuess('PLMOK', 5), true);
+  assert.equal(validateWordleGuess('TRWPS', 5), true);
+  assert.equal(validateWordleGuess('BROMELIADS', 10), true);
+});
