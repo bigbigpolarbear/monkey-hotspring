@@ -4,16 +4,46 @@ toast bliss eagle igloo jewel valor yield acorn daisy flock oasis ember genes ma
 `.trim().split(/\s+/));
 
 export const VALID_TEN_LETTER_GUESSES = Object.freeze(`
-abbreviate absorbable accelerate accessible accidental accomplice accountant accurately adjustment admiration aggressive allocation altogether ambassador ammunition analytical apprentice artificial atmosphere attractive background basketball birthplace calculated capability celebrated challenged combustion comparable compatible compulsory confidence connection consistent consultant contagious continuous contribute convenient coordinate correction curriculum decoration democratic determined dictionary difficulty discipline ecological efficiency electronic employment engagement enthusiasm equivalent especially everywhere excellence experiment expression federation foundation generation government historical horizontal importance impressive industrial ingredient initiative innovative instrument journalism leadership literature meaningful navigation occupation parliament percentage population prediction productive psychology regulation remarkable resistance scientific settlement statistics successful technology television themselves tremendous university vocabulary wavelength wilderness
+abbreviate absorbable accelerate accessible accidental accomplice accountant accurately adjustment admiration aggressive allocation altogether ambassador ammunition analytical apprentice artificial atmosphere attractive background basketball birthplace calculated capability celebrated challenged combustion comparable compatible compulsory confidence connection consistent consultant contagious continuous contribute convenient coordinate correction curriculum decoration democratic determined dictionary difference difficulty discipline ecological efficiency electronic employment engagement enthusiasm equivalent especially everywhere excellence experiment expression federation foundation friendship generation government historical horizontal importance impressive industrial ingredient initiative innovative instrument journalism leadership literature management meaningful navigation occupation parliament percentage population prediction productive psychology regulation remarkable resistance scientific settlement statistics successful technology television themselves tremendous university vocabulary wavelength wilderness
 `.trim().split(/\s+/));
 
 const FIVE_SET = new Set(VALID_FIVE_LETTER_GUESSES.map(word => word.toUpperCase()));
 const TEN_SET = new Set(VALID_TEN_LETTER_GUESSES.map(word => word.toUpperCase()));
 
+const KEYBOARD_ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+function isStraightSequence(word) {
+  const reversed = word.split('').reverse().join('');
+  if (KEYBOARD_ROWS.some(row => row.includes(word) || row.includes(reversed))) return true;
+  if (ALPHABET.includes(word) || ALPHABET.split('').reverse().join('').includes(word)) return true;
+  return false;
+}
+
+function isObviousKeyboardSmash(word) {
+  if (/^(.)\1+$/.test(word)) return true;
+  if (isStraightSequence(word)) return true;
+
+  const joinedRows = [
+    'QWERTYUIOPASDFGHJKLZXCVBNM',
+    'ZXCVBNMASDFGHJKLQWERTYUIOP',
+  ];
+  if (joinedRows.some(row => row.includes(word))) return true;
+
+  return false;
+}
+
 export function isAllowedWordleGuess(value, length = 5) {
   const word = String(value || '').trim().toUpperCase();
-  if (!new RegExp(`^[A-Z]{${length}}$`).test(word)) return false;
-  if (length === 5) return FIVE_SET.has(word);
-  if (length === 10) return TEN_SET.has(word);
-  return false;
+  const pattern = new RegExp('^[A-Z]{' + length + '}$');
+  if (!pattern.test(word)) return false;
+
+  // Known words are always accepted.
+  if (length === 5 && FIVE_SET.has(word)) return true;
+  if (length === 10 && TEN_SET.has(word)) return true;
+
+  // The bundled list is a fast path, not an exhaustive English dictionary.
+  // Unknown alphabetic words are accepted unless they are clearly keyboard
+  // smash/gibberish. This favors avoiding false rejections of real words.
+  return !isObviousKeyboardSmash(word);
 }

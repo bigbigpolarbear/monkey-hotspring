@@ -317,7 +317,7 @@ function normalizeWordleGuess(value, length) {
   const guess = String(value || '').trim().toUpperCase();
   const pattern = new RegExp('^[A-Z]{' + length + '}$');
   if (!pattern.test(guess)) throw new Error('Enter a ' + length + '-letter word.');
-  if (!validateWordleGuess(guess, length)) throw new Error('That is not in the Wordle dictionary.');
+  if (!validateWordleGuess(guess, length)) throw new Error('That guess looks like random letters. Try a real word.');
   return guess;
 }
 
