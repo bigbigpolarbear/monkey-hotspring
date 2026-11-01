@@ -22,3 +22,10 @@ html.mh-student-active [data-monkey-dashboard-layout] > :last-child { flex:1 1 a
 #mh-student-layer[data-theme="rainbow"] .mh-topbar,#mh-student-layer[data-theme="rainbow"] .mh-today-card,#mh-student-layer[data-theme="rainbow"] .mh-sitters-modal{background:linear-gradient(135deg,rgba(255,249,253,.97),rgba(252,249,229,.97),rgba(241,253,249,.97))}
 .mh-safe-copy{margin:0;color:var(--mh-muted);font-size:12px;line-height:1.4}.mh-job-card{border:1.5px solid var(--mh-line);border-radius:14px;background:rgba(255,255,255,.55);overflow:hidden}.mh-job-card .mh-job-row{border:0;border-radius:0;background:transparent}.mh-rating-row{display:grid;grid-template-columns:100px minmax(170px,1fr) auto;gap:8px;align-items:end;padding:0 12px 12px}.mh-rating-row label{display:grid;gap:3px;font-size:12px;font-weight:700}.mh-rating-row select{min-width:0;padding:7px 8px;border:1.5px solid var(--mh-line);border-radius:9px;background:white;font-family:inherit;color:var(--mh-ink)}.mh-rated-line{padding:0 12px 10px;color:var(--mh-green);font-size:12px;font-weight:700}
 @media(max-width:600px){.mh-rating-row{grid-template-columns:1fr}.mh-rating-row .mh-secondary{width:100%}}
+
+/* Restore the student-facing entry to the existing Pet Mart and collection. */
+.mh-pet-shop{background:linear-gradient(135deg,#fff0c9,#ffe1e6);border-color:#e8ba8c;color:#754b2b;white-space:nowrap}
+.mh-pet-shop:hover{box-shadow:0 3px 12px rgba(192,126,70,.18)}
+.mh-drawer-actions .mh-drawer-pet-shop{background:linear-gradient(135deg,#fff0c9,#ffe1e6);border-color:#e8ba8c;color:#754b2b;font-size:17px}
+#mh-student-layer[data-theme="dark"] .mh-pet-shop,#mh-student-layer[data-theme="dark"] .mh-drawer-actions .mh-drawer-pet-shop{background:#443542;color:#ffe1b2;border-color:#735a55}
+@media(max-width:520px){.mh-pet-shop span{display:none}.mh-pet-shop{min-width:37px;justify-content:center;padding-inline:9px}}

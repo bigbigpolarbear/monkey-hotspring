@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { getAnonymousDisplayEmoji, getAnonymousDisplayName } from '../game/anonymousIdentity.js';
 
 export default function StudentNavigationDrawer({
-  open, onClose, student, onOpenChallenge, onOpenWordle, onOpenChallengeWordle, onOpenToughestWordle, onOpenRules, onOpenVocab, onLegacyAction,
+  open, onClose, student, onOpenChallenge, onOpenWordle, onOpenChallengeWordle, onOpenToughestWordle, onOpenRules, onOpenVocab, onOpenPetShop, onLegacyAction,
 }) {
   useEffect(() => {
     if (!open) return;
@@ -27,6 +27,7 @@ export default function StudentNavigationDrawer({
           <button className="mh-icon-button" onClick={onClose} aria-label="Close menu">✕</button>
         </div>
         <nav className="mh-drawer-actions">
+          <button className="mh-drawer-pet-shop" onClick={onOpenPetShop}>🎁 Pet Shop & My Pets</button>
           <button onClick={onOpenWordle}>🔤 Daily Wordle · +1 ⭐</button>
           <button onClick={onOpenChallengeWordle}>🔥 Challenge Wordle · +3 ⭐</button>
           <button onClick={onOpenToughestWordle}>💀 TOUGHEST CHALLENGE · +7 ⭐</button>
