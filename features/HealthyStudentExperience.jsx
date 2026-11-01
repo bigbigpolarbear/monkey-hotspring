@@ -27,7 +27,9 @@ function clickLegacyAction(label) {
   const visible = buttons.filter(btn => btn.offsetParent !== null);
   const find = list => list.find(btn => (btn.getAttribute('title') || '').toLowerCase().includes(needle))
     || list.find(btn => (btn.textContent || '').trim().toLowerCase().includes(needle));
-  (find(visible) || find(buttons))?.click();
+  const target = find(visible) || find(buttons);
+  if (target) target.click();
+  return Boolean(target);
 }
 
 function tagLegacyLeaderboard(marker) {
@@ -189,6 +191,16 @@ export default function HealthyStudentExperience() {
     setActivePanel(current => current === name ? null : name);
   }, []);
 
+  // The original Pet Mart and collection still live in LegacyApp. Its own
+  // button is hidden by the student redesign, so reopen it from both navs.
+  const openPetShop = useCallback(() => {
+    setActivePanel(null);
+    setDrawerOpen(false);
+    if (!clickLegacyAction('Pet Packs')) {
+      notify('Pet Shop could not open. Please refresh and try again.');
+    }
+  }, [notify]);
+
   if (!studentId || !student) return null;
   const ready = collectedToday ? 0 : (pending?.total || 0);
   const panelCommon = { student, onClose: () => setActivePanel(null) };
@@ -200,6 +212,7 @@ export default function HealthyStudentExperience() {
         <div className="mh-brand">Monkey Hotspring</div>
         <button className="mh-stat mh-star-stat" onClick={() => openPanel('rules')} aria-label="Open ways to earn Stars">⭐ {Number(student.points || 0).toLocaleString()}<small>Earn Stars</small></button>
         <button className={`mh-stat mh-hub-nav${activePanel === 'today' ? ' is-active' : ''}`} onClick={() => openPanel('today')}>☀️ Today</button>
+        <button className="mh-stat mh-pet-shop" onClick={openPetShop} aria-label="Open Pet Shop and My Pets">🎁 <span>Pet Shop</span></button>
         <button className={`mh-stat mh-hub-nav${activePanel === 'leaderboard' ? ' is-active' : ''}`} onClick={() => openPanel('leaderboard')}>🏆 <span>Leaderboard</span></button>
         <div className="mh-stat mh-streak-stat">🔥 {Number(student.streak || 0)}</div>
         <button className="mh-world" onClick={() => { setActivePanel(null); clickLegacyAction('World View'); }}>World View</button>
@@ -243,6 +256,7 @@ export default function HealthyStudentExperience() {
         onOpenToughestWordle={() => { setDrawerOpen(false); setActivePanel('toughestWordle'); }}
         onOpenRules={() => { setDrawerOpen(false); setActivePanel('rules'); }}
         onOpenVocab={() => { setDrawerOpen(false); setActivePanel('vocabLog'); }}
+        onOpenPetShop={openPetShop}
         onLegacyAction={label => { setActivePanel(null); clickLegacyAction(label); }}
       />
     </div>
