@@ -14,22 +14,12 @@ import { hasClaimedMonaBirthday, isMonaStudent } from '../game/birthdaySurprise.
 import { hasAnonymousMonkeyIdentity } from '../game/anonymousIdentity.js';
 import { collectPassiveIncome, subscribeStudent } from '../services/studentEconomy.js';
 import { getStudents } from '../firebase.js';
+import { clickLegacyAction } from '../services/legacyNavigation.js';
 import '../styles/student-experience.css';
 import '../styles/student-hub.css';
 
 function findStudentMarker() {
   return document.querySelector('[data-monkey-student-id]');
-}
-
-function clickLegacyAction(label) {
-  const needle = String(label).toLowerCase();
-  const buttons = [...document.querySelectorAll('button')];
-  const visible = buttons.filter(btn => btn.offsetParent !== null);
-  const find = list => list.find(btn => (btn.getAttribute('title') || '').toLowerCase().includes(needle))
-    || list.find(btn => (btn.textContent || '').trim().toLowerCase().includes(needle));
-  const target = find(visible) || find(buttons);
-  if (target) target.click();
-  return Boolean(target);
 }
 
 function tagLegacyLeaderboard(marker) {
