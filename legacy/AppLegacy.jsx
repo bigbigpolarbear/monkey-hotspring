@@ -14853,6 +14853,7 @@ function SnowMonkeyTrackerInner() {
   const [newStudentUser, setNewStudentUser] = useState("");
   const [newStudentPass, setNewStudentPass] = useState("");
   const [pointAmount, setPointAmount] = useState(1);
+  const validPointAmount = Number.isSafeInteger(Number(pointAmount)) && Number(pointAmount) > 0;
   const [notification, setNotification] = useState(null);
   const [showManage, setShowManage] = useState(false);
   const [showOverview, setShowOverview] = useState(false); // teacher yearbook view
@@ -15978,7 +15979,13 @@ function SnowMonkeyTrackerInner() {
   };
 
   const addPoints = (id, amount) => {
-    const newS = students.map(s => s.id === id ? { ...s, points: Math.max(0, s.points + amount) } : s);
+    amount = Number(amount);
+    const currentPoints = Number(students.find(s => s.id === id)?.points || 0);
+    if (!Number.isSafeInteger(amount) || amount === 0 || !Number.isSafeInteger(currentPoints + amount)) {
+      notify("Enter a valid whole number of points", "error");
+      return;
+    }
+    const newS = students.map(s => s.id === id ? { ...s, points: Math.max(0, currentPoints + amount) } : s);
     persist(null, newS);
     const st = students.find(s => s.id === id);
     notify(`${amount > 0 ? "+" : ""}${amount} point${Math.abs(amount) !== 1 ? "s" : ""} for ${st?.name}!`);
@@ -18294,11 +18301,15 @@ function SnowMonkeyTrackerInner() {
               {sel.name} <span style={{ color: C.gold, marginLeft: 4 }}>★ {sel.points}</span>
             </div>
             <div style={{ width: 1, height: 28, background: C.fur2 + "30" }} />
-            <select value={pointAmount} onChange={e => setPointAmount(Number(e.target.value))} style={{ padding: "7px 10px", borderRadius: 10, border: `2px solid ${C.fur2}30`, background: C.snow1, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text }}>
-              {[1, 2, 3, 5, 10].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <button onClick={() => addPoints(sel.id, pointAmount)} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.green}40` }}>+ Give</button>
-            <button onClick={() => addPoints(sel.id, -pointAmount)} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.accent, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.accent}40` }}>− Take</button>
+            <label style={{ display: "flex", flexDirection: "column", gap: 3, color: C.text, fontSize: 13 }}>
+              Points
+              <input type="number" min="1" step="1" inputMode="numeric" value={pointAmount}
+                onChange={e => setPointAmount(e.target.value)} aria-label="Points to give or take"
+                aria-invalid={!validPointAmount} placeholder="Amount"
+                style={{ width: 100, padding: "7px 10px", borderRadius: 10, border: `2px solid ${C.fur2}30`, background: C.snow1, fontFamily: "'Patrick Hand', cursive", fontSize: 16, color: C.text }} />
+            </label>
+            <button disabled={!validPointAmount} onClick={() => addPoints(sel.id, Number(pointAmount))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.green}40` }}>+ Give</button>
+            <button disabled={!validPointAmount} onClick={() => addPoints(sel.id, -Number(pointAmount))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.accent, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.accent}40` }}>− Take</button>
             <div style={{ width: 1, height: 28, background: C.fur2 + "30" }} />
             <button onClick={() => setShowAccessories(true)}
               style={{ padding: "10px 18px", borderRadius: 12, border: `2px solid ${C.gold}50`, background: `${C.gold}20`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 16, cursor: "pointer", fontWeight: 700 }}>
