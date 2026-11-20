@@ -42,7 +42,7 @@ export default function DailyToiletFact({ student, onDone, onReward, notify }) {
       <section className="mh-hub-panel mh-hub-panel-modal mh-toilet-panel" role="dialog" aria-modal="true" aria-label="Daily Toilet Fact">
         <header className="mh-hub-panel-head mh-toilet-head">
           <div>
-            <div className="mh-kicker">{stage === 'fact' ? 'Your daily bathroom brain break' : result ? 'Answer saved' : 'One quick question'}</div>
+            <div className="mh-kicker">{stage === 'fact' ? 'Strange facts about our world' : result ? 'Answer saved' : 'One quick question'}</div>
             <h2>🚽 Toilet Fact of the Day</h2>
           </div>
           <span className="mh-toilet-reward">+{REWARD_CONFIG.toiletFact} ⭐</span>

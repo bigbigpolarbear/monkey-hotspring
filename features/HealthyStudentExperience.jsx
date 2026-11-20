@@ -200,12 +200,12 @@ export default function HealthyStudentExperience() {
       <header className="mh-topbar mh-hub-topbar">
         <button className="mh-menu-button" onClick={() => { setActivePanel(null); setDrawerOpen(true); }} aria-label="Open menu">☰</button>
         <div className="mh-brand">Monkey Hotspring</div>
-        <button className="mh-stat mh-star-stat" onClick={() => openPanel('rules')} aria-label="Open ways to earn Stars">⭐ {Number(student.points || 0).toLocaleString()}<small>Earn Stars</small></button>
-        <button className={`mh-stat mh-hub-nav${activePanel === 'today' ? ' is-active' : ''}`} onClick={() => openPanel('today')}>☀️ Today</button>
-        <button className="mh-stat mh-pet-shop" onClick={openPetShop} aria-label="Open Pet Shop and My Pets">🎁 <span>Pet Shop</span></button>
-        <button className={`mh-stat mh-hub-nav${activePanel === 'leaderboard' ? ' is-active' : ''}`} onClick={() => openPanel('leaderboard')}>🏆 <span>Leaderboard</span></button>
-        <div className="mh-stat mh-streak-stat">🔥 {Number(student.streak || 0)}</div>
-        <button className="mh-world" onClick={() => { setActivePanel(null); clickLegacyAction('World View'); }}>World View</button>
+        <button className="mh-stat mh-star-stat" onClick={() => openPanel('rules')} title="Earn Stars" aria-label="Open ways to earn Stars">⭐ {Number(student.points || 0).toLocaleString()}</button>
+        <button className={`mh-stat mh-hub-nav${activePanel === 'today' ? ' is-active' : ''}`} onClick={() => openPanel('today')} title="Today" aria-label="Today">☀️</button>
+        <button className="mh-stat mh-pet-shop" onClick={openPetShop} title="Pet Shop" aria-label="Open Pet Shop and My Pets">🎁</button>
+        <button className={`mh-stat mh-hub-nav${activePanel === 'leaderboard' ? ' is-active' : ''}`} onClick={() => openPanel('leaderboard')} title="Leaderboard" aria-label="Leaderboard">🏆</button>
+        <div className="mh-stat mh-streak-stat" title="Daily streak" aria-label={`Daily streak: ${Number(student.streak || 0)}`}>🔥 {Number(student.streak || 0)}</div>
+        <button className="mh-world" onClick={() => { setActivePanel(null); clickLegacyAction('Hotspring'); }} title="Hotspring — see the entire classroom" aria-label="Hotspring — see the entire classroom">♨️</button>
         <button className="mh-profile" onClick={() => { setActivePanel(null); setDrawerOpen(true); }} aria-label="Open profile">🐒</button>
       </header>
 

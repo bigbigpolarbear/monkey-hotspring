@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { buildDailyChallenge, getDailyVocab, masteryLabel, VOCABULARY } from '../game/dailyContent.js';
 import { localDayKey } from '../game/petEconomy.js';
-import { REWARD_CONFIG, calculateReadingReward } from '../game/rewardConfig.js';
-import { completeDailyChallenge, completeDailyVocab, logReadingAndReward, recordVocabReview } from '../services/rewardService.js';
+import { REWARD_CONFIG } from '../game/rewardConfig.js';
+import { completeDailyChallenge, completeDailyVocab, recordVocabReview } from '../services/rewardService.js';
+import { calculateBookPoints, WORDS_PER_POINT } from '../game/bookPoints.js';
 import { getAnonymousDisplayName } from '../game/anonymousIdentity.js';
 
 function todayFlags(student = {}) {
@@ -88,7 +89,7 @@ export function TodayPanel({ student, pending, busy, onCollectPet, onOpenChallen
           : flags.challengeWordleDone
             ? <ActionRow icon="💀" title="TOUGHEST CHALLENGE" subtitle="10-letter final boss · 12 chances" reward={`+${REWARD_CONFIG.toughestWordle} ⭐`} actionLabel="Try It" onAction={onOpenToughestWordle} />
             : <ActionRow icon="🔒" title="TOUGHEST CHALLENGE" subtitle="Finish Challenge Wordle to unlock" reward={`+${REWARD_CONFIG.toughestWordle} ⭐`} />}
-        <ActionRow icon="📖" title="Reading" subtitle={flags.readingStars ? `${flags.readingStars} Stars from reading today` : 'Earn Stars from your own book'} actionLabel="View options" onAction={onOpenReading} />
+        <ActionRow icon="📖" title="Reading" subtitle="1 point per 750 words" actionLabel="Calculate Points" onAction={onOpenReading} />
       </div>
       <div className="mh-today-total"><span>Stars earned today</span><strong>{flags.starsEarnedToday} ⭐</strong></div>
       <button className="mh-text-button mh-rules-link" onClick={onOpenRules}>See every way to earn Stars →</button>
@@ -215,37 +216,24 @@ export function VocabularyLogPanel({ student, onClose }) {
   );
 }
 
-function groupedReading(log = []) {
-  const groups = new Map();
-  for (const entry of log) {
-    const key = String(entry.normalizedTitle || entry.bookTitle || '').toLowerCase();
-    if (!key) continue;
-    const current = groups.get(key) || { title:entry.bookTitle, pages:0, stars:0, sessions:[] };
-    current.pages += Math.max(0, Number(entry.pages) || 0); current.stars += Math.max(0, Number(entry.stars) || 0); current.sessions.push(entry); groups.set(key, current);
-  }
-  return [...groups.values()].slice(0, 8);
-}
-
-export function ReadingPanel({ student, onClose, onReward, notify }) {
-  const dateKey = localDayKey();
-  const log = Array.isArray(student?.readingLog) ? student.readingLog : [];
-  const alreadyEarnedToday = log.filter(entry => entry?.date === dateKey).reduce((sum, entry) => sum + Math.max(0, Number(entry.stars) || 0), 0);
-  const [bookTitle, setBookTitle] = useState(''); const [startPage, setStartPage] = useState(''); const [endPage, setEndPage] = useState(''); const [completed, setCompleted] = useState(false); const [busy, setBusy] = useState(false);
-  const preview = calculateReadingReward({ startPage, endPage, alreadyEarnedToday });
-  const groups = useMemo(() => groupedReading(log), [log]);
-  async function submit(event) {
-    event.preventDefault(); if (busy) return; setBusy(true);
-    try {
-      const result = await logReadingAndReward(student.id, { bookTitle, startPage, endPage, completed }, { dateKey });
-      if (result.amount) onReward(result.amount);
-      notify(result.duplicate ? 'That reading session was already logged.' : `Nice reading! ${result.session.pages} pages · +${result.amount} ⭐`);
-      if (!result.duplicate) { setStartPage(endPage); setEndPage(''); setCompleted(false); }
-    } catch (error) { notify(error.message || 'Could not log reading'); }
-    finally { setBusy(false); }
-  }
+export function ReadingPanel({ onClose }) {
+  const [wordCount, setWordCount] = useState('');
+  const points = calculateBookPoints(wordCount);
   return (
-    <PanelFrame title="📚 Log Your Reading" kicker={`Up to ${REWARD_CONFIG.reading.maxStarsPerDay} Stars / day`} onClose={onClose} wide>
-      <div className="mh-reading-layout"><form className="mh-reading-form" onSubmit={submit}><label>Book<input value={bookTitle} onChange={event => setBookTitle(event.target.value)} placeholder="Book title" maxLength={80}/></label><div className="mh-reading-pages"><label>Started at page<input type="number" min="0" value={startPage} onChange={event => setStartPage(event.target.value)}/></label><label>Finished at page<input type="number" min="1" value={endPage} onChange={event => setEndPage(event.target.value)}/></label></div><div className="mh-reading-preview"><span>Pages read <b>{preview.pages || 0}</b></span><span>Stars <b>+{preview.stars || 0} ⭐</b></span></div>{!preview.valid && startPage !== '' && endPage !== '' && <small className="mh-form-note">{preview.reason}</small>}<label className="mh-check"><input type="checkbox" checked={completed} onChange={event => setCompleted(event.target.checked)}/> I finished this book</label><button className="mh-primary" type="submit" disabled={busy || !bookTitle.trim() || !preview.valid}>Submit Reading</button><small className="mh-form-note">Stars are calculated automatically: about 1 Star per {REWARD_CONFIG.reading.pagesPerStar} pages, with anti-spam and daily limits.</small></form><section className="mh-reading-history"><h3>Reading Log</h3>{groups.length ? groups.map(group => <article className="mh-book-group" key={group.title}><div><strong>{group.title}</strong><span>{group.pages} pages logged · {group.stars} ⭐</span></div>{group.sessions.slice(0, 3).map(session => <small key={session.id}>{session.date} — {session.pages} pages — +{session.stars} ⭐</small>)}</article>) : <div className="mh-empty">Your reading sessions will appear here.</div>}</section></div>
+    <PanelFrame title="📚 Book Points Calculator" kicker="1 point per 750 words" onClose={onClose}>
+      <div className="mh-reading-form">
+        <label>Book word count
+          <input type="number" min="0" step="1" inputMode="numeric" value={wordCount}
+            onChange={event => setWordCount(event.target.value)} placeholder="e.g. 45000"
+            aria-describedby="book-points-help" aria-invalid={wordCount !== '' && points === null} />
+        </label>
+        <div className="mh-reading-preview" role="status" aria-live="polite">
+          <span>Book points <b>{points === null ? '—' : `${points.toLocaleString()} ⭐`}</b></span>
+        </div>
+        {wordCount !== '' && points === null && <small className="mh-form-note">Enter a whole number of words, zero or more.</small>}
+        <small id="book-points-help" className="mh-form-note">Every complete {WORDS_PER_POINT.toLocaleString()} words is 1 point. Rounded down: 1,500 words = 2 points.</small>
+        <small className="mh-form-note">Calculator only — this does not add points to your balance.</small>
+      </div>
     </PanelFrame>
   );
 }
@@ -261,7 +249,7 @@ export function StarRulesPanel({ student, pending, busy, onCollectPet, onOpenCha
         <ActionRow icon={flags.challengeWordleDone ? "💀" : "🔒"} title="TOUGHEST CHALLENGE" subtitle={flags.challengeWordleDone ? "10-letter final boss · 12 chances" : "Unlock after Challenge Wordle"} reward={flags.toughestWordleWon ? `+${REWARD_CONFIG.toughestWordle} ⭐` : flags.toughestWordleDone ? '' : `+${REWARD_CONFIG.toughestWordle} ⭐`} done={flags.toughestWordleDone} actionLabel={flags.challengeWordleDone ? "Try It" : ""} onAction={onOpenToughestWordle}/>
         <ActionRow icon="☀️" title="Daily Challenge" subtitle="Complete today’s four-question challenge" reward={`+${REWARD_CONFIG.dailyChallenge} ⭐`} done={flags.challengeDone} actionLabel="Start" onAction={onOpenChallenge}/>
         <ActionRow icon="🧠" title="Daily Vocabulary" subtitle="Learn and collect today’s word" reward={`+${REWARD_CONFIG.dailyVocab} ⭐`} done={flags.vocabDone} actionLabel="Learn" onAction={onOpenVocab}/>
-        <ActionRow icon="📚" title="Read on PreIGCSE" subtitle="Complete meaningful verified reading" reward={`+${REWARD_CONFIG.preIGCSE} ⭐`} actionLabel="Go Read" onAction={() => window.open('https://www.preigcse.com', '_blank', 'noopener,noreferrer')} note="Stars are awarded only after verified completion; opening the site alone never earns Stars."/><ActionRow icon="📖" title="Read Your Own Book" subtitle="Log genuine page progress" reward={flags.readingStars ? `+${flags.readingStars} ⭐ today` : 'Earn by pages'} done={false} actionLabel="Log Reading" onAction={onOpenReading}/><ActionRow icon="🐵" title="Pet earnings" subtitle={petAmount ? `${petAmount} Stars ready to collect` : 'Your pets earn every day'} reward={petAmount ? `+${petAmount} ⭐` : ''} done={flags.petDone} actionLabel={petAmount ? 'Collect' : ''} onAction={onCollectPet} disabled={busy || !petAmount}/></div>
+        <ActionRow icon="📚" title="Read on PreIGCSE" subtitle="Complete meaningful verified reading" reward={`+${REWARD_CONFIG.preIGCSE} ⭐`} actionLabel="Go Read" onAction={() => window.open('https://www.preigcse.com', '_blank', 'noopener,noreferrer')} note="Stars are awarded only after verified completion; opening the site alone never earns Stars."/><ActionRow icon="📖" title="Read Your Own Book" subtitle="Calculate points from your book’s word count" reward="750 words = 1 point" done={false} actionLabel="Calculate Points" onAction={onOpenReading}/><ActionRow icon="🐵" title="Pet earnings" subtitle={petAmount ? `${petAmount} Stars ready to collect` : 'Your pets earn every day'} reward={petAmount ? `+${petAmount} ⭐` : ''} done={flags.petDone} actionLabel={petAmount ? 'Collect' : ''} onAction={onCollectPet} disabled={busy || !petAmount}/></div>
       <div className="mh-rules-tools"><button className="mh-secondary" onClick={onOpenVocabLog}>📖 Open Vocabulary Log</button><span>Rewards update everywhere immediately after Firestore confirms them.</span></div>
     </PanelFrame>
   );

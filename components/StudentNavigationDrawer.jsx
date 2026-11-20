@@ -36,7 +36,7 @@ export default function StudentNavigationDrawer({
           <button onClick={onOpenVocab}>🧠 My Vocabulary</button>
           <button onClick={() => action('Missions')}>🎯 Missions</button>
           <button onClick={() => action('Food')}>🍙 Food & feeding</button>
-          <button onClick={() => action('World View')}>♨️ Hot Spring / Classroom</button>
+          <button onClick={() => action('Hotspring')}>♨️ Hotspring / Classroom</button>
         </nav>
         <section className="mh-drawer-section">
           <div className="mh-section-title">Upcoming exams</div>
