@@ -1,3 +1,4 @@
+import { giftStudentPet } from '../services/petGifts.js';
 import { useState, useEffect, useRef, useCallback, useMemo, memo, createContext, useContext } from "react";
 import {
   getTeachers, getStudents, updateStudent, addStudentToDB, deleteStudent, addTeacherToDB,
@@ -14852,6 +14853,8 @@ function SnowMonkeyTrackerInner() {
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentUser, setNewStudentUser] = useState("");
   const [newStudentPass, setNewStudentPass] = useState("");
+  const [giftPetId, setGiftPetId] = useState("");
+  const [giftingPet, setGiftingPet] = useState(false);
   const [pointAmount, setPointAmount] = useState(1);
   const validPointAmount = Number.isSafeInteger(Number(pointAmount)) && Number(pointAmount) > 0;
   const [notification, setNotification] = useState(null);
@@ -15976,6 +15979,24 @@ function SnowMonkeyTrackerInner() {
       console.error("Failed to remove student:", error);
       notify("Failed to remove student", "error");
     }
+  };
+
+  const giftPet = async (studentId) => {
+    const pet = getPet(giftPetId);
+    if (!isTeacherUser || !pet || giftingPet || !myClassStudents.some(s => s.id === studentId)) return;
+    setGiftingPet(true);
+    try {
+      const result = await giftStudentPet(user.id, studentId, pet.id);
+      if (result.duplicate) {
+        notify("This student already owns that pet.");
+      } else {
+        setStudents(previous => previous.map(s => s.id === studentId ? { ...s, ...result.patch } : s));
+        notify(`${pet.name} gifted to ${students.find(s => s.id === studentId)?.name}!`);
+        setGiftPetId("");
+      }
+    } catch (error) {
+      notify(error.message || "Could not gift pet. Please try again.", "error");
+    } finally { setGiftingPet(false); }
   };
 
   const addPoints = (id, amount) => {
@@ -18296,7 +18317,7 @@ function SnowMonkeyTrackerInner() {
 
         {/* Points bar */}
         {sel && (
-          <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: `${C.card}f0`, borderRadius: 22, padding: "14px 24px", boxShadow: `0 10px 36px rgba(0,0,0,0.18), 0 0 0 2px ${C.gold}30`, display: "flex", alignItems: "center", gap: 14, zIndex: 50, backdropFilter: "blur(12px)" }}>
+          <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: `${C.card}f0`, borderRadius: 22, padding: "14px 24px", width: "max-content", maxWidth: "calc(100vw - 32px)", boxSizing: "border-box", flexWrap: "wrap", maxHeight: "50vh", overflowY: "auto", boxShadow: `0 10px 36px rgba(0,0,0,0.18), 0 0 0 2px ${C.gold}30`, display: "flex", alignItems: "center", gap: 14, zIndex: 50, backdropFilter: "blur(12px)" }}>
             <div style={{ fontSize: 18, color: C.text, fontWeight: 700 }}>
               {sel.name} <span style={{ color: C.gold, marginLeft: 4 }}>★ {sel.points}</span>
             </div>
@@ -18311,6 +18332,20 @@ function SnowMonkeyTrackerInner() {
             <button disabled={!validPointAmount} onClick={() => addPoints(sel.id, Number(pointAmount))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.green, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.green}40` }}>+ Give</button>
             <button disabled={!validPointAmount} onClick={() => addPoints(sel.id, -Number(pointAmount))} style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: C.accent, color: "white", fontFamily: "'Patrick Hand', cursive", fontSize: 18, cursor: "pointer", fontWeight: 700, boxShadow: `0 3px 10px ${C.accent}40` }}>− Take</button>
             <div style={{ width: 1, height: 28, background: C.fur2 + "30" }} />
+            <label style={{ display: "flex", flexDirection: "column", gap: 3, color: C.text, fontSize: 13 }}>
+              Gift a pet
+              <select value={giftPetId} onChange={e => setGiftPetId(e.target.value)} disabled={giftingPet} aria-label="Choose a pet to gift"
+                style={{ maxWidth: 200, padding: "7px 10px", borderRadius: 10, background: C.snow1, color: C.text }}>
+                <option value="">Choose a pet</option>
+                {PET_CATALOG.map(pet => <option key={pet.id} value={pet.id} disabled={(sel.ownedPets || []).includes(pet.id)}>
+                  {pet.emoji} {pet.name} · {pet.rarity}{(sel.ownedPets || []).includes(pet.id) ? " (Owned)" : ""}
+                </option>)}
+              </select>
+            </label>
+            <button disabled={giftingPet || !giftPetId || (sel.ownedPets || []).includes(giftPetId)} onClick={() => giftPet(sel.id)}
+              style={{ padding: "10px 18px", borderRadius: 12, border: "none", background: C.green, color: "white", cursor: "pointer", fontFamily: "'Patrick Hand', cursive", fontSize: 16 }}>
+              {giftingPet ? "Gifting…" : "🎁 Gift Pet"}
+            </button>
             <button onClick={() => setShowAccessories(true)}
               style={{ padding: "10px 18px", borderRadius: 12, border: `2px solid ${C.gold}50`, background: `${C.gold}20`, color: C.text, fontFamily: "'Patrick Hand', cursive", fontSize: 16, cursor: "pointer", fontWeight: 700 }}>
               ✨ Accessories
